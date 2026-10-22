@@ -29,6 +29,8 @@ def generate_launch_description():
             launch_arguments={
                 'use_sim_time': use_sim_time,
                 'victimas': LaunchConfiguration('victimas'),
+                # La TF fija map -> odom de abajo reemplaza a AMCL: dos publicadores se pelearían.
+                'localizacion': 'false',
             }.items(),
         ),
         Node(
