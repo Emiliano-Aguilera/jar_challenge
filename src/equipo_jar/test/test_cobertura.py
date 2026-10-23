@@ -7,7 +7,8 @@ import sys
 
 def test_coverage_suite():
     root = Path(__file__).resolve().parents[3]
-    files = [root / 'pruebas' / name for name in ('test_cobertura_plan.py', 'test_cobertura_node.py')]
+    files = [root / 'pruebas' / name for name in (
+        'test_cobertura_plan.py', 'test_cobertura_node.py', 'test_metricas_cobertura.py')]
     assert all(path.is_file() for path in files), 'Run coverage tests from the full source checkout'
     environment = dict(os.environ)
     environment['PYTHONPATH'] = str(root / 'src/equipo_jar') + os.pathsep + environment.get('PYTHONPATH', '')

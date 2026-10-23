@@ -272,3 +272,45 @@ def test_rotating_the_map_preserves_visibility(yaw):
         for b in cells:
             assert rotated.visible(rotated.center(a), rotated.center(b), 25) == plain.visible(
                 plain.center(a), plain.center(b), 25)
+
+
+def test_prepared_heading_witness_matches_existing_visibility_model():
+    import random
+    from equipo_jar.cobertura_plan import _heading_geometry, _has_visible_heading, visibility_mask
+
+    rng = random.Random(3017)
+    for origin_yaw in (0.0, 0.37, -math.pi / 2):
+        grid = room(width=15, height=13, origin=Pose(-1.2, 0.7, origin_yaw),
+                    blocked=[(7, j) for j in range(2, 10)])
+        for camera in (Camera(), Camera(0.057, -0.03, 0.2)):
+            settings = replace(Settings(), heading_count=7, fov_degrees=61.0)
+            geometry = _heading_geometry(grid, settings, camera)
+            for _ in range(100):
+                cell = rng.randrange(grid.width), rng.randrange(grid.height)
+                center = grid.center((rng.randrange(grid.width), rng.randrange(grid.height)))
+                expected = any(visibility_mask(
+                    grid, cell, origin_yaw + heading * math.tau / settings.heading_count,
+                    [center], settings, camera) for heading in range(settings.heading_count))
+                actual = _has_visible_heading(
+                    grid, cell, center, geometry, settings.view_range ** 2,
+                    math.radians(settings.fov_degrees / 2), settings.free_threshold)
+                assert actual == expected
+
+
+def test_prepared_heading_witness_preserves_fov_and_range_boundaries():
+    from equipo_jar.cobertura_plan import _heading_geometry, _has_visible_heading, visibility_mask
+
+    grid = room(width=50, height=50)
+    settings = replace(Settings(), heading_count=1, view_range=1.0)
+    camera = Camera(0.057, 0.0, 0.0)
+    cell = (20, 20)
+    x, y = grid.center(cell)
+    geometry = _heading_geometry(grid, settings, camera)
+    for angle in (0.0, math.radians(settings.fov_degrees / 2)):
+        for distance in (1.0 - 1e-12, 1.0, 1.0 + 1e-12):
+            center = x + camera.x + distance * math.cos(angle), y + distance * math.sin(angle)
+            expected = bool(visibility_mask(grid, cell, 0.0, [center], settings, camera))
+            actual = _has_visible_heading(
+                grid, cell, center, geometry, settings.view_range ** 2,
+                math.radians(settings.fov_degrees / 2), settings.free_threshold)
+            assert actual == expected

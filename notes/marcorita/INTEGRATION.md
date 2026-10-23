@@ -1,13 +1,16 @@
 # Coverage integration
 
-Current state reviewed against development `c01ccdc` on 2026-10-22.
+Current state reviewed against development `d375427` on 2026-10-23.
 Follow-up proposals below do not change the agreed interface.
 Current output stays `/jar/plan_cobertura`, `nav_msgs/Path`, frame `map`.
 
 ## Mission
 
 Mission already owns execution progress: it remembers finished goals and takes
-the first pending pose, using 0.30 m and 0.5 rad tolerances. Failed goals count as
+the first pending pose, using 0.02 m and 0.1 rad identity tolerances. It compares
+requested plan coordinates, not the robot's measured arrival pose. These values
+distinguish the current grid centers and headings; recheck finer map resolutions
+or smaller heading intervals. Failed goals count as
 finished to avoid endless retries. It also owns visits to doubtful candidates.
 This supports a first integration with coverage's initial route, without a new
 progress topic. Coverage does not yet consume navigation or observation results.
@@ -15,6 +18,14 @@ progress topic. Coverage does not yet consume navigation or observation results.
 Mission starts returning at 480 s and forces finishing at 570 s. Some complete
 coverage estimates exceed the search allowance, so mission's deadline must stay
 active. A geometric plan is not a guarantee of executing all poses in time.
+Mission now also waits 8 s initially and cancels trips that stay still or exceed
+their timeout. Budget evaluation assumes TF is available immediately and every
+goal succeeds; real delays and inspections still need measurement.
+
+The offline evaluator found useful goals grouped by the old mission tolerances
+in four of 18 cases. Mission PR #9 resolves these losses: replaying all 18 saved
+plans selects every intended view in order. See `MISSION_COMPATIBILITY.md`.
+This identity correction does not validate actual observation or navigation.
 
 Information to agree for future adaptive coverage, before adding a message/topic:
 

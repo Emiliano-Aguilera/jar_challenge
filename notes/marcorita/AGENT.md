@@ -5,6 +5,18 @@ and `docs/team/INTERFACES.md`. Read `notes/marcorita/NOTES.md` for decisions.
 
 ## Local planner
 
+- Current work: `cobertura/evaluacion-presupuesto`, updated to development
+  `d375427`. Reference measurements use the earlier `a8b9530` planner.
+  Read `STATUS.md` for progress and evidence. Marco authorized publishing this
+  advance and merging it once checks pass, with no conflicts or change requests.
+- Budget diagnostics and the prepared camera/heading optimization are verified
+  locally. The 18-case comparison preserves routes exactly; paired runtimes and
+  the complete verifier pass. Read `MISSION_COMPATIBILITY.md` before changing
+  point identity: PR #9 in development `d375427` fixes all four diagnosed cases.
+  Replaying all 18 saved routes selects every point; 22 merged selector tests pass.
+  Development is now integrated. The full verifier passes with 118 project tests,
+  including the wrapper running 77 coverage/evaluation checks.
+
 - Pure planner: `src/equipo_jar/equipo_jar/cobertura_plan.py`.
 - ROS adapter: existing `src/equipo_jar/equipo_jar/cobertura.py`.
 - Generated test geometry: `pruebas/`, outside `src/`.
