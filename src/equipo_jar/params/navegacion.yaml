@@ -59,3 +59,222 @@ lifecycle_manager_localizacion:
     autostart: true
     node_names: [amcl]
     bond_timeout: 4.0
+
+# ---------------------------------------------------------------------------
+# Navegación (Nav2): planner (camino), controller (seguirlo), behaviors
+# (destrabarse), bt_navigator (el que recibe navigate_to_pose) y smoother
+# (único publicador de /cmd_vel).
+
+bt_navigator:
+  ros__parameters:
+    global_frame: map
+    robot_base_frame: base_footprint
+    odom_topic: /odom
+    bt_loop_duration: 10
+    default_server_timeout: 20
+    # Sin default_nav_to_pose_bt_xml ni plugin_lib_names: se usan los de Humble
+    # (árbol con replanificación y recoveries). La lista completa de plugins
+    # tiene más de 12 elementos y el CI la rechaza.
+
+controller_server:
+  ros__parameters:
+    controller_frequency: 20.0
+    min_x_velocity_threshold: 0.001
+    min_y_velocity_threshold: 0.001   # el ejemplo de Nav2 usa 0.5: anularía el movimiento lateral
+    min_theta_velocity_threshold: 0.001
+    failure_tolerance: 0.3
+    progress_checker_plugin: progress_checker
+    goal_checker_plugins: [general_goal_checker]
+    controller_plugins: [FollowPath]
+    progress_checker:
+      plugin: nav2_controller::SimpleProgressChecker
+      required_movement_radius: 0.3
+      movement_time_allowance: 10.0
+    general_goal_checker:
+      plugin: nav2_controller::SimpleGoalChecker
+      stateful: true                  # primero llega a la posición, después gira
+      xy_goal_tolerance: 0.10
+      yaw_goal_tolerance: 0.25
+    FollowPath:
+      plugin: nav2_mppi_controller::MPPIController
+      motion_model: Omni              # mecanum: también se mueve de costado
+      time_steps: 56                  # 56 x 0.05 s = mira 2.8 s hacia adelante
+      model_dt: 0.05
+      batch_size: 2000                # trayectorias que imagina por ciclo
+      iteration_count: 1
+      vx_std: 0.2
+      vy_std: 0.2
+      wz_std: 0.4
+      vx_max: 0.5
+      vx_min: -0.35
+      vy_max: 0.5
+      wz_max: 1.9
+      temperature: 0.3
+      gamma: 0.015
+      prune_distance: 1.7
+      transform_tolerance: 0.3
+      enforce_path_inversion: false
+      critics: [ConstraintCritic, ObstacleCritic, GoalCritic, GoalAngleCritic, PathAlignCritic,
+                PathFollowCritic, PathAngleCritic, PreferForwardCritic]
+      ConstraintCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 4.0
+      ObstacleCritic:
+        enabled: true
+        cost_power: 1
+        repulsion_weight: 1.5
+        critical_weight: 20.0
+        consider_footprint: false
+        collision_cost: 10000.0
+        collision_margin_distance: 0.05
+        near_goal_distance: 0.5
+      GoalCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 5.0
+        threshold_to_consider: 1.0
+      GoalAngleCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 3.0
+        threshold_to_consider: 0.5
+      PathAlignCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 14.0
+        max_path_occupancy_ratio: 0.05
+        trajectory_point_step: 3
+        threshold_to_consider: 0.5
+        offset_from_furthest: 20
+        use_path_orientations: false
+      PathFollowCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 5.0
+        offset_from_furthest: 5
+        threshold_to_consider: 1.0
+      PathAngleCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 2.0
+        offset_from_furthest: 4
+        threshold_to_consider: 0.5
+        max_angle_to_furthest: 1.0
+        forward_preference: false     # mecanum: ir de costado está bien
+      PreferForwardCritic:
+        enabled: false
+
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      update_frequency: 7.0           # el LiDAR va a ~7.2 Hz
+      publish_frequency: 2.0
+      global_frame: odom
+      robot_base_frame: base_footprint
+      rolling_window: true
+      width: 3
+      height: 3
+      resolution: 0.05
+      robot_radius: 0.18              # media diagonal del chasis; footprint no (aviso del juez)
+      transform_tolerance: 0.5
+      plugins: [obstacle_layer, inflation_layer]
+      obstacle_layer:
+        plugin: nav2_costmap_2d::ObstacleLayer
+        enabled: true
+        observation_sources: scan
+        scan:
+          topic: /scan
+          data_type: LaserScan
+          clearing: true
+          marking: true
+          max_obstacle_height: 2.0
+          raytrace_max_range: 3.5
+          obstacle_max_range: 3.0
+          inf_is_valid: false
+      inflation_layer:
+        plugin: nav2_costmap_2d::InflationLayer
+        inflation_radius: 0.35
+        cost_scaling_factor: 6.0
+
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      update_frequency: 2.0
+      publish_frequency: 1.0
+      global_frame: map
+      robot_base_frame: base_footprint
+      resolution: 0.05
+      robot_radius: 0.18
+      track_unknown_space: true
+      transform_tolerance: 0.5
+      plugins: [static_layer, obstacle_layer, inflation_layer]
+      static_layer:
+        plugin: nav2_costmap_2d::StaticLayer
+        map_topic: /map
+        map_subscribe_transient_local: true
+      obstacle_layer:                 # las cajas no están en /map: las marca el LiDAR
+        plugin: nav2_costmap_2d::ObstacleLayer
+        enabled: true
+        observation_sources: scan
+        scan:
+          topic: /scan
+          data_type: LaserScan
+          clearing: true
+          marking: true
+          max_obstacle_height: 2.0
+          raytrace_max_range: 3.5
+          obstacle_max_range: 3.0
+      inflation_layer:
+        plugin: nav2_costmap_2d::InflationLayer
+        inflation_radius: 0.35
+        cost_scaling_factor: 6.0
+
+planner_server:
+  ros__parameters:
+    expected_planner_frequency: 5.0
+    planner_plugins: [GridBased]
+    GridBased:
+      plugin: nav2_navfn_planner/NavfnPlanner
+      tolerance: 0.2
+      use_astar: true
+      allow_unknown: false
+
+behavior_server:
+  ros__parameters:
+    costmap_topic: local_costmap/costmap_raw
+    footprint_topic: local_costmap/published_footprint
+    cycle_frequency: 10.0             # el robot frena con 0.5 s sin /cmd_vel
+    behavior_plugins: [spin, backup, wait]
+    spin:
+      plugin: nav2_behaviors/Spin
+    backup:
+      plugin: nav2_behaviors/BackUp
+    wait:
+      plugin: nav2_behaviors/Wait
+    global_frame: odom
+    robot_base_frame: base_footprint
+    transform_tolerance: 0.3
+    simulate_ahead_time: 1.0
+    max_rotational_vel: 1.0
+    min_rotational_vel: 0.4
+    rotational_acc_lim: 3.2
+
+velocity_smoother:
+  ros__parameters:
+    smoothing_frequency: 20.0         # /cmd_vel a >= 10 Hz mientras se mueve
+    scale_velocities: false
+    feedback: OPEN_LOOP
+    max_velocity: [0.5, 0.5, 2.0]     # x, y, yaw. 3 números: el CI acepta hasta 3
+    min_velocity: [-0.5, -0.5, -2.0]
+    max_accel: [1.5, 1.5, 3.2]
+    max_decel: [-1.5, -1.5, -3.2]
+    deadband_velocity: [0.0, 0.0, 0.0]
+    velocity_timeout: 1.0
+    odom_topic: /odom
+
+lifecycle_manager_navegacion:
+  ros__parameters:
+    autostart: true
+    node_names: [controller_server, planner_server, behavior_server, bt_navigator, velocity_smoother]
+    bond_timeout: 4.0

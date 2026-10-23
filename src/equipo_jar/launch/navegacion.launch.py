@@ -25,6 +25,9 @@ def generate_launch_description():
     comunes = [params, {'use_sim_time': use_sim_time}]
     # El driver del robot real publica /diagnostics; el lifecycle manager de Nav2 también.
     sin_diagnostics = [('/diagnostics', '/jar/diagnostics')]
+    # Un solo publicador de /cmd_vel: el smoother. Controller y behaviors le pasan
+    # sus velocidades por cmd_vel_nav. Después de /done alcanza con que paren ellos.
+    al_smoother = [('cmd_vel', 'cmd_vel_nav')]
 
     def nodo(paquete, ejecutable, nombre, remapeos=()):
         return Node(package=paquete, executable=ejecutable, name=nombre, output='screen',
@@ -39,9 +42,23 @@ def generate_launch_description():
                  'lifecycle_manager_localizacion', sin_diagnostics),
         ])
 
+    # Siempre arranca: en pruebas.launch.py usa la TF fija en vez de AMCL.
+    navegacion = [
+        nodo('nav2_controller', 'controller_server', 'controller_server', al_smoother),
+        nodo('nav2_planner', 'planner_server', 'planner_server'),
+        nodo('nav2_behaviors', 'behavior_server', 'behavior_server', al_smoother),
+        nodo('nav2_bt_navigator', 'bt_navigator', 'bt_navigator'),
+        nodo('nav2_velocity_smoother', 'velocity_smoother', 'velocity_smoother', [
+            ('cmd_vel', 'cmd_vel_nav'),
+            ('cmd_vel_smoothed', '/cmd_vel')]),
+        nodo('nav2_lifecycle_manager', 'lifecycle_manager',
+             'lifecycle_manager_navegacion', sin_diagnostics),
+    ]
+
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='false'),
         DeclareLaunchArgument('localizacion', default_value='true',
                               description='false: sin AMCL (otro publica map -> odom)'),
         localizacion,
+        *navegacion,
     ])
