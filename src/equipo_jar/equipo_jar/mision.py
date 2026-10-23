@@ -38,8 +38,8 @@ class Mision(Node):
         self.declare_parameter('cantidad_victimas', 5)
         self.cantidad_victimas = self.get_parameter('cantidad_victimas').value
         self.p = parametros_en_vivo(self, {'min_observations': 5, 'max_deviation_m': 0.10, 
-                                            'min_report_distance_m': 0.40, 'same_point_distance_m': 0.30, 
-                                            'same_point_angle_rad': 0.5, 'return_time_s': 480.0,
+                                            'min_report_distance_m': 0.40, 'same_point_distance_m': 0.02, 
+                                            'same_point_angle_rad': 0.1, 'return_time_s': 480.0,
                                             'min_observations_final': 1, 'max_deviation_final_m': 0.30, 
                                             'finish_time_s': 570.0, 'idle_spin_s': 10.0, 'idle_spin_rad': 1.57,
                                             'visit_min_observations': 2, 'visit_distance_m': 0.8, 
