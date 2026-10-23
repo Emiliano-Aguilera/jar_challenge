@@ -118,6 +118,41 @@ repetitions. Every execution asserts identical poses, target counts and route
 metrics. Run without another CPU-heavy evaluation; results are machine-specific.
 Timings exclude diagnostic reconstruction and the exhaustive oracle.
 
+## Compare fixed-view observation ordering
+
+The runtime keeps the existing selected view set. After 2-opt, one bounded
+relocation sweep can move a view earlier or later. It accepts only improvements
+in sampled mean first-view time (or equal mean with shorter search), with no
+increase in estimated search or search-plus-return. Sampled coverage must not
+decrease on the configured predicted-clock grid.
+
+`order_check_interval_s` is the check spacing; `order_start_delay_s` estimates
+the initial wait before the route. Both apply live. The estimate does not read
+or control mission's clock. Recheck it when startup wait or actual planning/TF
+delays change. Coverage between samples/checks and physical detection remain
+unverified; the full-grid offline report is still needed.
+
+Use the budget evaluator above for the current planner. To compare isolated
+ordering policies against an earlier evaluator's saved poses:
+
+```bash
+python3 pruebas/experimentar_orden.py \
+  --reference build/verificacion/cobertura/presupuesto-optimizado/budget.json \
+  --simulator "$(ros2 pkg prefix --share yahboom_rosmaster_gazebo)" \
+  --modes sample-phase60 --output build/verificacion/cobertura/orden-experimento
+```
+
+The script does not regenerate the reference plan. It evaluates retained views
+with full-grid visibility and compares experimental relocation rules. The
+`sample-phase60` policy uses minute checks aligned with the saved startup delay.
+Other policies can regress early coverage and are not runtime defaults.
+
+For paired complete-planner CPU measurements when only order changes, use
+`comparar_rendimiento.py --allow-reordering` with a trusted saved planner file.
+It checks identical view sets/target counts across versions and deterministic
+order/metrics within each version. Without the flag, exact route/metric parity
+is still required. Estimated travel savings are separate from CPU time.
+
 ## Current mission integration
 
 Coverage publishes an initial route. Mission in current development remembers
@@ -126,8 +161,14 @@ and heading. Coverage does not remove those points or track actual observation.
 See `notes/marcorita/INTEGRATION.md` for execution tolerances, deadlines and the
 remaining perception/navigation agreements.
 
-For a handoff check, start the official simulator and judge following
-`docs/team/SIMULATION.md`, then use separate terminals with the same ROS domain:
+For a handoff check, use the official simulator and practice judge following
+`docs/team/SIMULATION.md`. Match the ROS domain in each terminal.
+
+In a communication-only fixture, prepare the team and simulator first and wait
+for fresh map/base/camera TF before starting the judge. An ordering probe exposed
+the map about 54 s before robot TF; fake navigation does not move, so the judge
+ended by inactivity at 60 s. Preparing this fixture does not validate or change
+the official run's startup conditions. Keep the first failed attempt as evidence.
 
 ```bash
 python3 notes/AlsinaBautista/nav_falso.py --ros-args -p duracion:=0.5

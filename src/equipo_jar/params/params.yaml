@@ -23,6 +23,10 @@ cobertura:
     max_positions: 256
     max_targets: 2048
     free_threshold: 25
+    #PARAM: preserve sampled coverage at predicted clock checks (>= observation_time).
+    order_check_interval_s: 60.0
+    #PARAM: estimated delay before route start; does not control mission's clock (>= 0).
+    order_start_delay_s: 8.0
     base_frame: base_footprint
     camera_frame: cam_1_color_optical_frame
     tf_max_age: 1.0

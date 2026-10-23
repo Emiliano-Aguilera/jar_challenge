@@ -31,6 +31,8 @@ def main():
     parser.add_argument('--output', type=Path, default=Path('build/verificacion/cobertura/rendimiento'))
     parser.add_argument('--maps', nargs='+', default=('laberinto_1', 'laberinto_simple', 'maze_1_6x5'))
     parser.add_argument('--repetitions', type=int, default=3)
+    parser.add_argument('--allow-reordering', action='store_true',
+                        help='require identical view sets and stable output per version; allow a new order')
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     if not args.output.resolve().is_relative_to(root / 'build'):
@@ -50,8 +52,10 @@ def main():
             grid = module.Grid(source.width, source.height, source.resolution,
                                list(source.data), module.Pose(**asdict(source.origin)))
             inputs[label] = (module.make_plan, grid, module.Pose(0.0, 0.0, 0.0),
-                             module.Settings(**values), module.Camera(**camera_values))
+                             module.Settings(**{key: values[key] for key in asdict(module.Settings())}),
+                             module.Camera(**camera_values))
         expected = None
+        expected_by_version = {}
         row = dict(map=name, reference=[], current=[])
         for repetition in range(-1, args.repetitions):
             order = ('reference', 'current') if repetition % 2 == 0 else ('current', 'reference')
@@ -62,13 +66,16 @@ def main():
                 seconds = time.perf_counter() - before
                 signature = ([(p.x, p.y, p.yaw) for p in result.poses], result.predicted_count,
                              result.target_count, asdict(result.metrics))
+                shared = (sorted(signature[0]), *signature[1:3]) if args.allow_reordering else signature
                 if expected is None:
-                    expected = signature
-                assert signature == expected, f'Planner output changed: {name}/{label}'
+                    expected = shared
+                assert shared == expected, f'Planner output changed beyond allowed order: {name}/{label}'
+                expected_by_version.setdefault(label, signature)
+                assert signature == expected_by_version[label], f'Non-deterministic output: {name}/{label}'
                 if repetition >= 0:
                     row[label].append(seconds)
                 print(f'{name} {label} {"warmup" if repetition < 0 else repetition + 1}: '
-                      f'{seconds:.3f} s; identical output', flush=True)
+                      f'{seconds:.3f} s; {"same views" if args.allow_reordering else "identical output"}', flush=True)
         row['reference_median'] = statistics.median(row['reference'])
         row['current_median'] = statistics.median(row['current'])
         row['median_speedup'] = row['reference_median'] / row['current_median']
@@ -77,6 +84,7 @@ def main():
         reference_sha256=hashlib.sha256(args.reference.read_bytes()).hexdigest(),
         current_sha256=hashlib.sha256(Path(current.__file__).read_bytes()).hexdigest(),
         settings=values, camera=camera_values, cases=records,
+        route_comparison='same view set' if args.allow_reordering else 'identical route and metrics',
         limits='One warmup and alternating paired repetitions on this machine; '
                'not a statistical or hardware-independent runtime guarantee. No diagnostics.')
     (args.output / 'timing.json').write_text(json.dumps(payload, indent=2) + '\n')
@@ -86,7 +94,10 @@ def main():
     for row in records:
         lines.append(f'| {row["map"]} | {row["reference_median"]:.3f} | '
                      f'{row["current_median"]:.3f} | {row["median_speedup"]:.2f}x |')
-    lines.extend(['', 'Every run asserts identical poses, predicted target counts and route metrics.'])
+    guarantee = ('Every run asserts identical view sets and target counts, with deterministic order/metrics per version.'
+                 if args.allow_reordering else
+                 'Every run asserts identical poses, predicted target counts and route metrics.')
+    lines.extend(['', guarantee])
     (args.output / 'timing.md').write_text('\n'.join(lines) + '\n')
 
 

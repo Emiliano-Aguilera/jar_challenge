@@ -1,6 +1,6 @@
 # Coverage integration
 
-Current state reviewed against development `d375427` on 2026-10-23.
+Current base is development `10f97ca`; local ordering work reviewed on 2026-10-23.
 Follow-up proposals below do not change the agreed interface.
 Current output stays `/jar/plan_cobertura`, `nav_msgs/Path`, frame `map`.
 
@@ -21,6 +21,14 @@ active. A geometric plan is not a guarantee of executing all poses in time.
 Mission now also waits 8 s initially and cancels trips that stay still or exceed
 their timeout. Budget evaluation assumes TF is available immediately and every
 goal succeeds; real delays and inspections still need measurement.
+
+Local observation-order refinement retains every selected pose and heading.
+It uses `order_check_interval_s` and `order_start_delay_s` to protect sampled
+coverage on a predicted clock grid. The delay currently estimates the 8 s
+startup wait, but does not read or control mission's actual clock. Recheck it
+if startup wait or measured planning/TF delays change. This adds no interface
+or execution-progress feedback. Dense visibility at the evaluated budgets is
+checked offline; runtime checks are sampled, with no between-check guarantee.
 
 The offline evaluator found useful goals grouped by the old mission tolerances
 in four of 18 cases. Mission PR #9 resolves these losses: replaying all 18 saved
@@ -79,6 +87,13 @@ unknown-cell, footprint and ray-corner policies before migrating to shared code.
   based on box size. Simulator dimensions alone are not a confirmed rule.
 
 ## Next end-to-end check
+
+The first local ordering handoff attempt received the map about 54 s before
+connected robot TF. Fake navigation does not move the robot, and the judge
+ended at its 60 s inactivity limit. The communication fixture now waits for
+fresh map/base/camera TF before starting that judge; the failed attempt remains
+recorded. This prepares the test, not the official run. Actual TF readiness and
+startup delay under the competition launch still need validation with localization.
 
 Once execution is connected, measure actual time, goal success, processed
 images, candidate confirmation and collision observations. Compare against

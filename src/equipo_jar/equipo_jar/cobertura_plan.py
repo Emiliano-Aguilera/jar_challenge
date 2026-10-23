@@ -34,6 +34,8 @@ class Settings:
     max_positions: int = 256
     max_targets: int = 2048
     free_threshold: int = 25
+    order_check_interval_s: float = 60.0
+    order_start_delay_s: float = 8.0
 
     def __post_init__(self):
         positive = ('robot_radius', 'candidate_spacing', 'target_spacing',
@@ -52,6 +54,11 @@ class Settings:
                 raise ValueError(f'{name} must be a positive integer')
         if type(self.free_threshold) is not int or not 0 <= self.free_threshold < 100:
             raise ValueError('free_threshold must be an integer in [0, 100)')
+        if (not math.isfinite(self.order_check_interval_s)
+                or self.order_check_interval_s < self.observation_time):
+            raise ValueError('order_check_interval_s must be finite and at least observation_time')
+        if not math.isfinite(self.order_start_delay_s) or self.order_start_delay_s < 0:
+            raise ValueError('order_start_delay_s must be finite and nonnegative')
 
 
 @dataclass(frozen=True)
@@ -337,8 +344,8 @@ def route_metrics(choices, start_cell, start_yaw, costs, settings, possible):
                    possible.bit_count(), tuple(curve))
 
 
-def improve_order(choices, start_cell, start_yaw, costs, settings, possible):
-    """One bounded 2-opt sweep. Preserve coverage and improve both time measures."""
+def improve_order(choices, start_cell, start_yaw, costs, settings, possible, cancel=None):
+    """Bounded 2-opt and relocation sweeps, retaining every selected view."""
     choices = list(choices)
     metrics = route_metrics(choices, start_cell, start_yaw, costs, settings, possible)
     for first in range(len(choices) - 1):
@@ -350,7 +357,83 @@ def improve_order(choices, start_cell, start_yaw, costs, settings, possible):
                 choices, metrics = candidate, trial
     # Keep every view: equal sampled coverage does not prove equal visibility
     # between samples, so removing a seemingly redundant pose would be unsafe.
-    return choices
+    return relocate_order(choices, start_cell, start_yaw, costs, settings, possible,
+                          settings.order_check_interval_s, settings.order_start_delay_s, cancel)
+
+
+def _order_checkpoints(curve, interval, start_delay):
+    """Only the first clock-grid check after each coverage increase can fail.
+
+    At most one check per view is needed, even for a very small interval.
+    Times in the curve are relative to route start; the grid includes the
+    estimated initial delay. This is a prediction, not mission's actual clock.
+    """
+    result = []
+    previous = 0
+    for seconds, count in curve:
+        if count == previous:
+            continue
+        previous = count
+        check = math.ceil((seconds + start_delay - 1e-9) / interval) * interval - start_delay
+        if result and abs(check - result[-1][0]) <= 1e-9:
+            result[-1] = check, count
+        else:
+            result.append((check, count))
+    return result
+
+
+def _meets_order_checks(curve, checks):
+    index = 0
+    for seconds, required in checks:
+        while index + 1 < len(curve) and curve[index + 1][0] <= seconds + 1e-9:
+            index += 1
+        if curve[index][1] < required:
+            return False
+    return True
+
+
+def relocate_order(choices, start_cell, start_yaw, costs, settings, possible,
+                   interval, start_delay, cancel=None):
+    """One bounded relocation sweep, preserving all views and sampled checks.
+
+    Accept only lower mean first-view time (or equal mean and shorter search),
+    with no increase in search duration or search-plus-return estimate. Do not
+    reduce sampled visibility on the configured predicted clock grid. This
+    does not guarantee dense visibility between target samples or clock checks.
+    """
+    if not math.isfinite(interval) or interval < settings.observation_time:
+        raise ValueError('order interval must be finite and at least observation_time')
+    if not math.isfinite(start_delay) or start_delay < 0:
+        raise ValueError('order start delay must be finite and nonnegative')
+    check_cancelled(cancel)
+    current = list(choices)
+    metrics = route_metrics(current, start_cell, start_yaw, costs, settings, possible)
+    for entry in tuple(choices):
+        check_cancelled(cancel)
+        first = current.index(entry)
+        rest = current[:first] + current[first + 1:]
+        checks = _order_checkpoints(metrics.coverage_curve, interval, start_delay)
+        best, best_metrics = current, metrics
+        for last in range(len(current)):
+            check_cancelled(cancel)
+            if last == first:
+                continue
+            trial = rest[:last] + [entry] + rest[last:]
+            candidate = route_metrics(trial, start_cell, start_yaw, costs, settings, possible)
+            if candidate.duration > metrics.duration + 1e-9:
+                continue
+            if (candidate.duration + candidate.return_distance / settings.travel_speed
+                    > metrics.duration + metrics.return_distance / settings.travel_speed + 1e-9):
+                continue
+            earlier = candidate.mean_first_view_time < best_metrics.mean_first_view_time - 1e-9
+            equal = abs(candidate.mean_first_view_time - best_metrics.mean_first_view_time) <= 1e-9
+            if not (earlier or (equal and candidate.duration < best_metrics.duration - 1e-9)):
+                continue
+            if not _meets_order_checks(candidate.coverage_curve, checks):
+                continue
+            best, best_metrics = trial, candidate
+        current, metrics = best, best_metrics
+    return current
 
 
 def shortest_leg(cells, start, goal, resolution):
@@ -482,7 +565,7 @@ def make_plan(grid, start, settings=Settings(), camera=Camera(), *,
     select_views(options, settings.max_views - len(result))
     unpolished = route_metrics(result, start_cell, start.yaw, costs, settings, possible)
     if improve:
-        result = improve_order(result, start_cell, start.yaw, costs, settings, possible)
+        result = improve_order(result, start_cell, start.yaw, costs, settings, possible, cancel)
     metrics = route_metrics(result, start_cell, start.yaw, costs, settings, possible)
     details = None
     if diagnostics:
