@@ -43,12 +43,22 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
 
 - Tried: always going to the first pose of `/jar/plan_cobertura`. If coverage is
   slow to drop a reached point, the robot goes back to it again and again.
-- Decided: mission keeps its own list of finished points and takes the first plan
-  pose that is not in it. Same point = within `same_point_distance_m` (0.30 m)
-  and facing within `same_point_angle_rad` (0.5 rad), because coverage may ask
-  for the same spot facing two ways. A point whose goal failed also counts as
+- Decided: mission keeps its own list of finished points, across plans, and takes
+  the first plan pose that is not in it. A point whose goal failed also counts as
   finished (no endless retries). This works whether or not coverage drops reached
   points.
+- Tried: "same point" = within 0.30 m and 0.5 rad. marcorita measured the 18
+  practice cases: in 4 of them mission skipped 1 to 7 distinct coverage views
+  (e.g. two views 0.25 m apart facing the same way).
+- Decided (agreed with marcorita): a view's identity is its exact plan coordinates.
+  Coverage puts views on a fixed grid (cell centers, multiples of
+  360°/`heading_count`), so the same view always comes with the same numbers, even
+  in a new plan. `same_point_distance_m` (0.02 m) and `same_point_angle_rad`
+  (0.1 rad) only absorb rounding. Rule: both must stay below half a map cell and
+  below π/`heading_count`; `test_params_respect_the_coverage_resolution` checks it.
+  Mission compares plan coordinates, not where the robot arrived, so navigation
+  accuracy does not matter here. Whether two close views are worth doing is
+  coverage's call.
 
 ## How does mission talk to Nav2?
 
@@ -70,9 +80,13 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
 
 - Tried: reading it when /map arrives. Localization needs the map before it
   publishes `map → odom`, so at that moment the pose usually doesn't exist yet.
-- Decided: read `map → base_footprint` from TF on every tick after /map until it
-  works. The robot doesn't move before mission sends a goal, so the first pose
-  found is the start.
+- Tried: keeping the first `map → base_footprint` found after /map. With AMCL that
+  is its first guess, before it corrects the hand placement (hans-die's
+  `localizacion` node settles it in about 5 s).
+- Decided: until the first goal the robot has not moved, so the latest pose is the
+  best estimate of the start. Mission updates `start_pose` on every tick and freezes
+  it when it sends the first goal (`go_to`). No goal goes out during the first
+  `start_wait_s` (8 s) after /map, so AMCL can settle; reports are not delayed.
 
 ## When does the robot go back?
 
@@ -116,9 +130,64 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
 - Needs from navigation (hans-die): a goal at the current position with another
   heading must make Nav2 turn in place.
 
+## Who picks where to look at a doubtful candidate?
+
+- Options: coverage (mission asks it through a service, a new `.srv` in
+  `equipo_jar_msgs`) or mission itself, from `/map`.
+- Decided (agreed with marcorita): mission. Coverage's main job, the plan, is the
+  one still missing, and a service adds an interface change and one more thing that
+  can fail. The map functions (`cell_value`, `is_free`, `line_is_clear`) go in
+  `src/equipo_jar/equipo_jar/mapa.py` so coverage can use them too. If coverage
+  writes similar ones, we merge them into one file.
+
+## How does mission look at doubtful candidates?
+
+- Problem: a box seen from one place stays at 0.15 m spread in fusion, above
+  `max_deviation_m`. Seen once in passing, it is only reported in the final round,
+  and the fast bonus is lost.
+- Decided: every time the robot is free (a trip ended), before the next plan point
+  or a turn, mission picks the nearest unreported candidate with at least
+  `visit_min_observations` (2) that it has not visited yet (`inspeccion.py`,
+  `pick_doubtful`). It goes to look at it from a free spot on a circle of
+  `visit_distance_m` (0.8 m) around the box, facing it (`viewpoint_for`):
+  - `visit_angles` (12) spots are tried; the robot must fit (`visit_clearance_m`,
+    0.25 m from walls, unknown cells and the map edge);
+  - no wall between the spot and the box, checked up to `visit_box_margin_m`
+    (0.25 m) before its center, in case the map draws the boxes;
+  - at least `visit_min_shift_m` (0.4 m) from the robot, so fusion gets a new view;
+  - of the valid spots, the nearest to the robot.
+- Each candidate is visited once, even if the trip fails or there is no spot:
+  visited ones are remembered by position, like reports. Visits are not plan points.
+- Mission does not go back for "no plan points left" while a doubtful candidate is
+  still waiting for its visit.
+- To check in the simulator: the robot leaves as soon as it arrives. If fusion
+  needs more time to confirm, add a short wait at the spot.
+
+## What if mission hits an unexpected error?
+
+- Problem: an error in a callback goes up to `rclpy.spin`, `correr()` only catches
+  Ctrl+C, and the node closes. Nobody restarts it: no more reports, goals or /done.
+- Decided: `step`, `on_goal_response` and `on_goal_result` catch any error, log it
+  with its traceback (at most every 5 s) and carry on. If a Nav2 callback fails,
+  the goal counts as failed, so mission never waits forever for it.
+
+## What if navigation gets stuck?
+
+- Problem: while a goal is in progress mission only waits. If Nav2 gets stuck with
+  a goal, mission waits forever and the judge ends the run after 60 s still.
+- Decided: while a goal is moving, mission cancels it if it takes more than
+  `goal_timeout_s` (90 s), or if the robot has not moved `stuck_distance_m` (5 cm)
+  nor turned `stuck_angle_rad` (0.2 rad) for `stuck_time_s` (20 s). Movement is
+  read from `odom → base_footprint`, like the judge reads /odom: AMCL corrections
+  in `map` would look like movement. Without odom data the robot is not called
+  stuck. After cancelling, mission waits for the goal's result (failed) and goes on
+  as with any failed goal; a stuck return ends the run.
+- Not covered: Nav2 never answering a goal (`sending` forever). Nav2 is down then,
+  and no new goal would help.
+
 ## Next
 
-- Go and look at doubtful candidates up close.
+- Run it in the simulator once Nav2, localization and coverage are in `development`.
 
 ## Testing without the other modules
 
@@ -126,5 +195,5 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
   any goal, waits, answers succeeded (or aborted with `-p fallar:=true`) and
   accepts cancels. Fake `/map`, plan, candidates and TF with `ros2 topic pub` and
   `ros2 run tf2_ros static_transform_publisher`.
-- Unit tests (no ROS needed): `src/equipo_jar/test/test_confirmacion.py` and
-  `test_exploracion.py`.
+- Unit tests (no ROS needed) in `src/equipo_jar/test/`: `test_confirmacion.py`,
+  `test_exploracion.py`, `test_mapa.py` and `test_inspeccion.py`.

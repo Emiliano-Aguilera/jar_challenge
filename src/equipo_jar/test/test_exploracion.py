@@ -1,4 +1,5 @@
 import math
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -107,3 +108,48 @@ def test_same_place_other_heading_is_still_pending():
     poses = [pose(1.0, 0.5, 0.0), pose(2.0, 0.5, 0.0), pose(2.0, 0.5, math.pi / 2)]
     visited = [(1.0, 0.5, 0.0), (2.0, 0.5, 0.0)]
     assert first_pending(poses, visited, DIST, ANG) is poses[2]
+
+
+# --- Identidad de una vista del plan de cobertura ---
+# Cobertura genera las vistas sobre una grilla fija (centros de celda y múltiplos de
+# 360°/heading_count), así que la misma vista sale siempre con las mismas coordenadas.
+# Misión las compara con tolerancias que solo filtran redondeo (params.yaml).
+
+PLAN_DIST = 0.02
+PLAN_ANG = 0.1
+MAP_RESOLUTION = 0.05   # m por celda en los mapas de práctica
+
+
+def test_coverage_views_25_cm_apart_are_different():
+    # Ejemplo de Marco (laberinto_1_start_0): vistas 31 y 34, misma dirección, a 0.25 m.
+    yaw = 4.71238898038469
+    poses = [pose(-2.675, 2.125, yaw), pose(-2.925, 2.125, yaw)]
+    visited = [(-2.675, 2.125, yaw_from_quaternion(quaternion(yaw)))]
+    assert first_pending(poses, visited, PLAN_DIST, PLAN_ANG) is poses[1]
+
+
+def test_coverage_headings_45_degrees_apart_are_different():
+    poses = [pose(1.025, 0.475, 0.0), pose(1.025, 0.475, math.pi / 4)]
+    visited = [(1.025, 0.475, 0.0)]
+    assert first_pending(poses, visited, PLAN_DIST, PLAN_ANG) is poses[1]
+
+
+def test_same_view_in_a_new_plan_is_recognized():
+    # El mismo punto, publicado otra vez en un plan nuevo y leído desde el cuaternión.
+    yaw = 3 * math.pi / 4
+    visited = [(1.025, 0.475, yaw_from_quaternion(quaternion(yaw)))]
+    assert already_visited(1.025, 0.475, yaw_from_quaternion(quaternion(yaw)),
+                           visited, PLAN_DIST, PLAN_ANG)
+
+
+def test_params_respect_the_coverage_resolution():
+    # Regla acordada con cobertura: las tolerancias de misión tienen que ser menores que
+    # media celda y que media separación entre direcciones. Si cobertura cambia su grilla
+    # o la cantidad de direcciones, este test avisa.
+    yaml = pytest.importorskip('yaml')
+    path = Path(__file__).resolve().parents[1] / 'params' / 'params.yaml'
+    params = yaml.safe_load(path.read_text())
+    mision = params['mision']['ros__parameters']
+    heading_count = params['cobertura']['ros__parameters']['heading_count']
+    assert mision['same_point_distance_m'] < MAP_RESOLUTION / 2
+    assert mision['same_point_angle_rad'] < math.pi / heading_count

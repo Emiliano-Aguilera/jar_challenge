@@ -8,7 +8,28 @@
 # Una sección por nodo. Los nombres no pueden contener victim, coord, spawn ni
 # posicion_ (docs/team/INTERFACES.md).
 cobertura:
-  ros__parameters: {}
+  ros__parameters:
+    robot_radius: 0.18
+    safety_margin: 0.03
+    candidate_spacing: 0.45
+    target_spacing: 0.15
+    view_range: 2.0
+    fov_degrees: 61.0
+    heading_count: 8
+    travel_speed: 0.25
+    turn_speed: 0.7
+    observation_time: 1.0
+    max_views: 80
+    max_positions: 256
+    max_targets: 2048
+    free_threshold: 25
+    #PARAM: preserve sampled coverage at predicted clock checks (>= observation_time).
+    order_check_interval_s: 60.0
+    #PARAM: estimated delay before route start; does not control mission's clock (>= 0).
+    order_start_delay_s: 8.0
+    base_frame: base_footprint
+    camera_frame: cam_1_color_optical_frame
+    tf_max_age: 1.0
 
 # Detection: red in the camera + LiDAR range -> /jar/observaciones. All values apply live.
 # Ranges and reasoning for each one: vision.py and deteccion.py (#PARAM comments).
@@ -94,9 +115,22 @@ mision:
     min_observations: 5
     max_deviation_m: 0.10
     min_report_distance_m: 0.40
-    same_point_distance_m: 0.30
-    same_point_angle_rad: 0.5
+    same_point_distance_m: 0.02
+    same_point_angle_rad: 0.1
     return_time_s: 480.0
     min_observations_final: 1
     max_deviation_final_m: 0.30
     finish_time_s: 570.0
+    idle_spin_s: 10.0
+    idle_spin_rad: 1.57
+    visit_min_observations: 2
+    visit_distance_m: 0.8
+    visit_clearance_m: 0.25
+    visit_angles: 12
+    visit_min_shift_m: 0.4
+    visit_box_margin_m: 0.25
+    start_wait_s: 8.0
+    goal_timeout_s: 90.0
+    stuck_time_s: 20.0
+    stuck_distance_m: 0.05
+    stuck_angle_rad: 0.2

@@ -20,12 +20,15 @@ from equipo_jar.comun import QOS_ESTADO, QOS_MAPA, correr, parametros_en_vivo
 from equipo_jar.reportes import armar_reporte
 from equipo_jar_msgs.msg import Candidatas
 from equipo_jar.confirmacion import select_to_report
-from equipo_jar.exploracion import yaw_from_quaternion, first_pending
+from equipo_jar.exploracion import yaw_from_quaternion, first_pending, angle_difference
+from equipo_jar.inspeccion import pick_doubtful, viewpoint_for
 
 from tf2_ros import Buffer, TransformListener, TransformException
 from rclpy.time import Time
 import math
 from action_msgs.msg import GoalStatus
+
+import traceback
 
 
 class Mision(Node):
@@ -35,10 +38,15 @@ class Mision(Node):
         self.declare_parameter('cantidad_victimas', 5)
         self.cantidad_victimas = self.get_parameter('cantidad_victimas').value
         self.p = parametros_en_vivo(self, {'min_observations': 5, 'max_deviation_m': 0.10, 
-                                            'min_report_distance_m': 0.40, 'same_point_distance_m': 0.30, 
-                                            'same_point_angle_rad': 0.5, 'return_time_s': 480.0,
+                                            'min_report_distance_m': 0.40, 'same_point_distance_m': 0.02, 
+                                            'same_point_angle_rad': 0.1, 'return_time_s': 480.0,
                                             'min_observations_final': 1, 'max_deviation_final_m': 0.30, 
-                                            'finish_time_s': 570.0, 'idle_spin_s': 10.0, 'idle_spin_rad': 1.57})  # parámetros ajustables
+                                            'finish_time_s': 570.0, 'idle_spin_s': 10.0, 'idle_spin_rad': 1.57,
+                                            'visit_min_observations': 2, 'visit_distance_m': 0.8, 
+                                            'visit_clearance_m': 0.25, 'visit_angles': 12, 
+                                            'visit_min_shift_m': 0.4, 'visit_box_margin_m': 0.25, 
+                                            'start_wait_s': 8.0, 'goal_timeout_s': 90.0, 'stuck_time_s': 20.0,
+                                            'stuck_distance_m': 0.05, 'stuck_angle_rad': 0.2})  # parámetros ajustables
 
         self.mapa = None
         self.plan = None
@@ -53,6 +61,7 @@ class Mision(Node):
 
         self.reported_ids = set()
         self.reported_points = []
+        self.inspected_points = []
 
         self.nav_state = 'idle'
         self.state = 'waiting_for_map'
@@ -65,6 +74,13 @@ class Mision(Node):
         self.canceling = False
 
         self.idle_since = None
+
+        self.start_locked = False
+
+        self.goal_start_time = None
+        self.last_motion_pose = None
+        self.last_motion_time = None
+        self.stuck_canceling = False
 
         self.create_subscription(OccupancyGrid, '/map', self.al_recibir_mapa, QOS_MAPA)
         self.create_subscription(Path, '/jar/plan_cobertura', self.al_recibir_plan, QOS_ESTADO)
@@ -103,6 +119,17 @@ class Mision(Node):
         except TransformException:
             return None
 
+    def odom_pose(self):
+        try:
+            pose = self.tf_buffer.lookup_transform('odom', 'base_footprint', Time())
+            x = pose.transform.translation.x
+            y = pose.transform.translation.y
+            q = pose.transform.rotation
+            yaw = yaw_from_quaternion(q)
+            return (x, y, yaw)
+        except TransformException:
+            return None
+
     def check_reports(self, min_obs, max_deviation):
         if self.candidatas is None:
             return
@@ -125,9 +152,49 @@ class Mision(Node):
         self.nav_state = "sending"
         future = self.navegacion.send_goal_async(goal)
         future.add_done_callback(self.on_goal_response)
+        now = self.seconds_since_t0()
+        self.goal_start_time = now
+        self.last_motion_time = now
+        self.last_motion_pose = self.odom_pose()
+        self.stuck_canceling = False
+        if not self.start_locked:
+            self.start_locked = True
+            if self.start_pose is not None:
+                x, y, yaw = self.start_pose
+                self.get_logger().info(f'Pose de inicio fija: x={x:.2f} y={y:.2f} yaw={yaw:.2f}')
+            else:
+                self.get_logger().warning('Primer viaje sin pose de inicio: no se va a poder volver')
         return True
 
-    def on_goal_response(self, future):
+    def check_stuck(self):
+        if self.nav_state != 'moving' or self.stuck_canceling:
+            return
+        now = self.seconds_since_t0()
+        pose = self.odom_pose()
+
+        if pose is None or self.last_motion_pose is None:
+            self.last_motion_pose = pose
+            self.last_motion_time = now
+        else:
+            x1, y1, yaw1 = pose
+            x2, y2, yaw2 = self.last_motion_pose
+            dist = math.hypot(x1 - x2, y1 - y2)
+            spin = angle_difference(yaw1, yaw2)
+            if dist > self.p['stuck_distance_m'] or spin > self.p['stuck_angle_rad']:
+                self.last_motion_pose = pose
+                self.last_motion_time = now
+
+        reason = None
+        if now - self.goal_start_time > self.p['goal_timeout_s']:
+            reason = 'viaje demasiado largo'
+        elif now - self.last_motion_time > self.p['stuck_time_s']:
+            reason = 'robot quieto'
+        if reason is not None:
+            self.current_goal.cancel_goal_async()
+            self.stuck_canceling = True
+            self.get_logger().warning(f'Cancelo el viaje: {reason}')
+
+    def handle_on_goal_response(self, future):
         goal_handle = future.result()
         if not goal_handle.accepted:
             self.nav_state = 'failed'
@@ -140,7 +207,14 @@ class Mision(Node):
         self.nav_state = 'moving'
         goal_handle.get_result_async().add_done_callback(self.on_goal_result)
 
-    def on_goal_result(self, future):
+    def on_goal_response(self, future):
+        try:
+            self.handle_on_goal_response(future)
+        except Exception:
+            self.nav_state = 'failed'
+            self.get_logger().error(f'Error en on_goal_response:\n{traceback.format_exc()}', throttle_duration_sec=5.0)
+
+    def handle_on_goal_result(self, future):
         status = future.result().status
         if status == GoalStatus.STATUS_SUCCEEDED:
             self.nav_state = 'arrived'
@@ -149,11 +223,18 @@ class Mision(Node):
             self.nav_state = 'failed'
             self.get_logger().info('Status failed')
 
+    def on_goal_result(self, future):
+        try:
+            self.handle_on_goal_result(future)
+        except Exception:
+            self.nav_state = 'failed'
+            self.get_logger().error(f'Error en on_goal_result:\n{traceback.format_exc()}', throttle_duration_sec=5.0)
+
     def change_state(self, new_state):
         self.get_logger().info(f'Estado: <{self.state}> -> <{new_state}>')
         self.state = new_state
 
-    def step(self):
+    def step_logic(self):
         if self.state == 'waiting_for_map':
             if self.t0 is not None:
                 self.change_state('exploring')
@@ -164,12 +245,13 @@ class Mision(Node):
             self.pub_done.publish(Empty())
             self.change_state('finished')
             return
-        if self.start_pose is None:
+        if not self.start_locked:
             pose = self.current_pose()
             if pose is not None:
+                if self.start_pose is None:
+                    x, y, yaw = pose
+                    self.get_logger().info(f'Pose de inicio (provisoria): x={x:.2f} y={y:.2f} yaw={yaw:.2f}')
                 self.start_pose = pose
-                x, y, yaw = pose
-                self.get_logger().info(f'Pose de inicio: x={x:.2f} y={y:.2f} yaw={yaw:.2f}')
         if self.seconds_since_t0() >= self.p['finish_time_s']:
             self.get_logger().info('Se termina el tiempo de la corrida')
             if self.nav_state == 'moving':
@@ -177,6 +259,9 @@ class Mision(Node):
             self.terminar()
             return
         self.check_reports(self.p['min_observations'], self.p['max_deviation_m'])
+        if self.seconds_since_t0() < self.p['start_wait_s']:
+            return
+        self.check_stuck()
         if self.state == 'exploring':
             reason = self.reason_to_return()
             if reason is not None:
@@ -186,6 +271,12 @@ class Mision(Node):
                 self.explore()
         if self.state == 'returning':
             self.return_to_start()
+
+    def step(self):
+        try:
+            self.step_logic()
+        except Exception:
+            self.get_logger().error(f'Error en step:\n{traceback.format_exc()}', throttle_duration_sec=5.0)
 
     def explore(self):
         if self.nav_state == 'sending' or self.nav_state == 'moving':
@@ -198,6 +289,8 @@ class Mision(Node):
                 self.visited.append((x, y, yaw))
             self.current_point = None
             self.nav_state = 'idle'
+        if self.inspect_doubtful():
+            return
         if self.plan is None:
             self.spin_if_idle()
             return
@@ -236,8 +329,8 @@ class Mision(Node):
             return 'se termina el tiempo'
         elif (self.plan is not None and self.nav_state != 'sending' and self.nav_state != 'moving' 
                 and first_pending(self.plan.poses, self.visited, self.p['same_point_distance_m'], 
-                    self.p['same_point_angle_rad']) is None):
-            return 'no quedan puntos'
+                    self.p['same_point_angle_rad']) is None and self.next_doubtful() is None):
+            return 'no quedan puntos ni dudosas'
         return None
 
     def make_pose(self, x, y, yaw):
@@ -274,6 +367,36 @@ class Mision(Node):
             self.get_logger().info(f'Vuelta terminada: {self.nav_state}')
             self.terminar()
             return
+
+    def next_doubtful(self):
+        if self.candidatas is None:
+            return None
+        pose = self.current_pose()
+        if pose is None:
+            return None
+        return pick_doubtful(self.candidatas, self.reported_ids, self.reported_points, self.inspected_points, 
+                            self.p['visit_min_observations'], self.p['min_report_distance_m'], pose[0], pose[1])
+
+    def inspect_doubtful(self):
+        c = self.next_doubtful()
+        if c is None:
+            return False
+        x_robot, y_robot, _ = self.current_pose()
+        view = viewpoint_for(self.mapa, c.centro.x, c.centro.y, x_robot, y_robot, self.p['visit_distance_m'], 
+                            self.p['visit_clearance_m'], self.p['visit_angles'], self.p['visit_min_shift_m'],
+                            self.p['visit_box_margin_m'])
+        if view is None:
+            self.get_logger().info(f'Candidata id: {c.id}. Sin lugar para mirarla')
+            self.inspected_points.append((c.centro.x, c.centro.y))
+            return False
+        else:
+            x, y, yaw = view
+            if self.go_to(self.make_pose(x, y, yaw)):
+                self.inspected_points.append((c.centro.x, c.centro.y))
+                self.get_logger().info(f'Voy a mirar la candidata id={c.id} desde ({x:.2f},{y:.2f})')
+                self.idle_since = None
+                return True
+        return False
 
     def al_recibir_plan(self, plan):
         self.plan = plan

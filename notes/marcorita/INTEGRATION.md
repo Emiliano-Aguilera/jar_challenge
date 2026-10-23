@@ -1,0 +1,101 @@
+# Coverage integration
+
+Current base is development `10f97ca`; local ordering work reviewed on 2026-10-23.
+Follow-up proposals below do not change the agreed interface.
+Current output stays `/jar/plan_cobertura`, `nav_msgs/Path`, frame `map`.
+
+## Mission
+
+Mission already owns execution progress: it remembers finished goals and takes
+the first pending pose, using 0.02 m and 0.1 rad identity tolerances. It compares
+requested plan coordinates, not the robot's measured arrival pose. These values
+distinguish the current grid centers and headings; recheck finer map resolutions
+or smaller heading intervals. Failed goals count as
+finished to avoid endless retries. It also owns visits to doubtful candidates.
+This supports a first integration with coverage's initial route, without a new
+progress topic. Coverage does not yet consume navigation or observation results.
+
+Mission starts returning at 480 s and forces finishing at 570 s. Some complete
+coverage estimates exceed the search allowance, so mission's deadline must stay
+active. A geometric plan is not a guarantee of executing all poses in time.
+Mission now also waits 8 s initially and cancels trips that stay still or exceed
+their timeout. Budget evaluation assumes TF is available immediately and every
+goal succeeds; real delays and inspections still need measurement.
+
+Local observation-order refinement retains every selected pose and heading.
+It uses `order_check_interval_s` and `order_start_delay_s` to protect sampled
+coverage on a predicted clock grid. The delay currently estimates the 8 s
+startup wait, but does not read or control mission's actual clock. Recheck it
+if startup wait or measured planning/TF delays change. This adds no interface
+or execution-progress feedback. Dense visibility at the evaluated budgets is
+checked offline; runtime checks are sampled, with no between-check guarantee.
+
+The offline evaluator found useful goals grouped by the old mission tolerances
+in four of 18 cases. Mission PR #9 resolves these losses: replaying all 18 saved
+plans selects every intended view in order. See `MISSION_COMPATIBILITY.md`.
+This identity correction does not validate actual observation or navigation.
+
+Information to agree for future adaptive coverage, before adding a message/topic:
+
+- Which plan and point the result belongs to: plan version and goal index,
+  or another stable identifier agreed by both owners.
+- Active goal acceptance and release. Keep the active goal stable until its
+  result; a replacement Path must not make mission restart from its first pose.
+- Separate reached, observed, failed, cancelled and timed-out results.
+  Reaching a pose alone does not prove that perception processed a usable image.
+- For observation evidence: capture time and the actual robot pose/heading,
+  plus a way to know perception was working. Candidate count zero can mean
+  either no red box or a broken detector; it is not observation evidence.
+- Failure policy: retry, a different view, defer, or abandon. A failed point
+  must never be counted as observed. Mission owns the real clock and return policy.
+- Duplicate or delayed feedback must be idempotent and must not apply to a
+  different plan version.
+
+Use the output as an initial route proposal. Coverage never publishes `/done`.
+Mission currently returns when the received plan is exhausted and no doubtful
+candidate is pending; that is an execution policy, not proof that all boxes were
+found. Live parameter changes can replace the route; coordinate them at a goal
+boundary and check mission's finished-point tolerances for newly sampled views.
+
+Shared `mapa.py` geometry is a separate change (PR #6 starts with origin rotation).
+Coverage currently retains its own tested Grid implementation. Align occupancy,
+unknown-cell, footprint and ray-corner policies before migrating to shared code.
+
+## Navigation and localization
+
+- Confirm `base_footprint`, robot footprint, safety margin and goal/yaw tolerances.
+- The current circle plus margin can disconnect narrow passages that a
+  rectangular robot could pass in a particular orientation. Do not lower
+  clearance just to improve a coverage percentage; validate it with navigation.
+- Agree how to expose a newly blocked goal and whether coverage can consult
+  a costmap or a path-cost query. No new input is implemented yet.
+- TF age is checked; TF alone does not express localization confidence.
+  Agree what happens during an AMCL jump or loss of localization.
+- The test identity `map → odom` is not a substitute for real localization.
+
+## Perception
+
+- Measure useful detection distance and field of view on boxes, with the
+  actual camera, LiDAR and detector. Current range is an initial parameter.
+- Confirm observation dwell, blur while turning, partial occlusion and
+  the camera/target heights. The planner uses only a horizontal projection.
+- Fusion needs robot positions separated by 0.30 m to reduce its single-view
+  uncertainty floor. Mission's inspection shift is 0.40 m. Rotation alone is not
+  confirmation. The planner's 1 s dwell is a cost estimate, not an implemented
+  mission wait; agree this with perception and mission before relying on it.
+- Confirm physical box dimensions before filtering possible target centers
+  based on box size. Simulator dimensions alone are not a confirmed rule.
+
+## Next end-to-end check
+
+The first local ordering handoff attempt received the map about 54 s before
+connected robot TF. Fake navigation does not move the robot, and the judge
+ended at its 60 s inactivity limit. The communication fixture now waits for
+fresh map/base/camera TF before starting that judge; the failed attempt remains
+recorded. This prepares the test, not the official run. Actual TF readiness and
+startup delay under the competition launch still need validation with localization.
+
+Once execution is connected, measure actual time, goal success, processed
+images, candidate confirmation and collision observations. Compare against
+the current offline plan with the same starts and settings. A green build or
+high predicted floor coverage does not measure competition performance.
