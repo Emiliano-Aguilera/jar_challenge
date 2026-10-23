@@ -273,6 +273,33 @@ def visibility_mask(grid, cell, yaw, centers, settings, camera):
     return mask
 
 
+def _heading_geometry(grid, settings, camera):
+    """Prepare camera terms once; retain the original arithmetic order."""
+    result = []
+    for heading in range(settings.heading_count):
+        yaw = grid.origin.yaw + heading * math.tau / settings.heading_count
+        co, si = math.cos(yaw), math.sin(yaw)
+        result.append((co * camera.x, si * camera.y, si * camera.x,
+                       co * camera.y, yaw + camera.yaw))
+    return tuple(result)
+
+
+def _has_visible_heading(grid, cell, center, geometry, radius_squared, half_fov, threshold):
+    """Single-target witness without rebuilding camera transforms per heading."""
+    x, y = grid.center(cell)
+    tx, ty = center
+    for ax, bx, ay, by, looking in geometry:
+        optical = x + ax - bx, y + ay + by
+        dx, dy = tx - optical[0], ty - optical[1]
+        if dx * dx + dy * dy > radius_squared:
+            continue
+        if abs(angle_difference(math.atan2(dy, dx), looking)) > half_fov:
+            continue
+        if grid.visible(optical, center, threshold):
+            return True
+    return False
+
+
 class TravelCosts:
     """Keep distances only between candidate centers, not full cached grid fields."""
     def __init__(self, cells, positions, resolution, cancel=None):
@@ -400,6 +427,9 @@ def make_plan(grid, start, settings=Settings(), camera=Camera(), *,
         existing = set(positions)
         raw_component = reachable_cells(free, start_cell)
         radius_squared = ((settings.view_range + math.hypot(camera.x, camera.y)) / grid.resolution) ** 2
+        geometry = _heading_geometry(grid, settings, camera)
+        view_radius_squared = settings.view_range ** 2
+        half_fov = math.radians(settings.fov_degrees / 2)
         for index, center in enumerate(centers):
             check_cancelled(cancel)
             if len(positions) >= settings.max_positions:
@@ -413,9 +443,9 @@ def make_plan(grid, start, settings=Settings(), camera=Camera(), *,
                                               cell[1], cell[0]))
             for cell in nearby:
                 check_cancelled(cancel)
-                witness = any(visibility_mask(
-                    grid, cell, grid.origin.yaw + heading * math.tau / settings.heading_count,
-                    [center], settings, camera) for heading in range(settings.heading_count))
+                witness = _has_visible_heading(
+                    grid, cell, center, geometry, view_radius_squared,
+                    half_fov, settings.free_threshold)
                 if witness:
                     existing.add(cell)
                     add_position(cell)

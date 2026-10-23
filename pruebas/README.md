@@ -78,6 +78,46 @@ ROS launch forwards it to its children. Sending it to the whole process group
 first interrupts children twice and can break their cleanup. Use the known
 process group only to force-stop your own probe after a shutdown timeout.
 
+## Evaluate time budgets and mission selection
+
+With the source Python path and simulator sourced as above:
+
+```bash
+python3 pruebas/evaluar_presupuesto.py \
+  --simulator "$(ros2 pkg prefix --share yahboom_rosmaster_gazebo)" \
+  --output build/verificacion/cobertura/presupuesto
+```
+
+This evaluates all six practice maps at three starts. JSON, CSV and Markdown
+include intended/mission-selected goals, dense visibility at 60/120/300/480 s,
+raw-connected denominators, startup wait and estimated travel/turn/dwell.
+The actual mission selector is imported from `exploracion.py`.
+The model assumes every goal succeeds; observations and inspections are not
+measured. A view earns predicted visibility after its estimated dwell completes.
+
+The nominal start on each map gets an exhaustive missing-target witness search.
+It separates raw disconnection, missing sampled positions and limits of the
+current reachable-cell-center/camera model. A second search checks safe centers
+in other components. A no-witness result is not physical impossibility.
+Use `--diagnose none` for a shorter run, `--starts nominal --maps laberinto_1`
+for a pilot, and `--profile` for one separately instrumented planner execution.
+All runtime outputs must stay under this checkout's ignored `build/` directory.
+
+For paired runtime checks, save the old pure planner revision under `build/`
+and run:
+
+```bash
+python3 pruebas/comparar_rendimiento.py \
+  --reference build/verificacion/cobertura/referencia/cobertura_plan.py \
+  --simulator "$(ros2 pkg prefix --share yahboom_rosmaster_gazebo)"
+```
+
+The reference file is Python code and must be a trusted repository revision.
+The comparison does one warmup per variant/map and three alternating paired
+repetitions. Every execution asserts identical poses, target counts and route
+metrics. Run without another CPU-heavy evaluation; results are machine-specific.
+Timings exclude diagnostic reconstruction and the exhaustive oracle.
+
 ## Current mission integration
 
 Coverage publishes an initial route. Mission in current development remembers

@@ -1,5 +1,61 @@
 # Coverage results
 
+## 2026-10-23: local budget evaluation and computation optimization
+
+Branch: `cobertura/evaluacion-presupuesto`; integrated development `d375427`.
+Reference measurements use `a8b9530`. See `STATUS.md` for the publication gate.
+
+- Evaluated six maps at three starts with intended and mission-selected routes.
+  All 18 cases passed. Dense visibility, raw-connected denominators and budgets
+  at 60/120/300/480 s are saved in JSON/CSV/Markdown.
+- Before mission PR #9, the selector skipped useful views in four cases. Dense visibility
+  losses are 65, 40 and 55 cells in the three difficult-map starts, and 8 cells in
+  the first offset of maze_3. PR #9 resolves this: all 18 saved plans now select
+  every intended point in order. Details: `MISSION_COMPATIBILITY.md`.
+- In the six nominal cases, an exhaustive safe-center/heading search found no
+  missed positional witnesses beyond those already considered by the planner.
+  Difficult-map residuals: 182 raw-disconnected samples; another 205 have no
+  reachable witness, of which 78 are visible from another safe component and 127
+  have no witness among any safe centers under the present model. The simple
+  labyrinth has 79 raw-disconnected samples and 32 with no safe-center witness.
+  The remaining four maps' missing sampled targets are raw-disconnected.
+- Prepared camera/heading terms reduce repeated work during fine recovery.
+  All 18 before/after comparisons retain exactly the same poses, mission-selected
+  goals, dense/sample visibility, travel and turning. Startup-normalized event
+  times match too. The check is `presupuesto-paridad.json`.
+- Full official verifier passed after integrating development `d375427`:
+  both packages build, 118 outer colcon entries pass (including 77 internal coverage/evaluator cases),
+  static checks have zero errors/hardcoding warnings and the startup audit finds
+  four team nodes with zero problems. All team parameters are unchanged.
+
+Paired CPU comparison, excluding diagnostics, with one warmup and three
+alternating repetitions per variant/map:
+
+| Map | Reference median | Current median | Time reduction |
+| --- | --- | --- | --- |
+| laberinto_1 | 7.515 s | 5.606 s | 25.4% |
+| laberinto_simple | 6.003 s | 5.003 s | 16.7% |
+| maze_1_6x5 | 1.936 s | 1.886 s | 2.6% |
+
+The small maze difference should not be treated as a reliable speed gain. These
+are measurements on this machine, not hardware-independent or statistical
+guarantees. All runs assert identical poses, target counts and route metrics.
+No new physical navigation or victim detection was measured.
+The simulator handoff was repeated after integrating PR #9: 50 viewpoints,
+first three mission goals match the published Path in order, and all five
+process parents exit 0. Navigation was fake; map-to-odom used the test identity.
+
+Current artifacts under ignored `build/verificacion/cobertura/`:
+
+- `presupuesto-base/budget.json` and `.md`;
+- `presupuesto-optimizado/budget.json`, `.csv`, `.md`, `profile.txt`;
+- `presupuesto-paridad.json`;
+- `rendimiento/timing.json` and `.md`;
+- `referencia/cobertura_plan.py`: saved trusted reference from development.
+- `presupuesto-verificador.log`: complete build/tests/startup verification.
+- `publicacion-verificador.log`: repeated complete gate after integrating PR #9.
+- `integracion-presupuesto-20261023/`: repeated simulator handoff and process logs.
+
 ## 2026-10-22: first integration baseline
 
 Branch: `cobertura/base-integrable`, based on development `c01ccdc`. Prepared for

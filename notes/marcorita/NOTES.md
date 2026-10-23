@@ -1,5 +1,51 @@
 # Coverage decisions
 
+## 2026-10-23: prepare the budget evaluation advance for publication
+
+- Marco authorized publishing this advance, then merging after all checks pass
+  if there are no conflicts or requested changes.
+- Fast-forwarded the task branch to development `d375427`; all pending coverage
+  changes were preserved. No contribution changes to shared parameters or mission.
+- Repeated the official verifier: two packages built, 118 project tests passed,
+  static checks and map-waiting runtime audit passed. The coverage wrapper runs
+  77 internal cases. Parameter values match development.
+- Repeated simulator handoff: 50 viewpoints, first three mission goals match
+  the Path in order, all process parents exit 0. Navigation was fake and
+  localization used the test identity; physical performance remains unmeasured.
+- Publish the computation optimization, evaluator, tests and documentation as
+  one task PR to the team fork's development branch. Keep runtime artifacts ignored.
+
+## 2026-10-23: budget evaluation and witness preparation
+
+Question: what can mission actually execute, where are the model's gaps, and
+which part of planning is expensive?
+
+- Created `cobertura/evaluacion-presupuesto` from development `a8b9530`, reusing
+  the clean coverage checkout. Marco requested careful local improvements and
+  a live progress record; `STATUS.md` tracks this task. Nothing new is published.
+- Added budget metrics at 60/120/300/480 s, dense and raw-connected denominators,
+  estimated startup/travel/turn/dwell, and mission's actual point selector.
+- Added exhaustive witness searches for outside targets. Nominal difficult map:
+  182 samples are raw-disconnected; 205 have no reachable safe-center witness.
+  Of the latter, 78 have a witness in another safe component and 127 have none
+  among all safe centers under the current camera/range/heading model. There is
+  no additional position-sampling gap in the six nominal cases at these settings.
+- Mission skips useful views in four of 18 cases, losing 65/40/55/8 dense cells.
+  See `MISSION_COMPATIBILITY.md`. No mission code, tolerances or ROS interface
+  was changed. Distinct-goal semantics need coordination with Bautista.
+- Profiling identified repeated single-target camera transforms in fine recovery.
+  Prepared heading/camera terms now reuse those calculations, preserving the
+  arithmetic order, range/FOV checks and ray semantics.
+- Compared 18 cases before/after: identical poses, selected goals, dense/sample
+  visibility, travel, turning and normalized event times. Added 600 generated
+  parity comparisons plus exact FOV/range-boundary checks.
+- Alternating paired runtime checks (one warmup, three repetitions per variant):
+  difficult map median 7.515 -> 5.606 s; simple labyrinth 6.003 -> 5.003 s;
+  first maze 1.936 -> 1.886 s. Outputs and route metrics match on every run.
+  These are local CPU measurements, not speed gains in actual robot travel.
+- Kept robot radius, margin, detector assumptions and all team parameters
+  unchanged. More samples alone cannot repair the model-limited targets.
+
 ## 2026-10-22: prepare the first shared baseline
 
 - Marco authorized a commit, push and PR of the working coverage baseline so
@@ -167,3 +213,18 @@ can we reduce travel cost without losing useful observations?
   feedback topic until both owners approve the agreement in INTEGRATION.md.
 - Useful range, observation dwell and target geometry still need perception
   experiments. Do not optimize away meaningful gaps using unconfirmed box sizes.
+## Mission identity review (2026-10-23)
+
+- Question: does Bautista's merged PR #9 resolve the distinct-view loss?
+- Reviewed development `d375427` / mission commit `7282d33`. Only identity
+  defaults/YAML values, selector tests and mission notes changed.
+- Replayed the 18 saved plans using the merged selector and 0.02 m / 0.1 rad
+  parameters. Every intended view is selected in order; previous four cases
+  lose no predicted visibility to identity grouping. All 22 selector tests pass.
+- Correction to our earlier discussion: mission stores requested goal poses,
+  not measured arrival poses. These values do not require 2 cm Nav2 accuracy.
+- Limits: current cell centers/headings; recheck finer grids or heading spacing.
+  Actual observation and failed-goal handling remain execution questions.
+- Evidence: `build/verificacion/cobertura/revision-mision-d375427/result.json`.
+  Fetched origin and tested exported files. No merge, commit or push locally;
+  pending coverage work and local parameters remain intact.
