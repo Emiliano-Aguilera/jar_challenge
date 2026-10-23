@@ -1,5 +1,63 @@
 # Coverage results
 
+## 2026-10-23: local observation-order refinement
+
+Branch: `cobertura/orden-observacion`, from development `10f97ca` (merged PR #10).
+Prepared for publication at Marco's request; GitHub holds the PR/merge state.
+Every previously selected pose and orientation is
+retained. One relocation sweep follows existing 2-opt, with sampled temporal
+checks and nonincreasing estimated search, search-plus-return and sampled mean
+first-view time. Marco approved the two coverage-only YAML parameters.
+
+All 18 integrated cases match the isolated chosen prototype, retain final
+dense/sample visibility, and mission selects every view. Dense/sample visibility
+at 60/120/300/480 s never decreases in these tests. Search decreases in 17 cases;
+one is unchanged. Median estimated saving is 11.43 s.
+
+Nominal-start estimates below exclude startup and include the configured 1 s
+observation cost per view. They are not physical navigation measurements.
+
+| Map | Previous search | New search | Estimated saving |
+| --- | --- | --- | --- |
+| laberinto_1 | 540.52 s | 482.14 s | 58.38 s |
+| laberinto_simple | 340.78 s | 336.29 s | 4.49 s |
+| maze_1_6x5 | 415.84 s | 387.10 s | 28.75 s |
+| maze_2_6x5 | 375.27 s | 365.50 s | 9.78 s |
+| maze_3_6x6 | 437.75 s | 435.51 s | 2.24 s |
+| maze_4_metal_6x6 | 471.18 s | 460.85 s | 10.33 s |
+
+Paired CPU medians (warmup + three alternating repetitions) against `10f97ca`:
+difficult map 5.586 -> 6.006 s; simple labyrinth 5.294 -> 5.507 s; first maze
+2.225 -> 2.221 s. The last change is noise-sized. Runtime costs increased in
+the larger maps; the largest single planning sample in the 18-case evaluation
+was 6.395 s, below the configured 8 s startup estimate on this machine. This
+does not guarantee a deadline on other hardware or under other workloads.
+
+Rejected variants are recorded: mean-only ordering can regress early coverage;
+strict full-curve dominance yields little travel reduction; unaligned periodic
+checks can miss the intended wall-clock budgets. The selected sampled-clock
+guard still does not guarantee dense visibility between samples/checks. Dense
+mean first-view time increases slightly in one offset case, despite no loss at
+the reported budgets. No physical navigation, detector or score improvement
+has been demonstrated.
+
+Evidence under ignored `build/verificacion/cobertura/`:
+`orden-integrado/budget.*`, `orden-integrado/comparison.*`,
+`orden-rendimiento/timing.*`, `orden-comparacion/`, `orden-intervalos/`,
+`orden-fase/`. Final project and simulator gates are recorded in `STATUS.md`.
+
+Final project gate passed: both packages build, 118 outer project checks
+including the wrapper running 97 coverage/evaluation cases, zero static errors
+or hardcoding warnings, four team nodes with zero runtime audit problems.
+The repeated simulator handoff passed with 50 views and the first three mission
+goals checked in order; all six parents and team children closed cleanly.
+That fixture waited for TF readiness before starting the judge. The first
+attempt failed by inactivity after a roughly 54 s simulator TF delay and is
+retained. No physical travel/detection or competition startup success is claimed.
+
+Gate logs: `orden-verificador.log`, `integracion-orden-20261023/` (failed first
+attempt), `integracion-orden-listo-20261023/` (passing communication fixture).
+
 ## 2026-10-23: local budget evaluation and computation optimization
 
 Branch: `cobertura/evaluacion-presupuesto`; integrated development `d375427`.

@@ -48,6 +48,9 @@ def test_invalid_maps(width, height, resolution, data):
     {'robot_radius': 0.0}, {'safety_margin': -0.1}, {'fov_degrees': 180.0},
     {'heading_count': 1.5}, {'max_views': 0}, {'travel_speed': math.inf},
     {'free_threshold': 100}, {'target_spacing': math.nan},
+    {'order_check_interval_s': 0.0}, {'order_check_interval_s': math.nan},
+    {'order_check_interval_s': 0.5}, {'order_start_delay_s': -1.0},
+    {'order_start_delay_s': math.inf},
 ])
 def test_invalid_parameters(settings):
     with pytest.raises(ValueError):

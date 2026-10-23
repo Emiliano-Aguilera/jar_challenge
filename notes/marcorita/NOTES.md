@@ -1,5 +1,48 @@
 # Coverage decisions
 
+## 2026-10-23: fixed-view observation ordering
+
+- Question: can the same selected views observe useful space sooner with less
+  estimated travel, while retaining final dense visibility?
+- Created `cobertura/orden-observacion` from development `10f97ca` after PR #10
+  merged. Preserved the other worktrees and the clean publication branch.
+- Compared nine relocation policies on the 18 saved practice cases. Mean-only
+  optimization and unaligned periodic checks regress some early dense budgets;
+  strict full-curve dominance saves little. These variants remain experiments.
+- Chose one bounded relocation sweep after existing 2-opt. Retain every pose
+  and heading. Require nonincreasing search, search-plus-return and sampled mean
+  first-view time; preserve sampled visibility on a periodic predicted-clock grid.
+- Marco approved only two coverage-section additions to shared params.yaml:
+  order_check_interval_s=60.0 and order_start_delay_s=8.0. The latter estimates
+  startup; it neither changes nor measures mission's actual clock. Recheck the
+  estimate if mission's startup wait or observed planning/localization delay changes.
+- Integrated 18-case evaluation matches the isolated prototype exactly, retains
+  all views/final visibility, and mission selects every goal. No dense/sample
+  visibility loss at 60/120/300/480 s in these cases. Median estimated saving
+  is 11.43 s; difficult nominal search is 540.52 -> 482.14 s, excluding startup.
+- Sampling remains approximate: dense mean first-view time slightly increases
+  in one case, despite improvements in sampled objectives. No universal claim
+  is made about visibility between samples/checks or actual victim detection.
+- Evidence: build/verificacion/cobertura/orden-integrado/comparison.json and .md.
+  Paired CPU medians: difficult map 5.586 -> 6.006 s; simple labyrinth
+  5.294 -> 5.507 s; first maze 2.225 -> 2.221 s (noise-sized). Both versions
+  retain the same view set and deterministic output across all repetitions.
+- Full final project verifier passed: 118 outer entries, including the wrapper
+  running 97 coverage/evaluation cases; zero static/hardcoding warnings and zero
+  runtime audit problems. Only the approved coverage YAML additions differ.
+- First simulator handoff failed: map preceded connected robot TF by about 54 s;
+  judge ended by inactivity at 60 s. This is retained under
+  build/verificacion/cobertura/integracion-orden-20261023/.
+- Repeated the communication fixture after waiting for fresh map/base/camera TF
+  before starting the judge. Passed: 50 published views, three mission goals
+  checked in order, six process parents exit 0 and team children close cleanly.
+  Evidence: integracion-orden-listo-20261023/probe.json. This fixture preparation
+  does not fix or validate actual competition startup, navigation or detection.
+- Ordering work is complete. Marco authorized publication, then confirmed merge
+  once checks pass with no issues. Publish only this verified advance to the
+  team fork's development branch, preserving the failed-probe evidence/limits.
+  Alternative view selection/orientations are the next separate experiment.
+
 ## 2026-10-23: prepare the budget evaluation advance for publication
 
 - Marco authorized publishing this advance, then merging after all checks pass
