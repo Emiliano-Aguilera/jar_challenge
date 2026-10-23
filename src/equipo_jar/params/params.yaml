@@ -111,8 +111,8 @@ mision:
     min_observations: 5
     max_deviation_m: 0.10
     min_report_distance_m: 0.40
-    same_point_distance_m: 0.30
-    same_point_angle_rad: 0.5
+    same_point_distance_m: 0.02
+    same_point_angle_rad: 0.1
     return_time_s: 480.0
     min_observations_final: 1
     max_deviation_final_m: 0.30

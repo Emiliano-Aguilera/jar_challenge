@@ -43,12 +43,22 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
 
 - Tried: always going to the first pose of `/jar/plan_cobertura`. If coverage is
   slow to drop a reached point, the robot goes back to it again and again.
-- Decided: mission keeps its own list of finished points and takes the first plan
-  pose that is not in it. Same point = within `same_point_distance_m` (0.30 m)
-  and facing within `same_point_angle_rad` (0.5 rad), because coverage may ask
-  for the same spot facing two ways. A point whose goal failed also counts as
+- Decided: mission keeps its own list of finished points, across plans, and takes
+  the first plan pose that is not in it. A point whose goal failed also counts as
   finished (no endless retries). This works whether or not coverage drops reached
   points.
+- Tried: "same point" = within 0.30 m and 0.5 rad. marcorita measured the 18
+  practice cases: in 4 of them mission skipped 1 to 7 distinct coverage views
+  (e.g. two views 0.25 m apart facing the same way).
+- Decided (agreed with marcorita): a view's identity is its exact plan coordinates.
+  Coverage puts views on a fixed grid (cell centers, multiples of
+  360°/`heading_count`), so the same view always comes with the same numbers, even
+  in a new plan. `same_point_distance_m` (0.02 m) and `same_point_angle_rad`
+  (0.1 rad) only absorb rounding. Rule: both must stay below half a map cell and
+  below π/`heading_count`; `test_params_respect_the_coverage_resolution` checks it.
+  Mission compares plan coordinates, not where the robot arrived, so navigation
+  accuracy does not matter here. Whether two close views are worth doing is
+  coverage's call.
 
 ## How does mission talk to Nav2?
 
