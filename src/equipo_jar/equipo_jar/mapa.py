@@ -1,8 +1,20 @@
 import math
 
 def cell_value(grid, x, y):
-    i = math.floor((x - grid.info.origin.position.x) / grid.info.resolution)
-    j = math.floor((y - grid.info.origin.position.y) / grid.info.resolution)
+    """Read a world point using the grid's planar origin pose.
+
+    Return None outside the grid or where data is missing. Lightweight test
+    grids without an orientation keep the previous zero-rotation behavior.
+    """
+    origin = grid.info.origin
+    q = getattr(origin, 'orientation', None)
+    yaw = 0.0 if q is None else math.atan2(
+        2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z))
+    c, s = math.cos(yaw), math.sin(yaw)
+    dx, dy = x - origin.position.x, y - origin.position.y
+    # Undo the origin translation and rotation before finding the cell.
+    i = math.floor((c * dx + s * dy) / grid.info.resolution)
+    j = math.floor((-s * dx + c * dy) / grid.info.resolution)
     index = j * grid.info.width + i
     if i < 0 or j < 0 or i >= grid.info.width or j >= grid.info.height or index >= len(grid.data):
         return None
