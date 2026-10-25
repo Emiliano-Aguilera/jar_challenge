@@ -273,7 +273,11 @@ velocity_smoother:
     max_velocity: [0.5, 0.5, 2.0]     # x, y, yaw. 3 números: el CI acepta hasta 3
     min_velocity: [-0.5, -0.5, -2.0]
     max_accel: [1.5, 1.5, 3.2]
-    max_decel: [-1.5, -1.5, -3.2]
+    # Frenar rápido: al llegar, el controller manda cero y el smoother baja en rampa. Con -3.2
+    # el giro final (~0.85 rad/s) tardaba 0.27 s en parar, y la misión manda /done 0.17-0.24 s
+    # después: quedaba un /cmd_vel no nulo tras /done. Con -20 hasta wz_max (1.9) para en
+    # < 0.1 s. Lineal -2.5 (0.25 g): de la velocidad típica al llegar (< 0.15) en < 0.06 s.
+    max_decel: [-2.5, -2.5, -20.0]
     deadband_velocity: [0.0, 0.0, 0.0]
     velocity_timeout: 1.0
     odom_topic: /odom
