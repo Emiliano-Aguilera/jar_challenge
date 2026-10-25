@@ -125,27 +125,31 @@ controller_server:
         cost_power: 1
         cost_weight: 3.81
         critical_cost: 300.0
-        consider_footprint: false
+        consider_footprint: true      # cerca de obstáculos chequea el rectángulo, no un círculo
         collision_cost: 1000000.0
         near_goal_distance: 1.0
         trajectory_point_step: 2
+      # threshold_to_consider: distancia en línea recta al objetivo. Más cerca que eso
+      # MPPI deja de seguir el camino y va derecho al objetivo. Con 1.0 m tiraba contra
+      # la pared cuando el objetivo estaba del otro lado (vuelta en U en laberinto_1).
+      # 0.4 m: menos que lo que separa dos poses a ambos lados de una pared.
       GoalCritic:
         enabled: true
         cost_power: 1
         cost_weight: 5.0
-        threshold_to_consider: 1.0
+        threshold_to_consider: 0.4
       GoalAngleCritic:
         enabled: true
         cost_power: 1
         cost_weight: 3.0
-        threshold_to_consider: 0.5
+        threshold_to_consider: 0.4
       PathAlignCritic:
         enabled: true
         cost_power: 1
         cost_weight: 14.0
         max_path_occupancy_ratio: 0.05
         trajectory_point_step: 3
-        threshold_to_consider: 0.5
+        threshold_to_consider: 0.4
         offset_from_furthest: 20
         use_path_orientations: false
       PathFollowCritic:
@@ -153,13 +157,13 @@ controller_server:
         cost_power: 1
         cost_weight: 5.0
         offset_from_furthest: 5
-        threshold_to_consider: 1.0
+        threshold_to_consider: 0.4
       PathAngleCritic:
         enabled: true
         cost_power: 1
         cost_weight: 2.0
         offset_from_furthest: 4
-        threshold_to_consider: 0.5
+        threshold_to_consider: 0.4
         max_angle_to_furthest: 1.0
         forward_preference: false     # mecanum: ir de costado está bien
 
@@ -174,7 +178,8 @@ local_costmap:
       width: 3
       height: 3
       resolution: 0.05
-      robot_radius: 0.18              # media diagonal del chasis; footprint no (aviso del juez)
+      footprint_padding: 0.02         # margen sobre el rectángulo del chasis (footprint: lo arma
+                                      # navegacion.launch.py con las medidas del URDF)
       transform_tolerance: 0.5
       plugins: [obstacle_layer, inflation_layer]
       obstacle_layer:
@@ -203,8 +208,9 @@ global_costmap:
       global_frame: map
       robot_base_frame: base_footprint
       resolution: 0.05
-      robot_radius: 0.20              # un poco más que el real (0.18): caminos algo más lejos de
-                                      # las paredes. Con 0.24 el planner cerraba huecos de 0.5 m (maze_1)
+      footprint_padding: 0.02         # igual que el local. El planner trata al robot como un
+                                      # círculo del medio ancho (0.12 m con el margen): los caminos van
+                                      # por el medio igual, por la inflación
       track_unknown_space: true
       transform_tolerance: 0.5
       plugins: [static_layer, obstacle_layer, inflation_layer]
