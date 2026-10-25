@@ -46,7 +46,8 @@ class Mision(Node):
                                             'visit_clearance_m': 0.25, 'visit_angles': 12, 
                                             'visit_min_shift_m': 0.4, 'visit_box_margin_m': 0.25, 
                                             'start_wait_s': 8.0, 'goal_timeout_s': 90.0, 'stuck_time_s': 20.0,
-                                            'stuck_distance_m': 0.05, 'stuck_angle_rad': 0.2})  # parámetros ajustables
+                                            'stuck_distance_m': 0.05, 'stuck_angle_rad': 0.2, 'stop_wait_s': 1.0,
+                                            'done_limit_s': 590.0})  # parámetros ajustables
 
         self.mapa = None
         self.plan = None
@@ -81,6 +82,9 @@ class Mision(Node):
         self.last_motion_pose = None
         self.last_motion_time = None
         self.stuck_canceling = False
+
+        self.stop_canceling = False
+        self.stop_since = None
 
         self.create_subscription(OccupancyGrid, '/map', self.al_recibir_mapa, QOS_MAPA)
         self.create_subscription(Path, '/jar/plan_cobertura', self.al_recibir_plan, QOS_ESTADO)
@@ -245,6 +249,9 @@ class Mision(Node):
             self.pub_done.publish(Empty())
             self.change_state('finished')
             return
+        if self.state == 'stopping':
+            self.wait_for_stop()
+            return
         if not self.start_locked:
             pose = self.current_pose()
             if pose is not None:
@@ -254,9 +261,7 @@ class Mision(Node):
                 self.start_pose = pose
         if self.seconds_since_t0() >= self.p['finish_time_s']:
             self.get_logger().info('Se termina el tiempo de la corrida')
-            if self.nav_state == 'moving':
-                self.current_goal.cancel_goal_async()
-            self.terminar()
+            self.change_state('stopping')
             return
         self.check_reports(self.p['min_observations'], self.p['max_deviation_m'])
         if self.seconds_since_t0() < self.p['start_wait_s']:
@@ -355,7 +360,7 @@ class Mision(Node):
         if not self.return_sent:
             if self.start_pose is None:
                 self.get_logger().warning('No hay pose de inicio, termino sin volver')
-                self.terminar()
+                self.change_state('stopping')
                 return
             else:
                 x, y, yaw = self.start_pose
@@ -365,7 +370,7 @@ class Mision(Node):
                     return
         if self.return_sent and (self.nav_state == 'arrived' or self.nav_state == 'failed'):
             self.get_logger().info(f'Vuelta terminada: {self.nav_state}')
-            self.terminar()
+            self.change_state('stopping')
             return
 
     def next_doubtful(self):
@@ -397,6 +402,24 @@ class Mision(Node):
                 self.idle_since = None
                 return True
         return False
+
+    def wait_for_stop(self):
+        now = self.seconds_since_t0()
+        if self.nav_state == 'moving' and not self.stop_canceling:
+            self.current_goal.cancel_goal_async()
+            self.stop_canceling = True
+            self.get_logger().info('Paro: cancelo el viaje')
+        if self.nav_state == 'sending' or self.nav_state == 'moving':
+            if now < self.p['done_limit_s']:
+                return
+            self.get_logger().warning('Nav2 no contesta: termino igual')
+            self.terminar()
+            return
+        if self.stop_since is None:
+            self.stop_since = now
+        if (now - self.stop_since) < self.p['stop_wait_s']:
+            return
+        self.terminar()
 
     def al_recibir_plan(self, plan):
         self.plan = plan
