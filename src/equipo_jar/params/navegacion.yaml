@@ -203,7 +203,8 @@ global_costmap:
       global_frame: map
       robot_base_frame: base_footprint
       resolution: 0.05
-      robot_radius: 0.18
+      robot_radius: 0.24              # más que el real (0.18): el planner no traza por huecos
+                                      # donde MPPI no se anima a pasar (caja + punta de pared)
       track_unknown_space: true
       transform_tolerance: 0.5
       plugins: [static_layer, obstacle_layer, inflation_layer]
