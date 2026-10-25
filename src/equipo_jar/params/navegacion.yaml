@@ -89,7 +89,7 @@ controller_server:
     progress_checker:
       plugin: nav2_controller::SimpleProgressChecker
       required_movement_radius: 0.3
-      movement_time_allowance: 10.0
+      movement_time_allowance: 5.0     # trabado antes: Nav2 prueba sus recoveries
     general_goal_checker:
       plugin: nav2_controller::SimpleGoalChecker
       stateful: true                  # primero llega a la posición, después gira
@@ -98,9 +98,9 @@ controller_server:
     FollowPath:
       plugin: nav2_mppi_controller::MPPIController
       motion_model: Omni              # mecanum: también se mueve de costado
-      time_steps: 56                  # 56 x 0.05 s = mira 2.8 s hacia adelante
+      time_steps: 40                  # 40 x 0.05 s = mira 2 s hacia adelante
       model_dt: 0.05
-      batch_size: 2000                # trayectorias que imagina por ciclo
+      batch_size: 1000                # trayectorias que imagina por ciclo (2000 saturaba la PC)
       iteration_count: 1
       vx_std: 0.2
       vy_std: 0.2
@@ -115,7 +115,7 @@ controller_server:
       transform_tolerance: 0.3
       enforce_path_inversion: false
       critics: [ConstraintCritic, ObstaclesCritic, GoalCritic, GoalAngleCritic, PathAlignCritic,
-                PathFollowCritic, PathAngleCritic, PreferForwardCritic]
+                PathFollowCritic, PathAngleCritic]
       ConstraintCritic:
         enabled: true
         cost_power: 1
@@ -162,8 +162,6 @@ controller_server:
         threshold_to_consider: 0.5
         max_angle_to_furthest: 1.0
         forward_preference: false     # mecanum: ir de costado está bien
-      PreferForwardCritic:
-        enabled: false
 
 local_costmap:
   local_costmap:
@@ -194,8 +192,8 @@ local_costmap:
           inf_is_valid: false
       inflation_layer:
         plugin: nav2_costmap_2d::InflationLayer
-        inflation_radius: 0.35
-        cost_scaling_factor: 6.0
+        inflation_radius: 0.45          # costo que baja despacio: caminos por el medio
+        cost_scaling_factor: 3.0        # del pasillo y curvas abiertas en las puntas de pared
 
 global_costmap:
   global_costmap:
@@ -227,8 +225,8 @@ global_costmap:
           obstacle_max_range: 3.0
       inflation_layer:
         plugin: nav2_costmap_2d::InflationLayer
-        inflation_radius: 0.35
-        cost_scaling_factor: 6.0
+        inflation_radius: 0.45          # costo que baja despacio: caminos por el medio
+        cost_scaling_factor: 3.0        # del pasillo y curvas abiertas en las puntas de pared
 
 planner_server:
   ros__parameters:
