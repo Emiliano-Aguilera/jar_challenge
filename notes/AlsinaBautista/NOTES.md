@@ -72,8 +72,8 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
 ## How is the run organised?
 
 - Decided: a state machine run by a 10 Hz timer:
-  waiting_for_map → exploring → returning → finishing → finished. Every state change is
-  logged. After /map, every tick also saves the start pose (if missing) and checks
+  waiting_for_map → exploring → returning → stopping → finishing → finished. Every state
+  change is logged. After /map, every tick also saves the start pose (if missing) and checks
   reports. Nothing happens before /map, and nothing after /done.
 
 ## Where is the start pose?
@@ -112,12 +112,25 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
 
 - Problem: /done only went out when the return goal ended. If Nav2 hangs, the run
   reaches 10 min without /done and without the final round.
-- Decided: at `finish_time_s` (570 s) after /map, from exploring or returning,
-  mission cancels the current goal (the robot must not move after /done) and ends
-  the run. A goal accepted after that is cancelled as soon as it is accepted.
+- Decided: at `finish_time_s` (570 s) after /map, from exploring or returning, the
+  run ends (see below).
+- Tried: cancelling the current goal and sending /done on the next tick (0.1 s).
+  Nav2 needs a moment to process the cancel, and the velocity smoother slows down
+  gradually (with hans-die's values, ~0.33 s from 0.5 m/s and ~0.63 s from
+  2 rad/s), so the robot could still move after /done. A goal still in `sending`
+  could also be accepted and start moving after /done.
+- Decided: every way of ending the run (time out, return finished, no start pose)
+  goes to state `stopping`. There mission cancels the goal in progress (once),
+  waits until no goal is `sending` or `moving`, then waits `stop_wait_s` (1 s) more
+  so the smoother stops the robot. If Nav2 never answers, it ends anyway at
+  `done_limit_s` (590 s), so /done goes out before 600 s. A goal accepted after the
+  run ended is cancelled as soon as it is accepted.
 - Ending = final round of reports, state `finishing`, then /done on the next tick.
   /victimas and /done are different topics and ROS does not guarantee the order
   between them; one tick (0.1 s) lets the reports arrive first.
+- Rule: `done_limit_s` stays between `finish_time_s` and 600 s. If navigation
+  changes its speeds or decelerations, check that `stop_wait_s` still covers the
+  braking.
 
 ## How does mission avoid standing still?
 
