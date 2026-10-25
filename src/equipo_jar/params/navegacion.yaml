@@ -118,7 +118,8 @@ controller_server:
       CostCritic:                     # obstáculos según el costmap: pasa mejor por huecos angostos
         enabled: true                 # que ObstaclesCritic (con ese se trababa en maze_1)
         cost_power: 1
-        cost_weight: 3.81
+        cost_weight: 1.0              # bajo: en huecos angostos manda el camino (que ya va por el
+                                      # medio). Chocar sigue prohibido: collision_cost no depende de esto
         critical_cost: 300.0
         consider_footprint: true      # cerca de obstáculos chequea el rectángulo, no un círculo
         collision_cost: 1000000.0
