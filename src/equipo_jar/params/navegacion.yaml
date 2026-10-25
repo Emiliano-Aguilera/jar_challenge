@@ -114,13 +114,13 @@ controller_server:
       prune_distance: 1.7
       transform_tolerance: 0.3
       enforce_path_inversion: false
-      critics: [ConstraintCritic, ObstacleCritic, GoalCritic, GoalAngleCritic, PathAlignCritic,
+      critics: [ConstraintCritic, ObstaclesCritic, GoalCritic, GoalAngleCritic, PathAlignCritic,
                 PathFollowCritic, PathAngleCritic, PreferForwardCritic]
       ConstraintCritic:
         enabled: true
         cost_power: 1
         cost_weight: 4.0
-      ObstacleCritic:
+      ObstaclesCritic:
         enabled: true
         cost_power: 1
         repulsion_weight: 1.5
