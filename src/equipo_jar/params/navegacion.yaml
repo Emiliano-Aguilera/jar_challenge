@@ -53,12 +53,7 @@ localizacion:
     desvio_xy_inicial: 0.20
     desvio_yaw_inicial: 0.30
     actualizaciones_quieto: 10
-
-lifecycle_manager_localizacion:
-  ros__parameters:
-    autostart: true
-    node_names: [amcl]
-    bond_timeout: 4.0
+    plazo_arranque_s: 5.0             # s sin respuesta de un nodo de Nav2 antes de volver a preguntar
 
 # ---------------------------------------------------------------------------
 # Navegación (Nav2): planner (camino), controller (seguirlo), behaviors
@@ -279,9 +274,3 @@ velocity_smoother:
     deadband_velocity: [0.0, 0.0, 0.0]
     velocity_timeout: 1.0
     odom_topic: /odom
-
-lifecycle_manager_navegacion:
-  ros__parameters:
-    autostart: true
-    node_names: [controller_server, planner_server, behavior_server, bt_navigator, velocity_smoother]
-    bond_timeout: 4.0
