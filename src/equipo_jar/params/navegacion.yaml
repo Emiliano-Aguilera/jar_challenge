@@ -83,9 +83,9 @@ controller_server:
     controller_plugins: [FollowPath]
     progress_checker:                 # girar también cuenta: el giro final en el objetivo no
       plugin: nav2_controller::PoseProgressChecker   # mueve el robot y antes abortaba a los 5 s
-      required_movement_radius: 0.2   # 0.2 m o 0.5 rad cada 3 s (0.07 m/s): detecta una traba
-      required_movement_angle: 0.5    # antes. El spin de Nav2 llega a las 4 fallas, y en el
-      movement_time_allowance: 3.0    # hueco de maze_1 es lo que destraba (antes 4 x 5 s)
+      required_movement_radius: 0.3
+      required_movement_angle: 0.5
+      movement_time_allowance: 5.0     # trabado antes: Nav2 prueba sus recoveries
     general_goal_checker:
       plugin: nav2_controller::SimpleGoalChecker
       stateful: true                  # primero llega a la posición, después gira
