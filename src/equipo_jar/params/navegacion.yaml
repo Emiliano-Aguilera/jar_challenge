@@ -241,7 +241,10 @@ planner_server:
     planner_plugins: [GridBased]
     GridBased:
       plugin: nav2_navfn_planner/NavfnPlanner
-      tolerance: 0.2
+      # 0: un objetivo pegado a un obstáculo (centro a < 0.12 m, p. ej. un punto de vista sobre
+      # una caja, que no está en /map) falla al planificar. Con 0.2 planificaba hasta un punto
+      # libre cercano y el robot quedaba ahí, sin llegar nunca, ~50 s hasta que se cancelaba.
+      tolerance: 0.0
       use_astar: true
       allow_unknown: false
 
