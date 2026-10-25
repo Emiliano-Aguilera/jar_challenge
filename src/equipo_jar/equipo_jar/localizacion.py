@@ -126,7 +126,8 @@ class Localizacion(Node):
         self.pub_pose = self.create_publisher(PoseWithCovarianceStamped, '/initialpose', 10)
         # AMCL crea este servicio con nombre relativo: queda en el namespace raíz.
         self.sin_movimiento = self.create_client(Empty, '/request_nomotion_update')
-        self.create_timer(0.5, self.tick)
+        # 0.2 s: un poco más que un barrido del LiDAR (~0.14 s), así cada pedido usa uno nuevo.
+        self.create_timer(0.2, self.tick)
 
     def al_recibir_mapa(self, _msg):
         self.mapa_recibido = True
