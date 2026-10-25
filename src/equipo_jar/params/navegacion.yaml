@@ -195,10 +195,12 @@ local_costmap:
           raytrace_max_range: 3.5
           obstacle_max_range: 3.0
           inf_is_valid: false
+      # El costo sube solo cerca de los obstáculos: MPPI entra en huecos angostos sin
+      # dudar. El camino ya viene por el medio por la inflación del global.
       inflation_layer:
         plugin: nav2_costmap_2d::InflationLayer
-        inflation_radius: 0.45          # costo que baja despacio: caminos por el medio
-        cost_scaling_factor: 3.0        # del pasillo y curvas abiertas en las puntas de pared
+        inflation_radius: 0.30          # mínimo: lo que cubre el rectángulo (0.23 m con el margen)
+        cost_scaling_factor: 10.0
 
 global_costmap:
   global_costmap:
