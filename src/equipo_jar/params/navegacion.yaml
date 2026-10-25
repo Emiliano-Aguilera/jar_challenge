@@ -114,21 +114,21 @@ controller_server:
       prune_distance: 1.7
       transform_tolerance: 0.3
       enforce_path_inversion: false
-      critics: [ConstraintCritic, ObstaclesCritic, GoalCritic, GoalAngleCritic, PathAlignCritic,
+      critics: [ConstraintCritic, CostCritic, GoalCritic, GoalAngleCritic, PathAlignCritic,
                 PathFollowCritic, PathAngleCritic]
       ConstraintCritic:
         enabled: true
         cost_power: 1
         cost_weight: 4.0
-      ObstaclesCritic:
-        enabled: true
+      CostCritic:                     # obstáculos según el costmap: pasa mejor por huecos angostos
+        enabled: true                 # que ObstaclesCritic (con ese se trababa en maze_1)
         cost_power: 1
-        repulsion_weight: 1.5
-        critical_weight: 20.0
+        cost_weight: 3.81
+        critical_cost: 300.0
         consider_footprint: false
-        collision_cost: 10000.0
-        collision_margin_distance: 0.05
-        near_goal_distance: 0.5
+        collision_cost: 1000000.0
+        near_goal_distance: 1.0
+        trajectory_point_step: 2
       GoalCritic:
         enabled: true
         cost_power: 1
@@ -203,8 +203,8 @@ global_costmap:
       global_frame: map
       robot_base_frame: base_footprint
       resolution: 0.05
-      robot_radius: 0.24              # más que el real (0.18): el planner no traza por huecos
-                                      # donde MPPI no se anima a pasar (caja + punta de pared)
+      robot_radius: 0.20              # un poco más que el real (0.18): caminos algo más lejos de
+                                      # las paredes. Con 0.24 el planner cerraba huecos de 0.5 m (maze_1)
       track_unknown_space: true
       transform_tolerance: 0.5
       plugins: [static_layer, obstacle_layer, inflation_layer]
