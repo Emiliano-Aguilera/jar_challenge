@@ -218,6 +218,12 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
   (`test_turn_radius_covers_nav2_arrivals` checks it).
 - Not chosen: Nav2's `Spin` action. It is a second navigation action, so an
   interface change with hans-die.
+- Checked (laberinto_1, 300 s, batch 20261026-191613-5aa61f6, commit 5aa61f6):
+  28 turns in place, all succeeded, 1.3 s each on average (max 3.7 s). 3 of them
+  started 0.10-0.17 m from the plan point, beyond `xy_goal_tolerance`: before,
+  each would have needed the approach again. No "Failed to make progress", no
+  cancels, 70 of 70 finished goals succeeded. Score 100, same as development: the
+  other two boxes are in areas the route never enters.
 
 ## Next
 
