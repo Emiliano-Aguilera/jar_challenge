@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from equipo_jar.exploracion import (
-    angle_difference, first_pending, already_visited, yaw_from_quaternion)
+    angle_difference, first_pending, already_visited, yaw_from_quaternion, goal_position)
 
 DIST = 0.30
 ANG = 0.5
@@ -153,3 +153,45 @@ def test_params_respect_the_coverage_resolution():
     heading_count = params['cobertura']['ros__parameters']['heading_count']
     assert mision['same_point_distance_m'] < MAP_RESOLUTION / 2
     assert mision['same_point_angle_rad'] < math.pi / heading_count
+
+
+# --- goal_position: girar en el lugar ---
+# Nav2 da por llegado un objetivo a menos de xy_goal_tolerance (0.10 m) y en el giro se
+# puede correr un poco. Si misión volviera a pedir el x,y del plan para el giro siguiente,
+# Nav2 tendría que acercarse otra vez (laberinto_1: 23 s trabado, notas de Hans).
+
+TURN_RADIUS = 0.20
+
+
+def test_without_tf_goes_to_the_plan_point():
+    assert goal_position(1.0, 2.0, None, TURN_RADIUS) == (1.0, 2.0, False)
+
+
+def test_robot_near_the_plan_point_turns_in_place():
+    # Caso de Hans: el objetivo (-2.17, 2.43) se dio por llegado con el robot a 0.14 m.
+    robot = (-2.03, 2.43, 0.5)
+    assert goal_position(-2.17, 2.43, robot, TURN_RADIUS) == (-2.03, 2.43, True)
+
+
+def test_robot_far_from_the_plan_point_travels():
+    robot = (1.5, 2.0, 0.0)
+    assert goal_position(1.0, 2.0, robot, TURN_RADIUS) == (1.0, 2.0, False)
+
+
+def test_robot_exactly_at_the_radius_travels():
+    # La comparación es estricta (<): justo en el borde, viaja.
+    robot = (0.2, 0.0, 0.0)
+    assert goal_position(0.0, 0.0, robot, TURN_RADIUS) == (0.0, 0.0, False)
+
+
+def test_turn_radius_covers_nav2_arrivals():
+    # turn_in_place_m tiene que ser mayor que la tolerancia de llegada de Nav2: si no, un
+    # robot que Nav2 dio por llegado puede quedar afuera del radio y tener que acercarse
+    # otra vez. Si navegación cambia su tolerancia, este test avisa.
+    yaml = pytest.importorskip('yaml')
+    params_dir = Path(__file__).resolve().parents[1] / 'params'
+    params = yaml.safe_load((params_dir / 'params.yaml').read_text())
+    mision = params['mision']['ros__parameters']
+    nav = yaml.safe_load((params_dir / 'navegacion.yaml').read_text())
+    checker = nav['controller_server']['ros__parameters']['general_goal_checker']
+    assert mision['turn_in_place_m'] > checker['xy_goal_tolerance']

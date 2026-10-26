@@ -198,6 +198,27 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
 - Not covered: Nav2 never answering a goal (`sending` forever). Nav2 is down then,
   and no new goal would help.
 
+## How does mission turn at a viewpoint?
+
+- Problem: coverage publishes several poses at one viewpoint: same x,y, another
+  heading. Mission sent each one with the plan's x,y. Nav2 calls a goal reached
+  within `xy_goal_tolerance` (0.10 m) and can drift while it turns (0.14 m in
+  laberinto_1), so the next turn was a new goal that needed the approach again:
+  23 s stuck in a corner (hans-die's NOTES, "For other modules").
+- Decided: if the robot is within `turn_in_place_m` (0.20 m) of the next plan
+  point, mission sends the robot's own x,y with the plan's heading, so Nav2 only
+  turns. The plan point, not the sent pose, goes into the list of finished
+  points, so the 0.02 m / 0.1 rad identity still works. Without TF it sends the
+  plan point.
+- Why 0.20 m: Nav2 stops are median 0.058 m, p90 0.10 m, worst seen 0.14 m. A
+  view from up to 0.20 m away is almost the same view.
+- Side effect: a different plan point closer than 0.20 m is also only turned
+  to, not driven to.
+- Rule: `turn_in_place_m` stays above Nav2's `xy_goal_tolerance`
+  (`test_turn_radius_covers_nav2_arrivals` checks it).
+- Not chosen: Nav2's `Spin` action. It is a second navigation action, so an
+  interface change with hans-die.
+
 ## Next
 
 - Run it in the simulator once Nav2, localization and coverage are in `development`.

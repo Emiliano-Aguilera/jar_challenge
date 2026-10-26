@@ -30,3 +30,15 @@ def first_pending(poses, visited, dist_min, ang_min):
         if not seen:
             return p
     return None
+
+def goal_position(plan_x, plan_y, robot_pose, radius):
+    in_place = False
+    if robot_pose is None:
+        return (plan_x, plan_y, in_place)
+    x, y, _ = robot_pose
+    dist = math.hypot(x - plan_x, y - plan_y)
+    if dist < radius:
+        in_place = True
+        return (x, y, in_place)
+    return (plan_x, plan_y, in_place)
+
