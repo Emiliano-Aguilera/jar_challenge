@@ -27,6 +27,7 @@ setup(
             'deteccion = equipo_jar.deteccion:main',
             'fusion = equipo_jar.fusion:main',
             'mision = equipo_jar.mision:main',
+            'localizacion = equipo_jar.localizacion:main',
         ],
     },
 )
