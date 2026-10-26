@@ -1,5 +1,123 @@
 # Coverage results
 
+## 2026-10-26: bounded route cleanup after the geometry correction
+
+The current candidate adds one cleanup relocation sweep after the existing
+sweep. It revisits choices that later moves can unlock, with the same sampled
+clock, mean, search and search-plus-return guards. No poses/headings are removed
+or changed. Cancellation is now checked inside the 2-opt search too.
+
+All 18 integrated routes exactly match the saved prototype's permutations.
+Seven searches shorten, eleven are unchanged; the largest predicted saving is
+50.96 s (Maze 3, offset 2). Final dense/sample visibility and all view/count
+sets are identical to the geometry-only candidate. Dense/sample visibility at
+60/120/300/480 s never decreases relative to that candidate. This does not
+restore the old geometry's lost views or prove detection on a real robot.
+Dense mean first-view time regresses by about 0.00072 s in one case, reflecting
+the sampled nature of the runtime guard.
+
+The difficult offset-2 route falls from 524.7 to 517.9 estimated seconds, still
+71.4 s longer than the old transit-only policy. Its nominal-start route is now
+485.1 s; Maze 4 nominal is 451.7 s. The table in the geometry section below
+records the earlier geometry-only stage, before this cleanup.
+
+Largest single complete planning sample in the integrated 18 cases: 6.336 s.
+Paired CPU medians (one warmup and three alternating repetitions) against the
+geometry-only candidate:
+
+| Map | One sweep | With cleanup |
+| --- | --- | --- |
+| Difficult labyrinth | 5.224 s | 5.651 s |
+| Simple labyrinth | 5.444 s | 5.468 s |
+| Maze 1 | 2.178 s | 2.397 s |
+
+These are local CPU timings, not driving savings or a hardware guarantee.
+The earlier real-navigation smoke below tested the geometry-only stage; the
+new order has exact offline integration checks, not a new physical benchmark.
+Pure suites pass 99 cases, including a regression task and cancellation during
+2-opt. Final official verifier passes on the combined candidate: 118 outer
+tests, including 115 internal coverage cases; zero static errors/hardcoding
+warnings and runtime interface problems, with no pre-map motion/reports.
+
+Additional evidence under ignored `build/verificacion/cobertura/`:
+`espacio-orden-extra/experiment.json`, `espacio-orden-integrado/budget.*`,
+`espacio-orden-integrado/comparison.json`, `espacio-orden-rendimiento/timing.*`
+and the trusted `espacio-orden-referencia/` snapshot.
+
+## 2026-10-26: observation clearance, local candidate
+
+Branch: `cobertura/espacio-observacion`, based on development `71ca3f1`.
+This is a geometry correction with measured visibility/time tradeoffs, not a
+demonstrated score improvement. Marco authorized publishing the verified
+candidate; GitHub holds the PR/merge state.
+
+Transit still uses radius+margin (0.21 m). Coarse observation candidates prefer
+0.30 m clearance. Fine recovery exhausts preferred centers before adding a
+tighter witness; all observations require at least 0.24 m, never less than
+transit clearance. That minimum encloses the current padded Nav2 rear corner
+(about 0.2341 m) in the known map. Arrival tolerance, localization, wall errors
+and unmapped boxes remain outside this nominal guarantee.
+
+The initial strict-0.30 m candidate was rejected: it lost 318 dense cells and
+56 samples in the difficult nominal case. The two-level policy reduces those
+losses to 26 cells / 5 samples. All 18 cases preserve transit reachability and
+mission selects every goal, with no sampled targets visible-but-deferred.
+Every new goal meets the minimum. For example, the difficult nominal case
+changes from 39 goals below the new minimum to zero.
+
+The table includes the estimated 8 s startup. It predicts all goals succeed;
+it does not measure driving or detection. Dense changes count floor-cell
+centers, not victims.
+
+| Nominal case | Goals before → after | Estimated route s | Final dense change |
+| --- | --- | --- | --- |
+| Difficult labyrinth | 65 → 77 | 490.1 → 488.5 | -26 |
+| Simple labyrinth | 52 → 52 | 344.3 → 346.1 | -10 |
+| Maze 1 | 50 → 51 | 395.1 → 416.0 | +6 |
+| Maze 2 | 52 → 52 | 373.5 → 363.8 | -7 |
+| Maze 3 | 60 → 61 | 443.5 → 463.4 | +11 |
+| Maze 4 | 62 → 60 | 468.9 → 455.7 | -9 |
+
+The difficult offset-2 case regresses from 446.5 to 524.7 s and loses 301 dense
+cells at 300 s; final loss is 31 cells. This requires route/stops work before
+claiming an efficiency improvement. The largest current planning sample is
+5.748 s; this is one sample per case, not a paired CPU benchmark.
+
+Verification: 16 generated geometry cases, 97 pure coverage/evaluation cases,
+113 internal coverage cases including ROS, and 118 outer project tests in the
+official verifier. Static checks and runtime interfaces pass; no motion or
+reports before /map. Marco approved only the two new coverage YAML entries;
+no other module parameters or interfaces changed.
+
+Real AMCL/Nav2 local smoke, one 180-wall-second run per variant on Maze 4:
+
+| Measurement | Previous policy | Candidate |
+| --- | --- | --- |
+| Published views | 62 | 60 |
+| Successful navigation actions | 17 | 14 |
+| Failed navigation actions | 0 | 0 |
+| Reports / practice score | 1 / 100 | 1 / 100 |
+| Protocol violations | 0 | 0 |
+| Process parent exit codes | all 0 | all 0 |
+
+Actions include mission's inspections, so action count is not coverage gain.
+An action was still running at the imposed cutoff. Collisions and RTF were not
+measured. These short runs do not prove fewer wall stalls, better score, full
+coverage, the 300 s bonus or performance on unseen maps/physical hardware.
+
+The first official-runner attempt published /map before team startup on WSL,
+invalidating the pre-map A/B parameter setup. Preserve that failure. The paired
+geometry fixture instead waits for fresh odometry/camera TF and the selected
+policy before starting the judge, with real AMCL/Nav2. It does not validate or
+change production startup; tools/ and shared launch files were not edited.
+No shared-server jobs were launched.
+
+Evidence in ignored `build/verificacion/cobertura/`: `espacio-observacion/`
+(rejected), `espacio-preferido/budget.*`, `espacio-preferido/comparison.json`,
+`espacio-verificador.log`, and `nav-espacio-20261026/` (both probes and the
+`official-startup-failure/` evidence). Helpers for this local WSL environment
+are outside the repository in `../auditoria-2026-10-26/`.
+
 ## 2026-10-23: local observation-order refinement
 
 Branch: `cobertura/orden-observacion`, from development `10f97ca` (merged PR #10).

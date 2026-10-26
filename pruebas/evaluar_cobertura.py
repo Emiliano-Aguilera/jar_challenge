@@ -216,7 +216,7 @@ def main():
     parser.add_argument('--params', type=Path, default=Path('src/equipo_jar/params/params.yaml'))
     args = parser.parse_args()
     values = yaml.safe_load(args.params.read_text())['cobertura']['ros__parameters']
-    settings = Settings(**{name: values[name] for name in asdict(Settings())})
+    settings = Settings(**{name: values.get(name, value) for name, value in asdict(Settings()).items()})
     evaluate(args.simulator, args.output, settings)
 
 

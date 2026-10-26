@@ -120,8 +120,9 @@ Timings exclude diagnostic reconstruction and the exhaustive oracle.
 
 ## Compare fixed-view observation ordering
 
-The runtime keeps the existing selected view set. After 2-opt, one bounded
-relocation sweep can move a view earlier or later. It accepts only improvements
+The runtime keeps the existing selected view set. After 2-opt, two bounded
+relocation sweeps can move a view earlier or later. The cleanup sweep revisits
+choices that later moves can unlock. Each accepts only improvements
 in sampled mean first-view time (or equal mean with shorter search), with no
 increase in estimated search or search-plus-return. Sampled coverage must not
 decrease on the configured predicted-clock grid.
@@ -153,6 +154,34 @@ It checks identical view sets/target counts across versions and deterministic
 order/metrics within each version. Without the flag, exact route/metric parity
 is still required. Estimated travel savings are separate from CPU time.
 
+## Observation clearance
+
+Transit still uses `robot_radius + safety_margin`. Observation centers have a
+separate minimum (`view_clearance`, 0.24 m) and preferred stand-off
+(`view_preferred_clearance`, 0.30 m). Coarse sampling uses preferred centers;
+fine recovery exhausts those before adding a tighter witness for a missed
+target. Every point, including an optional start view, obeys the minimum.
+Neither setting reduces transit clearance. Both apply live.
+
+The current padded Nav2 rear corner is about 0.2341 m from base_footprint.
+Recheck the minimum when chassis dimensions or footprint padding change.
+This nominal-map rule does not certify arrival error, localization, actual
+walls or unmapped boxes. Navigation remains responsible for each movement.
+Separate observation clearance avoids closing transit passages just to keep
+stops farther from walls, although the existing circular transit model still
+has its own reachability limits.
+
+```bash
+python3 -m pytest pruebas/test_espacio_observacion.py -q
+```
+
+The budget evaluator uses eligible minimum-clearance observation centers in
+its missing-view oracle. Compare final dense visibility and early budgets:
+new viewpoints can lose visibility or add travel. The exact-view CPU/order
+comparison is not an acceptance test for changed geometry. For a controlled
+baseline replay only, set both observation clearances to zero before /map;
+that restores the previous transit-only candidate policy.
+
 ## Current mission integration
 
 Coverage publishes an initial route. Mission in current development remembers
@@ -164,19 +193,17 @@ remaining perception/navigation agreements.
 For a handoff check, use the official simulator and practice judge following
 `docs/team/SIMULATION.md`. Match the ROS domain in each terminal.
 
-In a communication-only fixture, prepare the team and simulator first and wait
-for fresh map/base/camera TF before starting the judge. An ordering probe exposed
-the map about 54 s before robot TF; fake navigation does not move, so the judge
-ended by inactivity at 60 s. Preparing this fixture does not validate or change
-the official run's startup conditions. Keep the first failed attempt as evidence.
+An older communication-only fixture used fake navigation before Nav2 was
+integrated. Do not start that fake action server alongside current Nav2.
+That probe exposed the map about 54 s before robot TF and ended by inactivity.
+Keep the failed attempt as evidence. Preparing sensors before a geometry
+comparison isolates startup delays; it does not validate production startup.
 
 ```bash
-python3 notes/AlsinaBautista/nav_falso.py --ros-args -p duracion:=0.5
-ros2 launch equipo_jar pruebas.launch.py use_sim_time:=true victimas:=2
+ros2 launch equipo_jar competencia.launch.py use_sim_time:=true victimas:=2
 python3 pruebas/capturar_plan_cobertura.py
 ```
 
-Pass the actual practice world's victim count instead of 2 when needed. Fake
-navigation accepts goals but does not move the robot; mission's `Punto actual`
-logs show which coverage poses it sends. This check tests communication only.
-Use real navigation and localization for travel or competition measurements.
+Start the simulator and judge separately following the team guide. Pass the
+actual practice world's count instead of 2. The launch now includes real AMCL
+and Nav2. A captured plan alone proves neither travel nor processed images.

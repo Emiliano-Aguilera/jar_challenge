@@ -36,6 +36,8 @@ class Settings:
     free_threshold: int = 25
     order_check_interval_s: float = 60.0
     order_start_delay_s: float = 8.0
+    view_clearance: float = 0.24
+    view_preferred_clearance: float = 0.30
 
     def __post_init__(self):
         positive = ('robot_radius', 'candidate_spacing', 'target_spacing',
@@ -59,6 +61,9 @@ class Settings:
             raise ValueError('order_check_interval_s must be finite and at least observation_time')
         if not math.isfinite(self.order_start_delay_s) or self.order_start_delay_s < 0:
             raise ValueError('order_start_delay_s must be finite and nonnegative')
+        for name in ('view_clearance', 'view_preferred_clearance'):
+            if not math.isfinite(getattr(self, name)) or getattr(self, name) < 0:
+                raise ValueError(f'{name} must be finite and nonnegative')
 
 
 @dataclass(frozen=True)
@@ -350,6 +355,7 @@ def improve_order(choices, start_cell, start_yaw, costs, settings, possible, can
     metrics = route_metrics(choices, start_cell, start_yaw, costs, settings, possible)
     for first in range(len(choices) - 1):
         for last in range(first + 1, len(choices)):
+            check_cancelled(cancel)
             candidate = choices[:first] + list(reversed(choices[first:last + 1])) + choices[last + 1:]
             trial = route_metrics(candidate, start_cell, start_yaw, costs, settings, possible)
             if (trial.duration < metrics.duration - 1e-9
@@ -357,6 +363,10 @@ def improve_order(choices, start_cell, start_yaw, costs, settings, possible, can
                 choices, metrics = candidate, trial
     # Keep every view: equal sampled coverage does not prove equal visibility
     # between samples, so removing a seemingly redundant pose would be unsafe.
+    choices = relocate_order(choices, start_cell, start_yaw, costs, settings, possible,
+                             settings.order_check_interval_s, settings.order_start_delay_s, cancel)
+    # Later moves can unlock improvements for views visited early in the first
+    # sweep. One cleanup sweep keeps the work bounded and repeats every guard.
     return relocate_order(choices, start_cell, start_yaw, costs, settings, possible,
                           settings.order_check_interval_s, settings.order_start_delay_s, cancel)
 
@@ -465,6 +475,22 @@ def shortest_leg(cells, start, goal, resolution):
     raise ValueError('no grid path between observation goals')
 
 
+def observation_cells(grid, reachable, settings, cancel=None, *, preferred=False):
+    """Reachable centers with room for observation, separate from transit.
+
+    The minimum envelope must cover the robot at every requested heading.
+    Prefer the larger envelope where it can supply the needed visibility.
+    Neither certifies map accuracy, localization or unmapped obstacles.
+    Setting both observation clearances to zero restores the transit mask.
+    """
+    transit_clearance = settings.robot_radius + settings.safety_margin
+    clearance = max(settings.view_clearance,
+                    settings.view_preferred_clearance if preferred else 0.0)
+    if clearance <= transit_clearance:
+        return reachable
+    return reachable & grid.safe_cells(clearance, settings.free_threshold, cancel)
+
+
 def make_plan(grid, start, settings=Settings(), camera=Camera(), *,
               refine=True, improve=True, diagnostics=False, cancel=None):
     """Greedily cover sampled free cells, balancing new visibility and travel time.
@@ -477,9 +503,11 @@ def make_plan(grid, start, settings=Settings(), camera=Camera(), *,
                            settings.free_threshold, cancel)
     start_cell = grid.cell(start.x, start.y)
     reachable = reachable_cells(safe, start_cell)
-    positions = sampled_cells(reachable, settings.candidate_spacing, grid.resolution,
+    observation = observation_cells(grid, reachable, settings, cancel)
+    preferred = observation_cells(grid, observation, settings, cancel, preferred=True)
+    positions = sampled_cells(preferred, settings.candidate_spacing, grid.resolution,
                               settings.max_positions)
-    if start_cell not in positions:
+    if start_cell in preferred and start_cell not in positions:
         positions = [start_cell] + positions[:settings.max_positions - 1]
     free = {(i, j) for j in range(grid.height) for i in range(grid.width)
             if grid.free((i, j), settings.free_threshold)}
@@ -505,6 +533,7 @@ def make_plan(grid, start, settings=Settings(), camera=Camera(), *,
     added = 0
     if refine:
         # Search fine safe cells only for targets missed by coarse sampling.
+        # Exhaust preferred centers before using a minimum-clearance witness.
         # A target in another raw free-space component cannot have a wall-free
         # line of sight from this component in the conservative planar model.
         existing = set(positions)
@@ -520,9 +549,10 @@ def make_plan(grid, start, settings=Settings(), camera=Camera(), *,
             if possible & (1 << index) or targets[index] not in raw_component:
                 continue
             ti, tj = targets[index]
-            nearby = sorted((cell for cell in reachable if cell not in existing
+            nearby = sorted((cell for cell in observation if cell not in existing
                              and (cell[0] - ti) ** 2 + (cell[1] - tj) ** 2 <= radius_squared),
-                            key=lambda cell: ((cell[0] - ti) ** 2 + (cell[1] - tj) ** 2,
+                            key=lambda cell: (cell not in preferred,
+                                              (cell[0] - ti) ** 2 + (cell[1] - tj) ** 2,
                                               cell[1], cell[0]))
             for cell in nearby:
                 check_cancelled(cancel)

@@ -19,7 +19,7 @@ import time
 import yaml
 
 from equipo_jar.cobertura_plan import (
-    Pose, Settings, TravelCosts, make_plan, reachable_cells)
+    Pose, Settings, TravelCosts, make_plan, observation_cells, reachable_cells)
 from evaluar_cobertura import camera_from_contract, read_grid
 from metricas_cobertura import (
     classify_outside, mask_for_cells, mission_indices, route_trace,
@@ -61,6 +61,7 @@ def evaluate_case(grid, start, settings, camera, mission, budgets, diagnose):
     safe = grid.safe_cells(settings.robot_radius + settings.safety_margin,
                            settings.free_threshold)
     reachable = reachable_cells(safe, start_cell)
+    observation = observation_cells(grid, reachable, settings)
     before = time.perf_counter()
     masks = visibility_masks(grid, plan.poses, cells, settings, camera)
     dense_seconds = time.perf_counter() - before
@@ -88,6 +89,7 @@ def evaluate_case(grid, start, settings, camera, mission, budgets, diagnose):
                      dense_visibility=dense_seconds),
         counts=dict(free=len(free), raw_connected=len(raw), safe=len(safe),
                     reachable_safe=len(reachable), targets=plan.target_count,
+                    reachable_observation=len(observation),
                     candidate_positions=len(details.diagnostics.positions),
                     sampled_outside=len(details.diagnostics.outside_candidates),
                     sampled_deferred=len(details.diagnostics.deferred)),
@@ -100,15 +102,16 @@ def evaluate_case(grid, start, settings, camera, mission, budgets, diagnose):
     if diagnose:
         before = time.perf_counter()
         groups, witnesses = classify_outside(
-            grid, details.diagnostics.outside_candidates, raw, reachable, settings, camera)
+            grid, details.diagnostics.outside_candidates, raw, observation, settings, camera)
         result['timings']['outside_oracle'] = time.perf_counter() - before
         result['outside'] = dict(counts={key: len(value) for key, value in groups.items()},
                                  cells=groups, witnesses=[asdict(p) for p in witnesses])
         # A witness in another safe component diagnoses the reachability limit;
         # it is not a usable goal from this start.
         before = time.perf_counter()
+        other_observation = observation_cells(grid, safe - reachable, settings)
         other, other_witnesses = classify_outside(
-            grid, groups['no_witness'], raw, safe - reachable, settings, camera)
+            grid, groups['no_witness'], raw, other_observation, settings, camera)
         assert not other['raw_disconnected']
         result['timings']['other_safe_component_oracle'] = time.perf_counter() - before
         result['outside']['model_limits'] = dict(
@@ -155,7 +158,7 @@ def save_report(output, payload):
             f'{fraction(late, "dense_all")} | {case["mission_lost_dense"]} | '
             f'{mission["duration"]:.1f} |')
     lines.extend(['', '## Missing sampled targets: exhaustive witness search', '',
-                  'The model uses reachable safe cell centers, the current camera/range and heading grid.',
+                  'The model uses eligible observation centers, the current camera/range and heading grid.',
                   'No witness under this model is not a claim of physical impossibility.', '',
                   '| Case | Raw disconnected | Candidate sampling gap | No reachable witness | Other safe component | No safe-center witness |',
                   '| --- | --- | --- | --- | --- | --- |'])
@@ -192,7 +195,8 @@ def main():
         parser.error('runtime output must stay under this checkout\'s build directory')
     args.output.mkdir(parents=True, exist_ok=True)
     params = yaml.safe_load(args.params.read_text())
-    settings = Settings(**{key: params['cobertura']['ros__parameters'][key] for key in asdict(Settings())})
+    settings = Settings(**{key: params['cobertura']['ros__parameters'].get(key, value)
+                           for key, value in asdict(Settings()).items()})
     mission = params['mision']['ros__parameters']
     camera = camera_from_contract(args.simulator)
     payload = dict(platform=platform.platform(), python=sys.version, settings=asdict(settings),

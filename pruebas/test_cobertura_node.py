@@ -113,13 +113,17 @@ def test_plan_is_latched_and_parameters_apply_live(ros_pair):
     result = coverage.set_parameters_atomically([
         Parameter('max_views', value=2),
         Parameter('order_check_interval_s', value=30.0),
-        Parameter('order_start_delay_s', value=5.0)])
+        Parameter('order_start_delay_s', value=5.0),
+        Parameter('view_clearance', value=0.32),
+        Parameter('view_preferred_clearance', value=0.35)])
     assert result.successful
     spin_until(executor, lambda: len(received) >= 2)
     assert coverage._generation == first_generation + 1
     assert 0 < len(received[-1].poses) <= 2
     assert coverage.p['order_check_interval_s'] == 30.0
     assert coverage.p['order_start_delay_s'] == 5.0
+    assert coverage.p['view_clearance'] == 0.32
+    assert coverage.p['view_preferred_clearance'] == 0.35
     assert coverage.pub_plan.topic_name == '/jar/plan_cobertura'
     published = {name for name, _ in coverage.get_publisher_names_and_types_by_node(
         'cobertura', '/')}

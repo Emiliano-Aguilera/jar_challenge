@@ -1,5 +1,49 @@
 # Coverage decisions
 
+## 2026-10-26: bounded cleanup sweep
+
+A second relocation sweep preserves every geometry-candidate pose and heading.
+It shortens 7/18 predicted routes, up to 50.96 s, without reducing dense/sample
+visibility at 60/120/300/480 s relative to that candidate. Keep the same guards
+and a fixed bounded pass rather than iterating until convergence. All integrated
+permutations match the prototype. CPU medians rise by 0.427/0.024/0.219 s on
+the three measured maps; largest complete planning sample is 6.336 s.
+The difficult offset-2 geometry tradeoff remains: 517.9 versus 446.5 s under
+the old transit-only policy. No physical score improvement has been proved.
+
+## 2026-10-26: minimum and preferred observation clearance
+
+The strict 0.30 m observation experiment lost 318 dense cells and 56 sampled
+targets in the difficult nominal case. Retain the separated transit model,
+but use a 0.24 m minimum and prefer 0.30 m. Fine recovery exhausts preferred
+centers before adding a minimum-clearance witness for a missed target.
+The padded Nav2 rear corner is sqrt((0.181+0.02)^2+(0.10+0.02)^2), about
+0.2341 m; 0.24 m encloses it in the known map. This is not protection against
+map error, pose error, arrival tolerance or boxes missing from the map.
+
+The full 18-case evaluation retains transit connectivity and all mission
+goals. Difficult nominal final loss falls to 26 dense cells / 5 samples;
+offset 2 still has a 78.2 s route regression and worse early visibility.
+Do not call this an across-the-board efficiency gain. Marco approved the two
+coverage-only YAML entries. Full verifier passes; actual-navigation probes
+and route/stops evaluation remain separate work.
+
+## 2026-10-26: separate observation stand-off from transit
+
+- User asked to start the four coverage corrections identified by Hans, beginning
+  with viewpoint geometry and then route/stops. Created
+  `cobertura/espacio-observacion` from current development `71ca3f1`.
+- Current transit mask uses 0.21 m effective radius; applying 0.30 m globally
+  disconnects 211 already-clear observation centers in the difficult map.
+  Navigation uses a rectangular footprint and heading-dependent clearance.
+- Added separate observation-center eligibility, default proposal 0.30 m, with
+  the original transit mask retained. This is conservative in the known map;
+  it does not validate real map error, localization, boxes or narrow transit.
+- Sampling, fine recovery and the initial pose all obey the new stop rule.
+  Eleven generated geometry cases plus existing pure suites pass (92 total).
+- The 18-case dense evaluation is running; shared YAML remains unchanged until
+  the minimal proposed addition is verified and approved. No publication yet.
+
 ## 2026-10-23: fixed-view observation ordering
 
 - Question: can the same selected views observe useful space sooner with less

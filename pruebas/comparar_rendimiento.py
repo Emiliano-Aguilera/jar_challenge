@@ -41,7 +41,7 @@ def main():
         parser.error('use at least two paired repetitions')
     reference = load_reference(args.reference)
     params = yaml.safe_load(args.params.read_text())['cobertura']['ros__parameters']
-    values = {key: params[key] for key in asdict(current.Settings())}
+    values = {key: params.get(key, value) for key, value in asdict(current.Settings()).items()}
     camera_values = asdict(camera_from_contract(args.simulator))
     args.output.mkdir(parents=True, exist_ok=True)
     records = []

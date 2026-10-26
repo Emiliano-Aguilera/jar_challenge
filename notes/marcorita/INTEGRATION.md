@@ -1,8 +1,41 @@
 # Coverage integration
 
-Current base is development `10f97ca`; local ordering work reviewed on 2026-10-23.
+Current base is development `71ca3f1`; local work reviewed on 2026-10-26.
 Follow-up proposals below do not change the agreed interface.
 Current output stays `/jar/plan_cobertura`, `nav_msgs/Path`, frame `map`.
+
+## Observation goals and navigation
+
+The local candidate separates transit clearance (0.21 m) from observation
+clearance (minimum 0.24 m, preferred 0.30 m). Tighter recovery points are used
+only after exhausting preferred witnesses. The current Nav2 chassis with
+0.02 m padding has a farthest corner about 0.2341 m from base_footprint.
+Recheck the minimum if that geometry changes. No Nav2 settings changed.
+
+Mission does not need an interface change for this: the plan still contains
+positions/headings, but their positions, number and order can change. Coverage
+identity remains mission's 0.02 m / 0.1 rad rule. Nav2's actual arrival tolerance
+(0.10 m / 0.25 rad) is a different rule and can shift the real viewing pose.
+The clearance model does not certify localization/map errors or real arrival.
+Do not count reaching a goal as a processed camera observation.
+
+## Concrete follow-up with Bautista
+
+Candidate boxes are absent from the static practice map. Mission already
+receives `/jar/candidatas`; agree on a temporary goal-exclusion rule there
+before adding coverage subscriptions or changing shared interfaces.
+
+- Check the robot footprint against the candidate box and its uncertainty.
+  A fixed 0.30 m center-distance rule does not cover every orientation/corner.
+- Keep an excluded goal pending; excluding it is neither success nor observed
+  coverage. Reconsider it as the candidate estimate changes and bound retries
+  with mission's existing deadline. False candidates must not erase areas.
+- Record first candidate, inspection, navigation result and report times.
+  A late report can come from confirmation/uncertainty, not just a late view.
+
+These are proposals, not implemented mission changes. Bautista owns selection
+and execution. Hans should review arrival behavior at the changed wall goals;
+full collision/startup instrumentation and real speed calibration remain open.
 
 ## Mission
 
