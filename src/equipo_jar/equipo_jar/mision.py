@@ -20,7 +20,7 @@ from equipo_jar.comun import QOS_ESTADO, QOS_MAPA, correr, parametros_en_vivo
 from equipo_jar.reportes import armar_reporte
 from equipo_jar_msgs.msg import Candidatas
 from equipo_jar.confirmacion import select_to_report
-from equipo_jar.exploracion import yaw_from_quaternion, first_pending, angle_difference
+from equipo_jar.exploracion import yaw_from_quaternion, first_pending, angle_difference, goal_position
 from equipo_jar.inspeccion import pick_doubtful, viewpoint_for
 
 from tf2_ros import Buffer, TransformListener, TransformException
@@ -47,7 +47,7 @@ class Mision(Node):
                                             'visit_min_shift_m': 0.4, 'visit_box_margin_m': 0.25, 
                                             'start_wait_s': 8.0, 'goal_timeout_s': 90.0, 'stuck_time_s': 20.0,
                                             'stuck_distance_m': 0.05, 'stuck_angle_rad': 0.2, 'stop_wait_s': 1.0,
-                                            'done_limit_s': 590.0})  # parámetros ajustables
+                                            'done_limit_s': 590.0, 'turn_in_place_m': 0.20})  # parámetros ajustables
 
         self.mapa = None
         self.plan = None
@@ -303,12 +303,20 @@ class Mision(Node):
         if point is None:
             self.spin_if_idle()
             return
-        sent = self.go_to(point)
+        plan_x = point.pose.position.x
+        plan_y = point.pose.position.y
+        q = point.pose.orientation
+        yaw = yaw_from_quaternion(q)
+        x, y, in_place = goal_position(plan_x, plan_y, self.current_pose(), self.p['turn_in_place_m'])
+        goal = self.make_pose(x, y, yaw)
+        sent = self.go_to(goal)
         if sent:
             self.current_point = point
-            q = point.pose.orientation
-            yaw = yaw_from_quaternion(q)
-            self.get_logger().info(f'Punto actual: ({point.pose.position.x}, {point.pose.position.y}, {yaw})')
+            if in_place:
+                self.get_logger().info(f'Giro en el lugar: yaw={yaw:.2f} desde ({x:.2f},{y:.2f}), '
+                                        f'punto del plan ({plan_x:.2f},{plan_y:.2f})')
+            else:
+                self.get_logger().info(f'Viaje al punto del plan: ({plan_x:.2f}, {plan_y:.2f}, {yaw})')
             self.idle_since = None
 
     def spin_if_idle(self):
