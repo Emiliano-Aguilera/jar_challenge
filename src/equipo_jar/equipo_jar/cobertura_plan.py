@@ -136,6 +136,7 @@ class Grid:
         self.width, self.height, self.resolution = width, height, resolution
         self.data, self.origin = tuple(data), origin
         self.cos, self.sin = math.cos(origin.yaw), math.sin(origin.yaw)
+        self._free_cache = None
 
     def cell(self, x, y):
         if not math.isfinite(x) or not math.isfinite(y):
@@ -156,8 +157,29 @@ class Grid:
         return (0 <= i < self.width and 0 <= j < self.height
                 and 0 <= self.data[j * self.width + i] <= threshold)
 
+    def _free_mask(self, threshold, cancel=None):
+        """One immutable occupancy lookup per map/threshold, shared by geometry.
+
+        Keep only the latest threshold. A local snapshot and atomic tuple
+        replacement let concurrent readers use different thresholds safely.
+        """
+        cached = self._free_cache
+        if cached is not None and cached[0] == threshold:
+            return cached[1]
+        mask = bytearray()
+        for first in range(0, len(self.data), self.width):
+            check_cancelled(cancel)
+            mask.extend(0 <= value <= threshold
+                        for value in self.data[first:first + self.width])
+        result = bytes(mask)
+        self._free_cache = threshold, result
+        return result
+
     def safe_cells(self, radius, threshold, cancel=None):
         """Conservative circular footprint against full cell squares and map edges."""
+        check_cancelled(cancel)
+        clear = self._free_mask(threshold, cancel)
+        width = self.width
         clearance = radius / self.resolution
         span = math.ceil(clearance + 0.5)
         offsets = []
@@ -166,6 +188,7 @@ class Grid:
                 distance = math.hypot(max(abs(di) - 0.5, 0), max(abs(dj) - 0.5, 0))
                 if distance <= clearance or math.isclose(distance, clearance, abs_tol=1e-12):
                     offsets.append((di, dj))
+        kernel_span = max(abs(di) for di, _ in offsets)
         safe = set()
         for j in range(self.height):
             check_cancelled(cancel)
@@ -173,16 +196,23 @@ class Grid:
                 if min(i + 0.5, j + 0.5, self.width - i - 0.5,
                        self.height - j - 0.5) <= clearance + 1e-12:
                     continue
-                if all(self.free((i + di, j + dj), threshold) for di, dj in offsets):
+                # isclose can include a square just beyond the exact radius.
+                if min(i, j, width - i - 1, self.height - j - 1) < kernel_span:
+                    continue
+                if all(clear[(j + dj) * width + i + di] for di, dj in offsets):
                     safe.add((i, j))
         return safe
 
     def visible(self, start, end, threshold):
         """Supercover ray: a wall touched at a grid corner blocks the ray too."""
         first, last = self.cell(*start), self.cell(*end)
-        if first is None or last is None or not self.free(first, threshold):
+        if first is None or last is None:
             return False
+        clear = self._free_mask(threshold)
+        width, height = self.width, self.height
         i, j = first
+        if not clear[j * width + i]:
+            return False
         end_i, end_j = last
         dxw, dyw = end[0] - start[0], end[1] - start[1]
         dx = (self.cos * dxw + self.sin * dyw) / self.resolution
@@ -195,10 +225,11 @@ class Grid:
         tj = ((j + (dy > 0) - sy) / dy) if dy else math.inf
         delta_i = abs(1 / dx) if dx else math.inf
         delta_j = abs(1 / dy) if dy else math.inf
-        while (i, j) != (end_i, end_j):
+        while i != end_i or j != end_j:
             if math.isclose(ti, tj, rel_tol=1e-12, abs_tol=1e-12):
-                if not (self.free((i + step_i, j), threshold)
-                        and self.free((i, j + step_j), threshold)):
+                ni, nj = i + step_i, j + step_j
+                if not (0 <= ni < width and 0 <= nj < height
+                        and clear[j * width + ni] and clear[nj * width + i]):
                     return False
                 i, j = i + step_i, j + step_j
                 ti, tj = ti + delta_i, tj + delta_j
@@ -206,7 +237,7 @@ class Grid:
                 i, ti = i + step_i, ti + delta_i
             else:
                 j, tj = j + step_j, tj + delta_j
-            if not self.free((i, j), threshold):
+            if not (0 <= i < width and 0 <= j < height and clear[j * width + i]):
                 return False
         return True
 
@@ -317,6 +348,7 @@ class TravelCosts:
     def __init__(self, cells, positions, resolution, cancel=None):
         self.cells, self.positions, self.resolution = cells, set(positions), resolution
         self.cache = {}
+        self.turn_cache = {}
         self.cancel = cancel
 
     def between(self, first, last):
@@ -328,14 +360,23 @@ class TravelCosts:
             self.cache[first] = {cell: field[cell] for cell in self.positions}
         return self.cache[first][last]
 
+    def turn_between(self, first, last):
+        """Reuse exact angular costs across trials of the same view set."""
+        key = first, last
+        if key not in self.turn_cache:
+            self.turn_cache[key] = abs(angle_difference(first, last))
+        return self.turn_cache[key]
+
 
 def route_metrics(choices, start_cell, start_yaw, costs, settings, possible):
     distance = turning = elapsed = weighted_time = 0.0
     mask, cell, yaw = 0, start_cell, start_yaw
     curve = [(0.0, 0)]
+    turn_cost = getattr(costs, 'turn_between', None)
     for nxt, pose, visible in choices:
         leg = costs.between(cell, nxt)
-        turn = abs(angle_difference(yaw, pose.yaw))
+        turn = (turn_cost(yaw, pose.yaw) if turn_cost is not None
+                else abs(angle_difference(yaw, pose.yaw)))
         distance += leg
         turning += turn
         elapsed += leg / settings.travel_speed + turn / settings.turn_speed + settings.observation_time

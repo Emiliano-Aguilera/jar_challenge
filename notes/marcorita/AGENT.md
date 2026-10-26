@@ -5,6 +5,36 @@ and `docs/team/INTERFACES.md`. Read `notes/marcorita/NOTES.md` for decisions.
 
 ## Local planner
 
+- Current task: `cobertura/calculo-eficiente`, from development `96134c0`
+  (merged PR #14). Marco asked for measurable coverage improvements while
+  waiting for Bautista. Work locally in coverage; do not edit mission/Nav2 or
+  add shared interfaces. No shared-server run is authorized for this task.
+- Tested consolidating separated views at the same cell into one visit, retaining
+  every pose/heading. Baseline `espacio-orden-integrado/budget.json` has 10-11
+  repeated visits in the difficult cases. `pruebas/experimentar_agrupacion.py`
+  compares predicted-time, mean and strict sampled-curve guards. Whole grouping
+  saves at most 0.586 s; guarded pair grouping at most 2.361 s in only 2/18
+  cases. Rejected as insufficient benefit; no grouping added to runtime.
+- Current runtime change reuses immutable free-cell masks (latest threshold
+  only) in ray casting/inflation, and exact angular costs within a plan. Mask
+  replacement uses an atomic tuple and local snapshots; cancellation is checked
+  during construction. Edge checks retain the original isclose behavior.
+- Paired CPU medians: 6.768->5.493 s, 6.831->5.390 s, 3.135->2.418 s.
+  All 18 cases retain poses, order, counts, visibility, route estimates and
+  mission selection exactly. Pure suites pass 103 cases; final verifier passes
+  118 outer tests including 120 internal coverage cases. Differential geometry
+  matches 20,250 rays / 1,575 masks; local 90 s Nav2 smoke passes with clean
+  parent exits and no protocol violations. No route-algorithm/parameter or
+  interface change. Do not prune views by sampled gain.
+- Current prototype output: ignored build/verificacion/cobertura/agrupacion-prototipos/.
+  Publication and shared-file/server permissions must follow the existing rules.
+  Marco explicitly authorized publishing this verified calculation optimization
+  and merging after green checks with no pending issues. GitHub holds its state.
+  Performance evidence: calculo-rendimiento/, calculo-integrado/ and the trusted
+  calculo-referencia/ snapshot under ignored build/verificacion/cobertura/.
+
+### Previous milestone: observation clearance (merged PR #14)
+
 - Current task (2026-10-26): `cobertura/espacio-observacion`, from development
   `71ca3f1` (navigation PR #13 and mission PR #12). Marco authorized correcting
   the observation geometry first, then route/stops. Keep this change focused.

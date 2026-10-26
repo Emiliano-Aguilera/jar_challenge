@@ -1,9 +1,39 @@
 # Coverage work status
 
-Updated: 2026-10-26. Branch: `cobertura/espacio-observacion`.
-Base: development `71ca3f1` (navigation PR #13 and mission PR #12).
+Updated: 2026-10-26. Branch: `cobertura/calculo-eficiente`.
+Base: development `96134c0` (merged PR #14).
 
 ## Current task
+
+Marco asked for measurable improvements within coverage while waiting for
+Bautista. Keep mission, navigation and shared interfaces unchanged.
+
+- Baseline: the 18 final PR #14 routes in espacio-orden-integrado/budget.json.
+- Difficult cases revisit 10-11 positions for different headings; test whether
+  grouping those headings reduces travel while keeping every original view.
+- Grouping prototypes rejected: whole-position grouping saves at most 0.586 s;
+  pair grouping with existing guards saves at most 2.361 s, in only 2/18 cases.
+- The current change accelerates geometry using a one-threshold free-cell mask
+  and reuses exact angular costs during route trials. Same formulas and outputs.
+- All 18 integrated cases exactly retain poses/order, counts, route estimates,
+  dense/sample visibility, budget snapshots and mission selection.
+- Paired CPU medians: difficult 6.768->5.493 s, simple 6.831->5.390 s,
+  first maze 3.135->2.418 s (about 19-23% less elapsed calculation time).
+  One warmup and three alternating repetitions; local hardware only.
+- Pure suites: 103 passed. Differential geometry matches 20,250 rays and 1,575
+  inflated masks. Full verifier passes 118 outer tests including 120 internal
+  coverage cases, with a live ROS threshold-change check and clean interfaces.
+- Local 90 s AMCL/Nav2 smoke passes: one report / 100 points, three successful
+  nav actions, zero failed actions/protocol violations, all parent exits 0.
+  Prepared sensor TF; production startup, collisions and score gains unproved.
+- No new shared parameters, interfaces or server jobs. Marco authorized
+  commit/push/PR and merge after successful checks without pending issues.
+  GitHub holds the publication/merge state.
+- Prototypes: build/verificacion/cobertura/agrupacion-prototipos/.
+  Partial grouping: agrupacion-pares/. Current performance/route evidence:
+  calculo-rendimiento/, calculo-integrado/ and calculo-referencia/.
+
+## Previous milestone: observation clearance and cleanup (merged PR #14)
 
 Fix observation stand-off without applying the same larger clearance to transit.
 Marco authorized starting with geometry, then route/stops. Source changes are
