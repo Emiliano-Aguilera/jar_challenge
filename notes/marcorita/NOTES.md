@@ -22,9 +22,17 @@ no-view path marked it inspected, preventing another attempt. Ring/angle and
 grid replay found no current-model viewpoint. Documented the case for Bautista
 in INSPECTION_REPLAY.md; no mission or reporting-threshold changes applied.
 
-Marco's authorization still covers amendments to the current PR. It does not
-cover more than the two completed shared-server runs. Ask before another run;
-merge only when CI and behavioral validation leave no pending issues.
+Marco authorized a third recorded 300-s run on corrected 37c2306. It completes
+as 40402162637: 100 points / RTF .972 / GPU 0, but report 161.92 s versus
+reference 74.83 s and four navigation failures versus zero. Actual Paths keep
+the first 37 views; reported candidate gets four early observations at sigma
+.15 m, then a fifth at 161.809 s lowers sigma to .0486 m. Near the first
+navigation failure, AMCL/truth stamps 1 ms apart differ by .5363 m; estimated
+cell occupied, actual cell free. Keep PR #16 draft and document owner follow-ups
+in SERVER_COMPARISON.md. No runtime edit follows this test.
+
+Marco's authorization covers amendments to the current PR, not a fourth
+manual run. Merge only when CI and behavior leave no pending issues.
 
 ## Rejected first candidate 755c891: preserve viewpoints with a global restart
 

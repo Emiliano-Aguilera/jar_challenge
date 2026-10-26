@@ -3,6 +3,21 @@
 2026-10-26. Branch cobertura/recorrido-laberinto. No Nav2 configuration or
 mission source change applied. This is a diagnostic case for Hans and Marco.
 
+## Server follow-up
+
+The third authorized server run repeats navigation failures with RTF .972,
+matching the reference's .973 on the same GPU 0/slot 0/simulator image.
+Four actions fail, compared with zero in the reference. Near the first failure,
+recorded AMCL and simulator truth at stamps 247.420/247.421 s differ by .5363 m:
+estimate (-2.2653,.1776), actual (-2.7350,-.0812). Their map cells are occupied
+(100) and free (0), respectively. World and map align in this practice world.
+These synchronized samples strengthen the earlier local localization clue.
+They do not isolate why the error arose or exclude route influence.
+See SERVER_COMPARISON.md and ignored server-recorrido/corrected/
+localization-diagnostic.json. Truth is used only for evaluation, never src.
+
+## Earlier local smoke
+
 A 300-wall-second full-team laberinto_1 smoke publishes 79 coverage goals,
 completes 12 Nav2 goals and fails two. It reaches only 82.2 simulated seconds
 (RTF about .273), with no candidates, reports or protocol violations; score 0.

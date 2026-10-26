@@ -26,6 +26,11 @@ agreement are in [INSPECTION_REPLAY.md](INSPECTION_REPLAY.md). This is separate
 from the candidate-obstacle proposal below. Neither changes shared interfaces
 without the affected owners' agreement.
 
+The third server run recovers a report but confirms delayed evidence and
+navigation failures. [SERVER_COMPARISON.md](SERVER_COMPARISON.md) records the
+4-to-5-observation transition for mission and a synchronized .5363 m AMCL
+error for Hans. The new ordering remains experimental in draft PR #16.
+
 Candidate boxes are absent from the static practice map. Mission already
 receives `/jar/candidatas`; agree on a temporary goal-exclusion rule there
 before adding coverage subscriptions or changing shared interfaces.

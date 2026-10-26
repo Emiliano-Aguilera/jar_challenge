@@ -2,6 +2,15 @@
 
 ## 2026-10-26: corrected ordering protects original view deadlines
 
+Latest: the additional authorized server run tested corrected 37c2306.
+It recovers 100 points, but reports at 161.92 s versus reference 74.83 s,
+with four navigation failures versus zero. Both use GPU 0 / slot 0, the same
+image and RTF .972 versus .973. All four CI checks pass on tested source;
+behavior remains open and PR #16 stays draft. See SERVER_COMPARISON.md.
+Recorded AMCL/truth samples 1 ms apart show .5363 m error near the first
+navigation failure, with estimated map cell occupied and actual cell free.
+No runtime code or parameters were changed after this server test.
+
 PR #16 is held in draft. The first candidate's aggregate clock checks allowed
 different regions to be delayed: at 60 s the nominal case misses 373 baseline
 dense cells while adding 388 others. Equal or larger counts are insufficient.
@@ -52,11 +61,11 @@ mission and the timeline recorder throw RuntimeError; the launch parent exits
 0 but this does not mean every child is clean. Behavioral validation remains
 pending. The fixture prepares TF and does not certify production startup.
 
-The two authorized 300-s server runs tested the old candidate, not this
-correction. Baseline 79ec03c scored 100 with one report at 74.83 wall seconds
+The initial two authorized 300-s runs tested the old candidate. Baseline
+79ec03c scored 100 with one report at 74.83 wall seconds
 (RTF .973, GPU 0); 755c891 scored 0 (RTF .748, GPU 1). Both used the same image,
-recording and no protocol violations. These factors do not isolate the cause.
-No corrected-candidate server run or score gain has been established.
+recording and no protocol violations. Those two runs do not isolate the cause.
+The third corrected-source result above recovers the report, not a score gain.
 
 Tailscale access now works. Logs and bounded recording decoding show three
 candidate detections / sigma .15 m, below reporting's five / .10 m. Mission

@@ -3,6 +3,27 @@
 2026-10-26. No mission, navigation, map helper or interface change applied.
 This is a failure case for Bautista to review, not a request to relax reporting.
 
+## Follow-up in corrected server run
+
+The authorized third run, 40402162637 / commit 37c2306, recovers a 100-point
+report at 161.92 wall seconds. Its reported candidate (id 2) first receives
+four observations at 73.137-73.984 s, with sigma .15 m. At 84.30 s mission
+again logs "Sin lugar para mirarla" and marks the candidate inspected.
+The fifth observation arrives at 161.809 s, reduces sigma to .0486 m and
+enables reporting. This shows that the inspection mark suppresses another
+inspection attempt; it does not block a later automatic report if evidence
+arrives independently. A separate one-observation candidate appears at 53.875 s.
+
+The actual coverage Path keeps the same view multiset and first 37 views as
+the reference. Its early reported-box observation window is near the old
+73.648-74.772 s window, but provides four observations instead of five. Thus
+the intended view sequence alone does not guarantee processed evidence or
+the report threshold. Do not prescribe a fixed short dwell as a proven fix:
+mission must consider processed frames, confidence and a useful second view.
+Full comparison and remaining navigation failures: SERVER_COMPARISON.md.
+Decoded inspection/report windows are saved under server-recorrido/corrected/
+in ignored build/verificacion/cobertura/.
+
 ## Recorded sequence
 
 The first coverage candidate was tested in server batch

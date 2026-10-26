@@ -8,8 +8,9 @@ Base: development 3adfaeb (merged PR #15), unchanged on latest fetch.
 PR #16 remains DRAFT. Published first candidate 755c891 passed all four CI
 checks, but the authorized server pair scored 100 for baseline and 0 for
 candidate. RTF .973/GPU 0 versus .748/GPU 1 confounds attribution. No merge
-or claimed score improvement. Both authorized runs are complete; more need
-approval. Tailscale installation/login succeeded; full logs and bounded
+or claimed score improvement. The initial pair is complete. Marco authorized
+one additional recorded 300-s run of corrected 37c2306; run 40402162637 is
+complete. Do not dispatch a fourth without approval. Tailscale installation/login succeeded; full logs and bounded
 recording ranges are accessible. No user connection step remains pending.
 
 The global restart's aggregate checks hid different delayed map regions.
@@ -29,7 +30,17 @@ The 300-wall-second local smoke reaches 82.2 simulated seconds (RTF .273):
 79 views, 12 successful and two failed navigation actions, no candidates,
 reports or protocol violations. Score 0. Mission and the timeline recorder
 throw RuntimeError during SIGINT cleanup. This is not a behavioral pass;
-see LOCAL_NAVIGATION.md. No corrected-version server test yet.
+see LOCAL_NAVIGATION.md. All four CI checks on 37c2306 pass.
+
+Corrected server test (same GPU 0/slot 0/image as reference) scores 100 with
+RTF .972 versus reference 100 / .973. Report is later, 161.92 versus 74.83 s;
+four navigation failures versus zero. No protocol violations. This does not
+clear behavior: keep PR #16 DRAFT. See SERVER_COMPARISON.md for the full table.
+The four early observations at sigma .15 m become five / .0486 m only on a
+later pass, enabling the report. Actual plans keep the first 37 views identical.
+At the first Nav2 failure, AMCL differs from simulator truth by .5363 m in
+samples 1 ms apart; estimated map cell is occupied, actual cell free. This is
+an actionable localization case for Hans, without excluding route influence.
 
 Native recorded map/static TF plus a recorded AMCL sample reproduce the old
 79-view Path exactly. Correction keeps the first 37 views and the critical

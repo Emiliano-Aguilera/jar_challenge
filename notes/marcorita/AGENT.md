@@ -7,8 +7,10 @@ INTERFACES.md. Read NOTES.md for decisions and STATUS.md for current state.
 
 - Branch cobertura/recorrido-laberinto, from development 3adfaeb (PR #15).
   Latest fetch still has that development commit. Marco authorized coverage
-  improvements, publication to the group's fork, and exactly two recorded
-  300-s server runs. Both runs have been consumed; ask before another run.
+  improvements, publication to the group's fork, and an initial pair of
+  recorded 300-s server runs. Both completed. Marco then authorized one more
+  recorded 300-s run of corrected 37c2306: run 40402162637 completed successfully.
+  Do not dispatch a fourth manual run without further authorization.
   Merge only after green CI and no pending behavioral/review issues.
 - Published first candidate 755c891 has four green CI checks, but PR #16 is
   DRAFT. It must not merge: baseline 79ec03c scored 100 (RTF .973, GPU 0),
@@ -42,7 +44,26 @@ INTERFACES.md. Read NOTES.md for decisions and STATUS.md for current state.
   failed navigation actions, no candidates/reports/protocol violations. Score
   0; behavioral validation is not passed. See LOCAL_NAVIGATION.md. Mission
   and the timeline recorder also throw RuntimeError during SIGINT cleanup;
-  do not describe all children as clean. No corrected server run yet.
+  do not describe all children as clean. All four CI checks pass on 37c2306.
+- Corrected server run 40402162637, batch 20261026-181111-37c2306, confirms
+  commit 37c2306, same simulator image/GPU 0/slot 0 as baseline. RTF .972
+  versus .973, 100 points versus 100, no protocol violations. Report is later:
+  161.92 versus 74.83 wall seconds, with 44 successful / 4 failed navigation
+  actions versus baseline 70 / 0. Keep PR #16 DRAFT, not merged. No score,
+  speed or robustness gain is demonstrated. Exactly three manual runs used.
+- Actual recorded plans retain the same view multiset and first 37 views.
+  Reported candidate receives four early observations at 73.137-73.984 s,
+  sigma .15 m; mission cannot inspect it at 84.30 s and marks it inspected.
+  Fifth observation at 161.809 s reduces sigma to .0486 m and enables report.
+  Earlier one-observation candidate appears at 53.875 s; do not conflate them.
+- Server failure diagnostic: matched AMCL stamp 247.420 and simulator truth
+  247.421 s differ by .5363 m. Estimated position (-2.2653,.1776) occupies a
+  wall cell (100); actual (-2.7350,-.0812) is free (0). Practice world/map
+  alignment is known; truth is evaluation-only. This is a localization error,
+  not proof that route order has no effect on it. See SERVER_COMPARISON.md.
+  Evidence: server-recorrido/corrected/{messages.jsonl,inspection-window.jsonl,
+  report-window.jsonl,first-nav-failure.jsonl,localization-diagnostic.json};
+  server-recorrido/comparison-corrected.json and full team logs.
 - Marco approved only three new coverage YAML entries: order_multiview=true,
   order_baseline_m=0.30, order_block_candidates=4, applied live. No other
   shared parameter, source, message or launch permission is implied.
