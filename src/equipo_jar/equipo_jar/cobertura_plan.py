@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections import deque
 from concurrent.futures import CancelledError
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import heapq
 import math
 
@@ -399,25 +399,13 @@ def route_metrics(choices, start_cell, start_yaw, costs, settings, possible):
 
 
 def improve_order(choices, start_cell, start_yaw, costs, settings, possible, cancel=None):
-    """Bounded multiview restart and short-segment moves, retaining every selected view."""
+    """Keep every baseline view's predicted clock deadline during new ordering."""
     baseline = _polish_order(choices, start_cell, start_yaw, costs, settings, possible, cancel)
     if len(baseline) < 2:
         return baseline
-    if not settings.order_multiview:
-        return _block_order(baseline, start_cell, start_yaw, costs, settings, possible, cancel)
-    original = route_metrics(baseline, start_cell, start_yaw, costs, settings, possible)
-    seeded = _multiview_seed(baseline, start_cell, start_yaw, costs, settings, cancel)
-    candidate = _polish_order(seeded, start_cell, start_yaw, costs, settings, possible, cancel)
-    candidate = _repair_order_checks(candidate, original, start_cell, start_yaw,
-                                     costs, settings, possible, cancel)
-    metrics = route_metrics(candidate, start_cell, start_yaw, costs, settings, possible)
-    checks = _order_checkpoints(original.coverage_curve, settings.order_check_interval_s,
-                               settings.order_start_delay_s)
-    if (_within_order_costs(metrics, original, settings)
-            and _meets_order_checks(metrics.coverage_curve, checks)
-            and (metrics.duration < original.duration - 1e-9
-                 or metrics.mean_first_view_time < original.mean_first_view_time - 1e-9)):
-        baseline = candidate
+    if settings.order_multiview:
+        baseline = _regional_multiview_order(baseline, start_cell, start_yaw,
+                                             costs, settings, possible, cancel)
     return _block_order(baseline, start_cell, start_yaw, costs, settings, possible, cancel)
 
 
@@ -512,6 +500,40 @@ def _within_order_costs(candidate, original, settings):
                 <= original.duration + original.return_distance / settings.travel_speed + 1e-9)
 
 
+def _regional_multiview_order(choices, start_cell, start_yaw, costs, settings, possible, cancel=None):
+    """Restart within existing clock buckets; do not postpone their original views."""
+    check_cancelled(cancel)
+    current = list(choices)
+    metrics = route_metrics(current, start_cell, start_yaw, costs, settings, possible)
+    guards = _view_clock_checks(current, metrics.coverage_curve, settings.order_check_interval_s,
+                                settings.order_start_delay_s)
+    groups = []
+    for index, (elapsed, _) in enumerate(metrics.coverage_curve[1:]):
+        bucket = math.ceil((elapsed + settings.order_start_delay_s - 1e-9) / settings.order_check_interval_s)
+        if groups and groups[-1][0] == bucket:
+            groups[-1][2] = index + 1
+        else:
+            groups.append([bucket, index, index + 1])
+    for _, first, last in groups:
+        check_cancelled(cancel)
+        if last - first < 2:
+            continue
+        previous = current[first - 1] if first else (start_cell, Pose(0.0, 0.0, start_yaw), 0)
+        local = replace(settings, order_start_delay_s=(settings.order_start_delay_s
+                                                       + metrics.coverage_curve[first][0]))
+        seeded = _multiview_seed(current[first:last], previous[0], previous[1].yaw, costs, local, cancel)
+        ordered = _polish_order(seeded, previous[0], previous[1].yaw, costs, local, possible, cancel)
+        trial = current[:first] + ordered + current[last:]
+        candidate = route_metrics(trial, start_cell, start_yaw, costs, settings, possible)
+        if (not _within_order_costs(candidate, metrics, settings)
+                or (candidate.duration >= metrics.duration - 1e-9
+                    and candidate.mean_first_view_time >= metrics.mean_first_view_time - 1e-9)):
+            continue
+        if _meets_view_clock(trial, candidate.coverage_curve, guards):
+            current, metrics = trial, candidate
+    return current
+
+
 def _block_order(choices, start_cell, start_yaw, costs, settings, possible, cancel=None):
     """Two bounded short-segment sweeps, shortlisting by exact edge-cost deltas.
 
@@ -534,8 +556,8 @@ def _block_order(choices, start_cell, start_yaw, costs, settings, possible, canc
     metrics = route_metrics(choices, start_cell, start_yaw, costs, settings, possible)
     for _ in range(2):
         shortlist = _block_proposals(ids, matrix, settings.order_block_candidates, cancel)
-        checks = _order_checkpoints(metrics.coverage_curve, settings.order_check_interval_s,
-                                   settings.order_start_delay_s)
+        guards = _view_clock_checks([choices[i] for i in ids], metrics.coverage_curve,
+                                   settings.order_check_interval_s, settings.order_start_delay_s)
         for _, first, size, destination, reverse in sorted(shortlist):
             check_cancelled(cancel)
             block, rest = ids[first:first + size], ids[:first] + ids[first + size:]
@@ -543,7 +565,7 @@ def _block_order(choices, start_cell, start_yaw, costs, settings, possible, canc
             candidate = route_metrics([choices[i] for i in trial], start_cell, start_yaw, costs, settings, possible)
             if (candidate.duration < metrics.duration - 1e-9
                     and _within_order_costs(candidate, metrics, settings)
-                    and _meets_order_checks(candidate.coverage_curve, checks)):
+                    and _meets_view_clock([choices[i] for i in trial], candidate.coverage_curve, guards)):
                 ids, metrics = trial, candidate
                 break
         else:
@@ -579,52 +601,40 @@ def _block_proposals(ids, matrix, limit, cancel=None):
     return shortlist
 
 
-def _repair_order_checks(choices, original, start_cell, start_yaw, costs, settings,
-                         possible, cancel=None):
-    """At most two rescue moves; the caller falls back if any deadline still fails."""
-    check_cancelled(cancel)
-    checks = _order_checkpoints(original.coverage_curve, settings.order_check_interval_s,
-                               settings.order_start_delay_s)
+def _view_clock_checks(choices, curve, interval, start_delay):
+    """Index every original view occurrence, including views with zero sampled gain."""
+    identities, checks = {}, []
+    mask = 0
+    for index, (entry, (seconds, _)) in enumerate(zip(choices, curve[1:])):
+        bit = 1 << index
+        identities.setdefault(entry, []).append(bit)
+        mask |= bit
+        clock = math.ceil((seconds + start_delay - 1e-9) / interval) * interval - start_delay
+        if checks and abs(checks[-1][0] - clock) <= 1e-9:
+            checks[-1] = clock, mask
+        else:
+            checks.append((clock, mask))
+    return identities, checks
 
-    def deficits(metrics):
-        index, values = 0, []
-        for seconds, count in checks:
-            while index + 1 < len(metrics.coverage_curve) and metrics.coverage_curve[index + 1][0] <= seconds + 1e-9:
-                index += 1
-            values.append(max(0, count - metrics.coverage_curve[index][1]))
-        return values
 
-    current = list(choices)
-    metrics = route_metrics(current, start_cell, start_yaw, costs, settings, possible)
-    if not _within_order_costs(metrics, original, settings):
-        return current
-    for _ in range(2):
-        check_cancelled(cancel)
-        missing = deficits(metrics)
-        if not any(missing):
-            break
-        bad = next(i for i, value in enumerate(missing) if value)
-        deadline = checks[bad][0]
-        first_late = next((i for i, (seconds, _) in enumerate(metrics.coverage_curve[1:])
-                           if seconds > deadline + 1e-9), len(current))
-        rank = sum(missing), metrics.duration, metrics.mean_first_view_time
-        best, best_metrics = current, metrics
-        for source in range(first_late, len(current)):
-            rest = current[:source] + current[source + 1:]
-            for destination in range(first_late + 1):
-                check_cancelled(cancel)
-                trial = rest[:destination] + [current[source]] + rest[destination:]
-                candidate = route_metrics(trial, start_cell, start_yaw, costs, settings, possible)
-                if not _within_order_costs(candidate, original, settings):
-                    continue
-                candidate_missing = deficits(candidate)
-                if any(candidate_missing[:bad]):
-                    continue
-                candidate_rank = sum(candidate_missing), candidate.duration, candidate.mean_first_view_time
-                if candidate_rank < rank:
-                    rank, best, best_metrics = candidate_rank, trial, candidate
-        current, metrics = best, best_metrics
-    return current
+def _meets_view_clock(choices, curve, guards):
+    """A greater coverage count cannot compensate for a postponed original view."""
+    identities, checks = guards
+    occurrences = {}
+    index = mask = 0
+    for seconds, required in checks:
+        while index < len(choices) and curve[index + 1][0] <= seconds + 1e-9:
+            entry = choices[index]
+            occurrence = occurrences.get(entry, 0)
+            try:
+                mask |= identities[entry][occurrence]
+            except (KeyError, IndexError):
+                return False
+            occurrences[entry] = occurrence + 1
+            index += 1
+        if required & ~mask:
+            return False
+    return True
 
 
 def _order_checkpoints(curve, interval, start_delay):

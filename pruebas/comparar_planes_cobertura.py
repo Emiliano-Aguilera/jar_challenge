@@ -11,6 +11,12 @@ def seen(route, seconds, target_set):
                 if event['elapsed'] <= seconds + 1e-9), default=0)
 
 
+def completed_views(case, route, seconds):
+    return Counter((case['poses'][event['index']]['x'], case['poses'][event['index']]['y'],
+                    case['poses'][event['index']]['yaw'])
+                   for event in case[route]['curve'] if event['elapsed'] <= seconds + 1e-9)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--before', type=Path, required=True)
@@ -44,6 +50,9 @@ def main():
             assert row[route]['duration'] <= reference[route]['duration'] + 1e-9
             for check in range(1, math.ceil(reference[route]['duration'] / interval) + 1):
                 seconds = check * interval
+                required_views = completed_views(reference, route, seconds)
+                actual_views = completed_views(row, route, seconds)
+                assert not required_views - actual_views, (row['case'], route, seconds, 'postponed views')
                 for target_set in row[route]['final_visible']:
                     assert seen(row[route], seconds, target_set) >= seen(reference[route], seconds, target_set), (
                         row['case'], route, seconds, target_set)
@@ -60,7 +69,7 @@ def main():
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / 'comparison.json').write_text(json.dumps(dict(cases=rows,
         limits='Grid predictions; no detector confirmation, collision or score guarantee.'), indent=2)+'\n')
-    print(f'{len(rows)} cases preserve all views/final visibility, mission identity and every predicted clock check.')
+    print(f'{len(rows)} cases preserve every view deadline, final visibility, mission identity and all predicted clock checks.')
     print(f"{sum(row['saved_s'] > 1e-9 for row in rows)} shorter; maximum saving {max(row['saved_s'] for row in rows):.2f} s.")
 
 

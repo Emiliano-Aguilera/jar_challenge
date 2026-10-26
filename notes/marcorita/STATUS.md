@@ -1,51 +1,51 @@
 # Coverage work status
 
-Updated: 2026-10-26. Branch: `cobertura/recorrido-laberinto`.
-Base: development `3adfaeb` (merged PR #15).
+Updated: 2026-10-26. Branch: cobertura/recorrido-laberinto.
+Base: development 3adfaeb (merged PR #15), unchanged on latest fetch.
 
 ## Current task
 
-Address Hans's HIGH wall-turn stalls and route delay in the difficult practice
-layout. Work locally in coverage; preserve mission/navigation interfaces.
-Marco authorized commit, push, a PR to the group's development, and two recorded
-300-s server comparisons in laberinto_1 (one per version). Merge after green
-CI and no pending comparison/review issues. GitHub holds the actual state.
+PR #16 remains DRAFT. Published first candidate 755c891 passed all four CI
+checks, but the authorized server pair scored 100 for baseline and 0 for
+candidate. RTF .973/GPU 0 versus .748/GPU 1 confounds attribution. No merge
+or claimed score improvement. Both authorized runs are complete; more need
+approval. Tailscale installation/login succeeded; full logs and bounded
+recording ranges are accessible. No user connection step remains pending.
 
-- Removed-view experiments preserve dense first sight and separated-position
-  evidence at every original event. No worthwhile safe reduction was found.
-  Physical box/chassis overlap filtering does not change that conclusion.
-- Extra fixed-view block relocation saves at most 10.3 estimated seconds in
-  the three difficult starts. A rarity/second-view greedy order followed by
-  current cleanup saves 103.4 s on offset 2 but worsens duration on the other
-  two starts. The runtime now accepts only a guarded restart, with at most two
-  rescue moves to restore clock checks. Two efficient short-segment sweeps
-  follow whichever route passes. Every pose/heading is retained.
-- Preliminary cardinal-spin Nav2 fixtures retain cancellations and truth/RTF
-  logs. They do not replay the planner, so cannot establish current-plan
-  safety. Separate published-Path windows completed 13/13 goals in all three
-  reported zones; the integrated first-zone repeat completed all 5 goals and
-  every process exited 0. This does not measure collisions or a full mission.
-- Evidence: seleccion-temporal/, seleccion-cajas/, bloques-prototipos/,
-  confirmacion-prototipos/ and pared-laberinto-20261026/ under ignored build/.
-  Nominal .30 m stand-off is not proof against localization/map discrepancies.
+The global restart's aggregate checks hid different delayed map regions.
+Its 115.62-s maximum is rejected as the current improvement. The correction
+preserves each original view's predicted deadline at configured clock cuts,
+including zero sampled-gain views. Restarts stay inside original clock
+buckets; two bounded segment sweeps repeat the identity guard. Same views,
+geometry, interfaces and approved coverage-only parameters.
 
-Integrated comparison: 9/18 shorter, 9 unchanged; maximum saving 115.62 predicted
-seconds. Difficult nominal 485.06 -> 477.62 s, offset 2 517.89 -> 402.27 s.
-Same pose multisets, map counts, final dense/sample visibility and mission
-selection. No dense/sample regression at any configured 60-s check or saved
-60/120/300/480-s budget. Largest planning sample 6.534 s. Paired medians:
-4.900 -> 6.397 s, 4.703 -> 5.307 s, 2.150 -> 2.472 s (planning is slower).
-The complete verifier passed; the final rerun includes approved coverage-only
-YAML entries and live-parameter tests (118 outer / 141 internal coverage cases).
-The 180-wall-second full-team smoke completed: 79 published goals, 18 Nav2
-successes, no failed actions/protocol violations, all parents exit 0. Only
-65.5 simulated seconds elapsed (RTF 0.367); no candidates/reports, score 0.
-This checks integration, not a score gain or production startup/collisions.
+Corrected offline comparison: 5/18 shorter, 13 unchanged; maximum 11.034 s.
+Difficult nominal unchanged; offset 2 saves 10.584 s. Independent comparisons
+check view occurrences, dense/sample counts, final visibility and mission
+selection on all 18 cases. Full verifier passes 118 outer tests, static and
+interface checks and the map-wait audit. Paired planning medians are
+5.687->5.686, 5.441->5.577 and 2.468->2.473 s. Largest single sample 5.732 s.
+The 300-wall-second local smoke reaches 82.2 simulated seconds (RTF .273):
+79 views, 12 successful and two failed navigation actions, no candidates,
+reports or protocol violations. Score 0. Mission and the timeline recorder
+throw RuntimeError during SIGINT cleanup. This is not a behavioral pass;
+see LOCAL_NAVIGATION.md. No corrected-version server test yet.
 
-Marco authorized order_multiview=true, order_baseline_m=0.30 and
-order_block_candidates=4 only under coverage. No mission/Nav2/interface change.
-See recorrido-completo/, recorrido-comparacion/, recorrido-rendimiento/ and
-recorrido-verificador.log under ignored build/verificacion/cobertura/.
+Native recorded map/static TF plus a recorded AMCL sample reproduce the old
+79-view Path exactly. Correction keeps the first 37 views and the critical
+first-detection transition, saves 6.810 predicted seconds and preserves every
+view at each 60-s cut. This does not establish actual processed frames.
+
+Recorded failure for Bautista: 3 observations / sigma .15 m did not meet
+reporting's 5 / .10 m. Mission could not find an inspection point, marked the
+candidate inspected anyway and did not retry it. Increasing rings/angles did
+not find a point in replay. See INSPECTION_REPLAY.md. No mission source edit.
+
+Evidence under ignored build/verificacion/cobertura/: server-recorrido/,
+recorrido-regiones.json, recorrido-vistas-protegidas/,
+vistas-protegidas-comparacion/, vistas-protegidas-rendimiento/ and
+vistas-protegidas-verificador.log. Historical first-candidate evidence stays
+in recorrido-completo/ and recorrido-rendimiento/. Do not mix the versions.
 
 ## Previous milestone: calculation efficiency (merged PR #15)
 

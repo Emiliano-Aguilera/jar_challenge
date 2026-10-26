@@ -1,5 +1,13 @@
 # Coverage goals grouped by mission
 
+## Current execution follow-up (2026-10-26)
+
+The original pose-identity mismatch below is resolved. A separate recorded
+failure now needs mission review: a candidate with insufficient reporting
+evidence was marked inspected when no inspection viewpoint was found.
+See [INSPECTION_REPLAY.md](INSPECTION_REPLAY.md) for the log, replay and bounded
+retry agreement. Current coverage changes do not edit mission or the interface.
+
 ## Resolution checked against mission PR #9
 
 Development `d375427` merges `7282d33`. Mission now uses 0.02 m and 0.1 rad

@@ -10,7 +10,7 @@ import pytest
 
 from equipo_jar.cobertura_plan import (
     Pose, Settings, _block_order, _block_proposals, _meets_order_checks, _multiview_seed, _order_checkpoints,
-    _repair_order_checks, improve_order, route_metrics)
+    _meets_view_clock, _view_clock_checks, improve_order, route_metrics)
 
 
 class Costs:
@@ -62,17 +62,22 @@ def test_baseline_uses_metres_even_when_positions_are_grid_indices():
     assert result[:2] == [tasks[0], tasks[2]]
 
 
-def test_clock_repair_does_not_trade_early_coverage_for_a_better_mean():
-    tasks = [view(10, 0, 1023), view(1, 0, 1024)]
-    settings = config(order_check_interval_s=11.0, order_start_delay_s=0.0)
-    reference = route_metrics(tasks, (0, 0), 0.0, Costs(), settings, 2047)
-    result = _repair_order_checks(tasks[::-1], reference, (0, 0), 0.0,
-                                  Costs(), settings, 2047)
-    metrics = route_metrics(result, (0, 0), 0.0, Costs(), settings, 2047)
-    assert _meets_order_checks(metrics.coverage_curve, _order_checkpoints(reference.coverage_curve, 11.0, 0.0))
-    assert sorted(result) == sorted(tasks)
-    assert metrics.duration <= reference.duration
-    assert metrics.duration + metrics.return_distance <= reference.duration + reference.return_distance
+def test_equal_total_coverage_cannot_compensate_for_a_postponed_region():
+    tasks = [view(1, 0, 1), view(2, 0, 2)]
+    curve = ((0.0, 0), (1.0, 1), (2.0, 2))
+    # Both orders claim the same counts, but they cover different regions first.
+    assert _meets_order_checks(curve, _order_checkpoints(curve, 1.0, 0.0))
+    assert not _meets_view_clock(tasks[::-1], curve, _view_clock_checks(tasks, curve, 1.0, 0.0))
+    assert _meets_view_clock(tasks, curve, _view_clock_checks(tasks, curve, 1.0, 0.0))
+
+
+def test_clock_guard_keeps_zero_gain_and_repeated_view_occurrences():
+    first, last = view(1, 0, 1), view(2, 0, 1)
+    tasks = [first, first, last]
+    curve = ((0.0, 0), (1.0, 1), (2.0, 1), (3.0, 1))
+    guards = _view_clock_checks(tasks, curve, 1.0, 0.0)
+    assert _meets_view_clock(tasks, curve, guards)
+    assert not _meets_view_clock([first, last, first], curve, guards)
 
 
 def test_cancelled_restart_never_returns_a_new_plan():
@@ -105,6 +110,13 @@ def test_generated_restart_keeps_all_views_and_every_baseline_clock_check():
         assert after.duration + after.return_distance <= before.duration + before.return_distance + 1e-9
         assert _meets_order_checks(after.coverage_curve, _order_checkpoints(
             before.coverage_curve, settings.order_check_interval_s, settings.order_start_delay_s))
+        for check in range(1, math.ceil((before.duration + settings.order_start_delay_s) / settings.order_check_interval_s) + 1):
+            seconds = check * settings.order_check_interval_s - settings.order_start_delay_s
+            required = Counter(entry for entry, (finished, _) in zip(baseline, before.coverage_curve[1:])
+                               if finished <= seconds + 1e-9)
+            actual = Counter(entry for entry, (finished, _) in zip(result, after.coverage_curve[1:])
+                             if finished <= seconds + 1e-9)
+            assert not required - actual
         improved += after.duration < before.duration - 1e-9
     assert improved > 0, 'exercise accepted alternatives as well as fallbacks'
 
@@ -150,6 +162,13 @@ def test_segment_cleanup_preserves_guards_and_all_headings_on_generated_tasks():
         assert after.duration + after.return_distance <= before.duration + before.return_distance + 1e-9
         assert _meets_order_checks(after.coverage_curve, _order_checkpoints(before.coverage_curve,
             settings.order_check_interval_s, settings.order_start_delay_s))
+        for check in range(1, math.ceil((before.duration + settings.order_start_delay_s) / settings.order_check_interval_s) + 1):
+            seconds = check * settings.order_check_interval_s - settings.order_start_delay_s
+            required = Counter(entry for entry, (finished, _) in zip(tasks, before.coverage_curve[1:])
+                               if finished <= seconds + 1e-9)
+            actual = Counter(entry for entry, (finished, _) in zip(result, after.coverage_curve[1:])
+                             if finished <= seconds + 1e-9)
+            assert not required - actual
         assert _block_order(tasks, (0, 0), 0.0, Costs(), replace(settings, order_block_candidates=0), 1023) == tasks
         improved += after.duration < before.duration - 1e-9
     assert improved > 0

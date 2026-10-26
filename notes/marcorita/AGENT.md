@@ -1,58 +1,69 @@
 # Context for marcorita's agent
 
-Module: cobertura. Follow root `AGENTS.md`, `CLAUDE.md`, `docs/team/FLOW.md`
-and `docs/team/INTERFACES.md`. Read `notes/marcorita/NOTES.md` for decisions.
+Module: cobertura. Follow root AGENTS.md, CLAUDE.md, docs/team/FLOW.md and
+INTERFACES.md. Read NOTES.md for decisions and STATUS.md for current state.
 
-## Local planner
+## Current task: protected ordering, PR #16 held in draft
 
-- Current task: `cobertura/recorrido-laberinto`, from development `3adfaeb`
-  (merged PR #15). Marco authorized addressing Hans's HIGH wall-turn stalls
-  and delayed route in laberinto_1. The runtime candidate now adds one guarded
-  scarcity/separated-view restart, at most two clock-rescue moves, and two
-  short-segment cleanup sweeps with exact edge-delta shortlists. All views are
-  retained. Do not treat the published CPU improvement as a route/score fix. Shared-server runs and
-  publication were initially pending. Marco now explicitly authorized commit,
-  push, PR to the group's development and two sequential recorded 300-s
-  laberinto_1 server runs, one per version. Merge after green CI and no pending
-  comparison/review issues. Baseline remote branch cobertura/calculo-eficiente
-  is frozen at 79ec03c, with the same src tree as merged development 3adfaeb.
-- Experiments: temporal dense/diverse view pruning gives no worthwhile safe
-  reduction; retaining each position's visibility removes no view in the three
-  difficult starts, including a physical box-center feasibility sensitivity.
-  Extra block relocation saves at most 10.3 predicted seconds. A rare-target /
-  separated-second-view ordering saves 103.4 s on offset 2 but lengthens the
-  other two routes. The integrated policy repairs the offset-2 clock deficit
-  and falls back in the other cases; short-segment cleanup also helps nominal.
-  Integrated 18-case comparison: 9 shorter (maximum 115.62 s), 9 unchanged,
-  identical pose multisets/counts/final visibility and mission selection; no
-  dense/sample loss at any 60-s clock-grid check or saved budget.
-  Paired medians add 1.497/0.604/0.322 s of planning on three nominal maps.
-  Largest integrated planning sample: 6.534 s. No measured score gain yet.
-- Marco explicitly authorized only the three coverage YAML entries on
-  2026-10-26: order_multiview=true, order_baseline_m=0.30,
-  order_block_candidates=4. They are added and apply live. Publication/server
-  permission was subsequently granted as specified above. Mission/Nav2 and shared interfaces are unchanged.
-- Evidence under ignored build/verificacion/cobertura/: seleccion-temporal/,
-  seleccion-cajas/, bloques-prototipos/, confirmacion-prototipos/.
-- Preliminary Nav2 wall fixture in pared-laberinto-20261026/ rotates through
-  arbitrary cardinal headings and has no mission warmup. Nominal 0.30 m
-  clearance alone does not make that fixture succeed. It does not replay our
-  selected goals, so it neither validates nor disproves the current plan.
-  Published-Path windows with an 8-s simulated warmup completed 13/13 goals
-  across the three reported zones. The integrated first-zone repeat completed
-  all 5 goals, with every parent exit 0. The earlier ros2-run wrapper needed
-  TERM; the final fixture invokes the installed executable directly and our
-  node tolerates expected ROS context shutdown. This is not collision proof.
-  Evidence: pared-plan-20261026/, pared-plan-otras-20261026/ and
-  pared-plan-integrado-20261026/. Record simulated time/RTF; local
-  software-rendered simulation is about 0.29 real-time factor.
-- Current final evidence: recorrido-completo/, recorrido-comparacion/,
-  recorrido-rendimiento/ and recorrido-verificador.log. A full-team local
-  180-wall-second laberinto_1 smoke completed: 79 goals, 18 Nav2 successes,
-  no failed actions/protocol violations, all parents exit 0; about 65.5 simulated
-  seconds (RTF 0.367), zero candidates/reports and score 0. This is integration
-  evidence only. Full verifier: 118 outer / 141 internal coverage cases pass.
-  No shared-server job dispatched.
+- Branch cobertura/recorrido-laberinto, from development 3adfaeb (PR #15).
+  Latest fetch still has that development commit. Marco authorized coverage
+  improvements, publication to the group's fork, and exactly two recorded
+  300-s server runs. Both runs have been consumed; ask before another run.
+  Merge only after green CI and no pending behavioral/review issues.
+- Published first candidate 755c891 has four green CI checks, but PR #16 is
+  DRAFT. It must not merge: baseline 79ec03c scored 100 (RTF .973, GPU 0),
+  candidate 755c891 scored 0 (RTF .748, GPU 1). Same image, 300 s, no protocol
+  violations. Unequal RTF/hardware and changed early order confound causality.
+- Tailscale is installed (authorized official 1.104.2), logged in and connected.
+  Full logs and bounded recording ranges were read successfully. Do not ask
+  Marco to connect again. Never download multi-GB bags in full.
+- The old global restart retained counts but delayed specific map regions:
+  nominal at 60 s misses 373 baseline dense cells while adding 388 others.
+  Discard the old 115.62-s headline as an accepted improvement. Old evidence
+  is frozen in recorrido-completo/ and recorrido-rendimiento/.
+- Correction: restart only inside original predicted-clock buckets; guard
+  every baseline view occurrence at each configured clock cut, including
+  zero sampled-gain views and repeated equal poses. Two bounded short-segment
+  sweeps repeat those guards. Preserve all selected views and geometry.
+  Existing merged polish stays unchanged. No mission/Nav2/interface edits.
+- Corrected 18-case comparison: 5 shorter / 13 unchanged, maximum 11.034 s.
+  Difficult offset 2 saves 10.584 s; nominal unchanged. Independent Counter
+  checks preserve every completed view at each 60-s cut on intended and
+  actual mission-selected sequences. Full verifier passes 118 outer tests,
+  static checks, interfaces and map-wait audit.
+- Paired CPU medians: difficult 5.687->5.686 s; simple 5.441->5.577 s;
+  maze 1 2.468->2.473 s. One warmup, three alternating timed repetitions,
+  exact saved-plan parity. Largest single integrated planning sample 5.732 s.
+  These are local timings, not a robot startup guarantee.
+- Evidence: recorrido-vistas-protegidas/, vistas-protegidas-comparacion/,
+  vistas-protegidas-rendimiento/ and vistas-protegidas-verificador.log under
+  ignored build/verificacion/cobertura/. Local 300-wall-second smoke reaches
+  only 82.2 simulated seconds (RTF .273), with 79 views, 12 successful and two
+  failed navigation actions, no candidates/reports/protocol violations. Score
+  0; behavioral validation is not passed. See LOCAL_NAVIGATION.md. Mission
+  and the timeline recorder also throw RuntimeError during SIGINT cleanup;
+  do not describe all children as clean. No corrected server run yet.
+- Marco approved only three new coverage YAML entries: order_multiview=true,
+  order_baseline_m=0.30, order_block_candidates=4, applied live. No other
+  shared parameter, source, message or launch permission is implied.
+- Recorded candidate had 3 observations / sigma .15 m; reporting needs 5 /
+  sigma <= .10 m. Latest delivered update had 2 at inspection attempt.
+  Mission logged "Sin lugar para mirarla", appended the center to inspected
+  points and continued. No retry/report followed. Replay finds no viewpoint
+  at .8/1.2/1.6/2.0 m with 12 or 72 angles, nor a saved-plan or exhaustive
+  reachable .25-clear grid alternative under current planar rays. Do not
+  sell a larger radius as a fix, lower confidence or call the center occupied.
+  See INSPECTION_REPLAY.md for Bautista's handoff. No mission change made.
+- A recorded startup AMCL sample plus native map/static TF reproduces all 79
+  baseline poses and order exactly. Corrected order keeps the first 37 views
+  and the critical first-detection transition, saves 6.810 predicted seconds,
+  and loses no view at any 60-s clock cut. This is not camera execution.
+  Assuming exactly zero pose previously failed to reproduce the plan.
+  Evidence: replay-plan-nativo.json. Practice truth stays out of src.
+- Earlier actual-Path wall windows: 13/13 plus first-zone 5/5 successes, all
+  parents exit 0. Short windows do not prove collisions, full mission, score
+  or production startup. Coverage accepts expected ROS shutdown after shared
+  cleanup; other errors still propagate.
 
 ### Previous milestone: calculation efficiency (merged PR #15)
 

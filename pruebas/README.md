@@ -265,11 +265,16 @@ python3 pruebas/comparar_planes_cobertura.py \
 ```
 
 The comparison requires the same geometry, camera, starts, target counts,
-pose/heading multisets, final visibility and mission identity. It checks dense
-and sampled visibility at every configured predicted clock-grid point, as
-well as the saved time budgets. Runtime guards use sampled predictions;
-full-grid preservation on these cases is an evaluation result, not a theorem
-for every possible map. Reports and navigation interruptions are not modelled.
+pose/heading multisets, final visibility and mission identity. It independently
+reconstructs completed-view Counters at each configured predicted clock cut:
+every original view occurrence must be present, including zero sampled-gain
+views. Greater aggregate counts cannot compensate for delayed views. Dense
+and sampled counts are also checked at those cuts and the saved budgets.
+Runtime restarts stay inside original clock buckets; segment moves use the
+same view deadline guard. The merged baseline polish remains unchanged.
+This preserves static predicted views at the cuts, not processed camera
+frames, transit visibility or actual execution timing. Reports and navigation
+interruptions are not modelled.
 
 `experimentar_confirmacion.py` compares scarcity/separated-view restarts and
 records rejected policies; `experimentar_bloques.py --modes shortlist` isolates

@@ -1,6 +1,6 @@
 # Coverage integration
 
-Current base is development `71ca3f1`; local work reviewed on 2026-10-26.
+Current base is development `3adfaeb`; local work reviewed on 2026-10-26.
 Follow-up proposals below do not change the agreed interface.
 Current output stays `/jar/plan_cobertura`, `nav_msgs/Path`, frame `map`.
 
@@ -20,6 +20,11 @@ The clearance model does not certify localization/map errors or real arrival.
 Do not count reaching a goal as a processed camera observation.
 
 ## Concrete follow-up with Bautista
+
+The recorded no-view inspection failure and the proposed bounded-retry
+agreement are in [INSPECTION_REPLAY.md](INSPECTION_REPLAY.md). This is separate
+from the candidate-obstacle proposal below. Neither changes shared interfaces
+without the affected owners' agreement.
 
 Candidate boxes are absent from the static practice map. Mission already
 receives `/jar/candidatas`; agree on a temporary goal-exclusion rule there

@@ -1,6 +1,32 @@
 # Coverage decisions
 
-## 2026-10-26: preserve viewpoints while escaping route local minima
+## 2026-10-26: preserve regions by guarding every original view deadline
+
+The first global restart passed aggregate count checks but delayed specific
+map regions. Reject its 115.62-s headline. A global restart plus two regional
+rescue moves also fails the strict regional guard on all 18 cases.
+
+Keep the selected views and merged polish. Restart only within the original
+predicted-clock buckets. Guard every original view occurrence at each clock
+cut, including zero sampled-gain views and identical duplicates. Repeat the
+same guard in the two bounded short-segment sweeps. Independent saved-pose
+Counter checks prevent the guard implementation from serving as its own oracle.
+Corrected comparison: 5/18 shorter, maximum 11.034 s, 13 unchanged. No report,
+camera-processing, collision or score guarantee follows from this geometry.
+
+Both authorized server runs are complete: baseline 100 versus old candidate 0,
+with different GPUs and RTF .973 versus .748. PR #16 stays draft. Tailscale is
+installed and connected, so full logs and bounded bag ranges are accessible.
+The recorded candidate reached three observations at sigma .15 m. Mission's
+no-view path marked it inspected, preventing another attempt. Ring/angle and
+grid replay found no current-model viewpoint. Documented the case for Bautista
+in INSPECTION_REPLAY.md; no mission or reporting-threshold changes applied.
+
+Marco's authorization still covers amendments to the current PR. It does not
+cover more than the two completed shared-server runs. Ask before another run;
+merge only when CI and behavioral validation leave no pending issues.
+
+## Rejected first candidate 755c891: preserve viewpoints with a global restart
 
 Marco asked to address Hans's HIGH wall/route priorities. Created
 cobertura/recorrido-laberinto from merged PR #15, development 3adfaeb.

@@ -1,6 +1,77 @@
 # Coverage results
 
-## 2026-10-26: guarded route restart and short-segment cleanup
+## 2026-10-26: corrected ordering protects original view deadlines
+
+PR #16 is held in draft. The first candidate's aggregate clock checks allowed
+different regions to be delayed: at 60 s the nominal case misses 373 baseline
+dense cells while adding 388 others. Equal or larger counts are insufficient.
+The historical 115.62-s maximum below is not an accepted current improvement.
+
+The correction retains every baseline view occurrence at its original
+configured clock cut, including views with zero sampled gain. A greater count
+from different views cannot compensate. Scarcity/separated-position restarts
+stay inside the old clock buckets. Two bounded edge-shortlisted segment
+sweeps repeat this guard. Search, search-plus-return and sampled mean guards
+also remain. The merged baseline polish and geometry are unchanged.
+
+Compared with merged PR #15 on six maps / three starts:
+
+| Changed case | Saved predicted time |
+| --- | --- |
+| Difficult offset 2 | 10.584 s |
+| Maze 2 nominal | 2.907 s |
+| Maze 3 nominal | 2.244 s |
+| Maze 4 nominal | 0.684 s |
+| Maze 4 offset 2 | 11.034 s |
+
+Five of 18 routes shorten; 13 are unchanged, including difficult nominal.
+The independent comparison reconstructs completed-view Counters from saved
+poses and event times for intended and mission-selected routes at every
+60-s cut. Pose multisets, counts, final dense/sample visibility and mission
+selection match. Dense/sample counts also pass the saved 60/120/300/480-s
+budgets. This preserves the static views' predicted regions at those cuts,
+not camera processing, transit visibility or actual execution timing.
+
+Paired medians (one warmup, three alternating timed repetitions, exact plan
+parity): difficult 5.687->5.686 s; simple 5.441->5.577 s; maze 1 2.468->2.473 s.
+Largest integrated planning sample 5.732 s. These local results do not certify
+track-station startup. The complete verifier passes 118 outer tests, static
+checks, interfaces and map waiting.
+
+Native-map replay using recorded static TF and an actual startup AMCL sample
+reproduces the baseline's entire 79-view Path exactly. Corrected ordering
+saves 6.810 predicted seconds and retains every original view at each 60-s
+cut. First difference is index 37: the first-detection transition is unchanged.
+This is static replay evidence, not actual image processing or a score result.
+
+The corrected local full-team smoke runs 300 wall seconds, only 82.2 simulated
+seconds (RTF .273): 79 views published, 12 successful and two failed Nav2
+actions, zero candidates/reports, score 0 and no protocol violations. The
+failed goals are documented in LOCAL_NAVIGATION.md. During SIGINT cleanup,
+mission and the timeline recorder throw RuntimeError; the launch parent exits
+0 but this does not mean every child is clean. Behavioral validation remains
+pending. The fixture prepares TF and does not certify production startup.
+
+The two authorized 300-s server runs tested the old candidate, not this
+correction. Baseline 79ec03c scored 100 with one report at 74.83 wall seconds
+(RTF .973, GPU 0); 755c891 scored 0 (RTF .748, GPU 1). Both used the same image,
+recording and no protocol violations. These factors do not isolate the cause.
+No corrected-candidate server run or score gain has been established.
+
+Tailscale access now works. Logs and bounded recording decoding show three
+candidate detections / sigma .15 m, below reporting's five / .10 m. Mission
+could not find an inspection point and marked the center inspected despite
+not executing one. More distances/angles and exhaustive reachable-grid replay
+did not solve the current planar constraints. See INSPECTION_REPLAY.md for
+the exact sequence and the bounded-retry agreement needed with Bautista.
+No mission, navigation, map helper or interface code was changed.
+
+Current evidence: recorrido-vistas-protegidas/, vistas-protegidas-comparacion/,
+vistas-protegidas-rendimiento/, vistas-protegidas-verificador.log and
+server-recorrido/ under ignored build/verificacion/cobertura/. Historical
+results below describe 755c891 and must not be mixed with this correction.
+
+## Rejected first candidate 755c891: global restart and segment cleanup
 
 Branch: `cobertura/recorrido-laberinto`, from development `3adfaeb` (PR #15).
 Marco authorized addressing Hans's HIGH wall-turn stalls and slow difficult-map

@@ -31,7 +31,7 @@ cobertura:
     order_check_interval_s: 60.0
     #PARAM: estimated delay before route start; does not control mission's clock (>= 0).
     order_start_delay_s: 8.0
-    #PARAM: try one scarcity/separated-view restart; keep the original if any guard fails.
+    #PARAM: scarcity/separated-view restarts inside clock buckets, preserving every view deadline.
     order_multiview: true
     #PARAM: separation for the ordering heuristic, not proof of detector confirmation (m, > 0).
     order_baseline_m: 0.30
