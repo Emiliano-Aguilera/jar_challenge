@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections import deque
 from concurrent.futures import CancelledError
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import heapq
 import math
 
@@ -36,12 +36,16 @@ class Settings:
     free_threshold: int = 25
     order_check_interval_s: float = 60.0
     order_start_delay_s: float = 8.0
+    order_multiview: bool = True
+    order_baseline_m: float = 0.30
+    order_block_candidates: int = 4
     view_clearance: float = 0.24
     view_preferred_clearance: float = 0.30
 
     def __post_init__(self):
         positive = ('robot_radius', 'candidate_spacing', 'target_spacing',
-                    'view_range', 'travel_speed', 'turn_speed', 'observation_time')
+                    'view_range', 'travel_speed', 'turn_speed', 'observation_time',
+                    'order_baseline_m')
         for name in positive:
             value = getattr(self, name)
             if not math.isfinite(value) or value <= 0:
@@ -61,6 +65,10 @@ class Settings:
             raise ValueError('order_check_interval_s must be finite and at least observation_time')
         if not math.isfinite(self.order_start_delay_s) or self.order_start_delay_s < 0:
             raise ValueError('order_start_delay_s must be finite and nonnegative')
+        if type(self.order_multiview) is not bool:
+            raise ValueError('order_multiview must be a boolean')
+        if type(self.order_block_candidates) is not int or not 0 <= self.order_block_candidates <= 16:
+            raise ValueError('order_block_candidates must be an integer in [0, 16]')
         for name in ('view_clearance', 'view_preferred_clearance'):
             if not math.isfinite(getattr(self, name)) or getattr(self, name) < 0:
                 raise ValueError(f'{name} must be finite and nonnegative')
@@ -391,6 +399,17 @@ def route_metrics(choices, start_cell, start_yaw, costs, settings, possible):
 
 
 def improve_order(choices, start_cell, start_yaw, costs, settings, possible, cancel=None):
+    """Keep every baseline view's predicted clock deadline during new ordering."""
+    baseline = _polish_order(choices, start_cell, start_yaw, costs, settings, possible, cancel)
+    if len(baseline) < 2:
+        return baseline
+    if settings.order_multiview:
+        baseline = _regional_multiview_order(baseline, start_cell, start_yaw,
+                                             costs, settings, possible, cancel)
+    return _block_order(baseline, start_cell, start_yaw, costs, settings, possible, cancel)
+
+
+def _polish_order(choices, start_cell, start_yaw, costs, settings, possible, cancel=None):
     """Bounded 2-opt and relocation sweeps, retaining every selected view."""
     choices = list(choices)
     metrics = route_metrics(choices, start_cell, start_yaw, costs, settings, possible)
@@ -410,6 +429,212 @@ def improve_order(choices, start_cell, start_yaw, costs, settings, possible, can
     # sweep. One cleanup sweep keeps the work bounded and repeats every guard.
     return relocate_order(choices, start_cell, start_yaw, costs, settings, possible,
                           settings.order_check_interval_s, settings.order_start_delay_s, cancel)
+
+
+def _multiview_seed(choices, start_cell, start_yaw, costs, settings, cancel=None):
+    """Favor scarce views and a second separated center, retaining every pose.
+
+    This is a geometric ordering heuristic, not detection/confirmation feedback.
+    Multiple headings at one center never count as a second position.
+    """
+    check_cancelled(cancel)
+    positions = tuple(dict.fromkeys(cell for cell, _, _ in choices))
+    unions = dict.fromkeys(positions, 0)
+    for cell, _, mask in choices:
+        check_cancelled(cancel)
+        unions[cell] |= mask
+    counts = {}
+    for mask in unions.values():
+        check_cancelled(cancel)
+        while mask:
+            bit = mask & -mask
+            counts[bit] = counts.get(bit, 0) + 1
+            mask ^= bit
+    rarity = {}
+    for bit, count in counts.items():
+        rarity[count] = rarity.get(count, 0) | bit
+    resolution = getattr(costs, 'resolution', 1.0)
+    distant = {cell: [other for other in positions
+                     if math.dist(cell, other) * resolution >= settings.order_baseline_m]
+               for cell in positions}
+
+    def weight(mask):
+        return sum((mask & group).bit_count() / count for count, group in rarity.items())
+
+    pending, result = list(choices), []
+    seen = dict.fromkeys(positions, 0)
+    covered = paired = 0
+    current, yaw = start_cell, start_yaw
+    while pending:
+        check_cancelled(cancel)
+        far = {}
+        for cell in positions:
+            mask = 0
+            for other in distant[cell]:
+                mask |= seen[other]
+            far[cell] = mask
+        best = None
+        for index, (cell, pose, mask) in enumerate(pending):
+            check_cancelled(cancel)
+            duration = (costs.between(current, cell) / settings.travel_speed
+                        + abs(angle_difference(yaw, pose.yaw)) / settings.turn_speed
+                        + settings.observation_time)
+            gain = weight(mask & ~covered) + weight(mask & far[cell] & ~paired)
+            rank = gain / duration, -duration, -index
+            if best is None or rank > best[0]:
+                best = rank, index
+        _, index = best
+        cell, pose, mask = pending.pop(index)
+        result.append((cell, pose, mask))
+        paired |= mask & far[cell]
+        covered |= mask
+        seen[cell] |= mask
+        current, yaw = cell, pose.yaw
+    return result
+
+
+def _within_order_costs(candidate, original, settings):
+    return (candidate.duration <= original.duration + 1e-9
+            and candidate.mean_first_view_time <= original.mean_first_view_time + 1e-9
+            and candidate.duration + candidate.return_distance / settings.travel_speed
+                <= original.duration + original.return_distance / settings.travel_speed + 1e-9)
+
+
+def _regional_multiview_order(choices, start_cell, start_yaw, costs, settings, possible, cancel=None):
+    """Restart within existing clock buckets; do not postpone their original views."""
+    check_cancelled(cancel)
+    current = list(choices)
+    metrics = route_metrics(current, start_cell, start_yaw, costs, settings, possible)
+    guards = _view_clock_checks(current, metrics.coverage_curve, settings.order_check_interval_s,
+                                settings.order_start_delay_s)
+    groups = []
+    for index, (elapsed, _) in enumerate(metrics.coverage_curve[1:]):
+        bucket = math.ceil((elapsed + settings.order_start_delay_s - 1e-9) / settings.order_check_interval_s)
+        if groups and groups[-1][0] == bucket:
+            groups[-1][2] = index + 1
+        else:
+            groups.append([bucket, index, index + 1])
+    for _, first, last in groups:
+        check_cancelled(cancel)
+        if last - first < 2:
+            continue
+        previous = current[first - 1] if first else (start_cell, Pose(0.0, 0.0, start_yaw), 0)
+        local = replace(settings, order_start_delay_s=(settings.order_start_delay_s
+                                                       + metrics.coverage_curve[first][0]))
+        seeded = _multiview_seed(current[first:last], previous[0], previous[1].yaw, costs, local, cancel)
+        ordered = _polish_order(seeded, previous[0], previous[1].yaw, costs, local, possible, cancel)
+        trial = current[:first] + ordered + current[last:]
+        candidate = route_metrics(trial, start_cell, start_yaw, costs, settings, possible)
+        if (not _within_order_costs(candidate, metrics, settings)
+                or (candidate.duration >= metrics.duration - 1e-9
+                    and candidate.mean_first_view_time >= metrics.mean_first_view_time - 1e-9)):
+            continue
+        if _meets_view_clock(trial, candidate.coverage_curve, guards):
+            current, metrics = trial, candidate
+    return current
+
+
+def _block_order(choices, start_cell, start_yaw, costs, settings, possible, cancel=None):
+    """Two bounded short-segment sweeps, shortlisting by exact edge-cost deltas.
+
+    Rank a few insertions per segment instead of rebuilding every full route.
+    Every accepted move retains all views and repeats all cost/clock guards.
+    """
+    check_cancelled(cancel)
+    if not settings.order_block_candidates or len(choices) < 3:
+        return list(choices)
+    choices = list(choices)
+    ids = list(range(len(choices)))
+    nodes = [(cell, pose.yaw) for cell, pose, _ in choices] + [(start_cell, start_yaw)]
+    matrix = []
+    for cell, yaw in nodes:
+        check_cancelled(cancel)
+        matrix.append([costs.between(cell, nxt) / settings.travel_speed
+                       + abs(angle_difference(yaw, heading)) / settings.turn_speed
+                       for nxt, heading in nodes])
+
+    metrics = route_metrics(choices, start_cell, start_yaw, costs, settings, possible)
+    for _ in range(2):
+        shortlist = _block_proposals(ids, matrix, settings.order_block_candidates, cancel)
+        guards = _view_clock_checks([choices[i] for i in ids], metrics.coverage_curve,
+                                   settings.order_check_interval_s, settings.order_start_delay_s)
+        for _, first, size, destination, reverse in sorted(shortlist):
+            check_cancelled(cancel)
+            block, rest = ids[first:first + size], ids[:first] + ids[first + size:]
+            trial = rest[:destination] + (block[::-1] if reverse else block) + rest[destination:]
+            candidate = route_metrics([choices[i] for i in trial], start_cell, start_yaw, costs, settings, possible)
+            if (candidate.duration < metrics.duration - 1e-9
+                    and _within_order_costs(candidate, metrics, settings)
+                    and _meets_view_clock([choices[i] for i in trial], candidate.coverage_curve, guards)):
+                ids, metrics = trial, candidate
+                break
+        else:
+            break
+    return [choices[i] for i in ids]
+
+
+def _block_proposals(ids, matrix, limit, cancel=None):
+    """Rank segment insertions from their changed edges, including reversal costs."""
+    def edge(first, last):
+        return matrix[first][last] if last is not None else 0.0
+
+    shortlist = []
+    for size in (2, 3):
+        for first in range(len(ids) - size + 1):
+            check_cancelled(cancel)
+            block, rest = ids[first:first + size], ids[:first] + ids[first + size:]
+            before = ids[first - 1] if first else len(ids)
+            after = ids[first + size] if first + size < len(ids) else None
+            removal = -edge(before, block[0]) - edge(block[-1], after) + edge(before, after)
+            inside = sum(edge(a, b) for a, b in zip(block, block[1:]))
+            proposals = []
+            for reverse in (False, True):
+                moved = block[::-1] if reverse else block
+                change = removal + sum(edge(a, b) for a, b in zip(moved, moved[1:])) - inside
+                for destination in range(len(rest) + 1):
+                    previous = rest[destination - 1] if destination else len(ids)
+                    following = rest[destination] if destination < len(rest) else None
+                    delta = change + edge(previous, moved[0]) + edge(moved[-1], following) - edge(previous, following)
+                    if delta < -1e-9:
+                        proposals.append((delta, first, size, destination, reverse))
+            shortlist.extend(heapq.nsmallest(limit, proposals))
+    return shortlist
+
+
+def _view_clock_checks(choices, curve, interval, start_delay):
+    """Index every original view occurrence, including views with zero sampled gain."""
+    identities, checks = {}, []
+    mask = 0
+    for index, (entry, (seconds, _)) in enumerate(zip(choices, curve[1:])):
+        bit = 1 << index
+        identities.setdefault(entry, []).append(bit)
+        mask |= bit
+        clock = math.ceil((seconds + start_delay - 1e-9) / interval) * interval - start_delay
+        if checks and abs(checks[-1][0] - clock) <= 1e-9:
+            checks[-1] = clock, mask
+        else:
+            checks.append((clock, mask))
+    return identities, checks
+
+
+def _meets_view_clock(choices, curve, guards):
+    """A greater coverage count cannot compensate for a postponed original view."""
+    identities, checks = guards
+    occurrences = {}
+    index = mask = 0
+    for seconds, required in checks:
+        while index < len(choices) and curve[index + 1][0] <= seconds + 1e-9:
+            entry = choices[index]
+            occurrence = occurrences.get(entry, 0)
+            try:
+                mask |= identities[entry][occurrence]
+            except (KeyError, IndexError):
+                return False
+            occurrences[entry] = occurrence + 1
+            index += 1
+        if required & ~mask:
+            return False
+    return True
 
 
 def _order_checkpoints(curve, interval, start_delay):

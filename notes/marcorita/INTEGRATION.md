@@ -1,6 +1,6 @@
 # Coverage integration
 
-Current base is development `71ca3f1`; local work reviewed on 2026-10-26.
+Current base is development `3adfaeb`; local work reviewed on 2026-10-26.
 Follow-up proposals below do not change the agreed interface.
 Current output stays `/jar/plan_cobertura`, `nav_msgs/Path`, frame `map`.
 
@@ -20,6 +20,16 @@ The clearance model does not certify localization/map errors or real arrival.
 Do not count reaching a goal as a processed camera observation.
 
 ## Concrete follow-up with Bautista
+
+The recorded no-view inspection failure and the proposed bounded-retry
+agreement are in [INSPECTION_REPLAY.md](INSPECTION_REPLAY.md). This is separate
+from the candidate-obstacle proposal below. Neither changes shared interfaces
+without the affected owners' agreement.
+
+The third server run recovers a report but confirms delayed evidence and
+navigation failures. [SERVER_COMPARISON.md](SERVER_COMPARISON.md) records the
+4-to-5-observation transition for mission and a synchronized .5363 m AMCL
+error for Hans. The new ordering remains experimental in draft PR #16.
 
 Candidate boxes are absent from the static practice map. Mission already
 receives `/jar/candidatas`; agree on a temporary goal-exclusion rule there
@@ -120,6 +130,15 @@ unknown-cell, footprint and ray-corner policies before migrating to shared code.
   based on box size. Simulator dimensions alone are not a confirmed rule.
 
 ## Next end-to-end check
+
+The local route-ordering candidate based on merged PR #15 retains every pose and heading;
+only their visiting order can change. No schema/topic or mission change is
+required. The real mission selector accepts all intended views in all 18
+offline cases. The 0.30 m ordering baseline is a geometric heuristic, not proof
+of fusion confirmation at the requested or actual pose. Mission inspections,
+dynamic obstacles and localization corrections can change real execution.
+The occupied-candidate goal filter discussed with Bautista is still pending;
+this ordering work neither implements it nor marks a failed goal as observed.
 
 The first local ordering handoff attempt received the map about 54 s before
 connected robot TF. Fake navigation does not move the robot, and the judge

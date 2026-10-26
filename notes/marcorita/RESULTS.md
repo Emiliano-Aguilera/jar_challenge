@@ -1,5 +1,163 @@
 # Coverage results
 
+## 2026-10-26: corrected ordering protects original view deadlines
+
+Latest: the additional authorized server run tested corrected 37c2306.
+It recovers 100 points, but reports at 161.92 s versus reference 74.83 s,
+with four navigation failures versus zero. Both use GPU 0 / slot 0, the same
+image and RTF .972 versus .973. All four CI checks pass on tested source;
+behavior remains open and PR #16 stays draft. See SERVER_COMPARISON.md.
+Recorded AMCL/truth samples 1 ms apart show .5363 m error near the first
+navigation failure, with estimated map cell occupied and actual cell free.
+No runtime code or parameters were changed after this server test.
+
+PR #16 is held in draft. The first candidate's aggregate clock checks allowed
+different regions to be delayed: at 60 s the nominal case misses 373 baseline
+dense cells while adding 388 others. Equal or larger counts are insufficient.
+The historical 115.62-s maximum below is not an accepted current improvement.
+
+The correction retains every baseline view occurrence at its original
+configured clock cut, including views with zero sampled gain. A greater count
+from different views cannot compensate. Scarcity/separated-position restarts
+stay inside the old clock buckets. Two bounded edge-shortlisted segment
+sweeps repeat this guard. Search, search-plus-return and sampled mean guards
+also remain. The merged baseline polish and geometry are unchanged.
+
+Compared with merged PR #15 on six maps / three starts:
+
+| Changed case | Saved predicted time |
+| --- | --- |
+| Difficult offset 2 | 10.584 s |
+| Maze 2 nominal | 2.907 s |
+| Maze 3 nominal | 2.244 s |
+| Maze 4 nominal | 0.684 s |
+| Maze 4 offset 2 | 11.034 s |
+
+Five of 18 routes shorten; 13 are unchanged, including difficult nominal.
+The independent comparison reconstructs completed-view Counters from saved
+poses and event times for intended and mission-selected routes at every
+60-s cut. Pose multisets, counts, final dense/sample visibility and mission
+selection match. Dense/sample counts also pass the saved 60/120/300/480-s
+budgets. This preserves the static views' predicted regions at those cuts,
+not camera processing, transit visibility or actual execution timing.
+
+Paired medians (one warmup, three alternating timed repetitions, exact plan
+parity): difficult 5.687->5.686 s; simple 5.441->5.577 s; maze 1 2.468->2.473 s.
+Largest integrated planning sample 5.732 s. These local results do not certify
+track-station startup. The complete verifier passes 118 outer tests, static
+checks, interfaces and map waiting.
+
+Native-map replay using recorded static TF and an actual startup AMCL sample
+reproduces the baseline's entire 79-view Path exactly. Corrected ordering
+saves 6.810 predicted seconds and retains every original view at each 60-s
+cut. First difference is index 37: the first-detection transition is unchanged.
+This is static replay evidence, not actual image processing or a score result.
+
+The corrected local full-team smoke runs 300 wall seconds, only 82.2 simulated
+seconds (RTF .273): 79 views published, 12 successful and two failed Nav2
+actions, zero candidates/reports, score 0 and no protocol violations. The
+failed goals are documented in LOCAL_NAVIGATION.md. During SIGINT cleanup,
+mission and the timeline recorder throw RuntimeError; the launch parent exits
+0 but this does not mean every child is clean. Behavioral validation remains
+pending. The fixture prepares TF and does not certify production startup.
+
+The initial two authorized 300-s runs tested the old candidate. Baseline
+79ec03c scored 100 with one report at 74.83 wall seconds
+(RTF .973, GPU 0); 755c891 scored 0 (RTF .748, GPU 1). Both used the same image,
+recording and no protocol violations. Those two runs do not isolate the cause.
+The third corrected-source result above recovers the report, not a score gain.
+
+Tailscale access now works. Logs and bounded recording decoding show three
+candidate detections / sigma .15 m, below reporting's five / .10 m. Mission
+could not find an inspection point and marked the center inspected despite
+not executing one. More distances/angles and exhaustive reachable-grid replay
+did not solve the current planar constraints. See INSPECTION_REPLAY.md for
+the exact sequence and the bounded-retry agreement needed with Bautista.
+No mission, navigation, map helper or interface code was changed.
+
+Current evidence: recorrido-vistas-protegidas/, vistas-protegidas-comparacion/,
+vistas-protegidas-rendimiento/, vistas-protegidas-verificador.log and
+server-recorrido/ under ignored build/verificacion/cobertura/. Historical
+results below describe 755c891 and must not be mixed with this correction.
+
+## Rejected first candidate 755c891: global restart and segment cleanup
+
+Branch: `cobertura/recorrido-laberinto`, from development `3adfaeb` (PR #15).
+Marco authorized addressing Hans's HIGH wall-turn stalls and slow difficult-map
+route. He subsequently authorized publication and two recorded 300-s server
+comparisons in laberinto_1, one per version. Actual dispatch/results remain to
+be verified; no server improvement is claimed here. Merge requires green CI
+and no pending comparison/review issues.
+Marco approved the three coverage-only YAML entries: order_multiview,
+order_baseline_m and order_block_candidates. Their defaults are true, 0.30 m
+and 4 candidates per short segment; changes apply live.
+
+The planner still selects exactly the same views. One alternative ordering
+favors cells visible from fewer distinct positions and a second position at
+least the configured baseline away. Repeated headings at the same position
+do not count as another baseline. The alternative receives the existing
+polish, then at most two deadline-rescue relocations. It is rejected unless
+search duration, search-plus-return, sampled mean first-view time and all
+predicted clock checks are no worse than the original polished route.
+Two short-segment sweeps follow: exact changed-edge costs shortlist candidate
+insertions before evaluating their full coverage profiles. Independent
+full-route cost tests cover reversal, endpoint, start and asymmetric edges.
+All accepted moves repeat the same guards; all views remain in the route.
+
+Compared with the merged PR #15 baseline on six maps / three starts:
+
+| Case | Before, including 8 s startup | Candidate | Saved |
+| --- | --- | --- | --- |
+| Difficult nominal | 485.06 s | 477.62 s | 7.44 s |
+| Difficult offset 1 | 474.88 s | 474.88 s | 0 s |
+| Difficult offset 2 | 517.89 s | 402.27 s | 115.62 s |
+
+Nine of 18 routes shorten; nine are unchanged. Pose/heading multisets, map and
+target counts, final dense/sample visibility and mission selection are exact.
+The independent comparison checks every 60-s predicted clock-grid point, plus
+the saved 60/120/300/480-s budgets: no dense or sampled visibility loss.
+These are planar predictions, not camera-processing or victim-confirmation
+evidence. Retaining all views also preserves final geometric baseline diversity.
+
+Planning adds work. One warmup plus three alternating timed repetitions,
+each requiring exact saved-plan parity:
+
+| Nominal map | Old ordering median | Candidate median | Added calculation |
+| --- | --- | --- | --- |
+| Difficult | 4.900 s | 6.397 s | 1.497 s |
+| Simple | 4.703 s | 5.307 s | 0.604 s |
+| Maze 1 | 2.150 s | 2.472 s | 0.322 s |
+
+Largest single planning sample in the integrated evaluation: 6.534 s.
+These local timings are not a robot/track-station startup guarantee.
+The simple redundant-view pruning and brute-force block prototypes were
+retained but not adopted; the useful cleanup shortlists edges instead.
+
+Wall checks use real local AMCL/Nav2 and the actual published Path. Windows
+around all three reported problem locations completed 13/13 actions after an
+8-s simulated warmup. The integrated first-zone repeat completed another 5/5
+actions with all process-parent exit codes 0. Earlier cardinal-spin probes
+used arbitrary headings and cannot judge the actual selected route. Their
+ros2-run coverage wrappers needed TERM on cleanup; the final fixture starts
+the installed executable directly. Coverage now accepts expected ROS context
+shutdown after shared cleanup and still propagates unexpected errors.
+
+Software-rendered RTF was roughly 0.29-0.39. Action success in these short
+windows does not certify collision-free navigation, all initial poses or the
+full route. The full-team local smoke completed 180 wall seconds, about 65.5
+simulated seconds (RTF 0.367): 79 published goals, 18 successful Nav2 actions,
+zero failed actions/protocol violations and all process parents exiting 0.
+No candidate or report was recorded; score was 0. This is integration evidence,
+not a score gain. The fixture prepares sensor TF before the judge and does not
+certify production startup. The nominal route is still long; no fast-bonus or
+score gain is claimed. Dynamic box-goal exclusion remains the separate mission
+agreement with Bautista. No interface or mission/navigation code was changed.
+
+Evidence under ignored build/verificacion/cobertura/: recorrido-completo/,
+recorrido-comparacion/, recorrido-rendimiento/, recorrido-verificador.log,
+confirmacion-reparada/, bloques-diversos/ and the three pared-plan* folders.
+Reproduce offline comparison using pruebas/comparar_planes_cobertura.py.
+
 ## 2026-10-26: faster calculations, identical plans
 
 Branch: `cobertura/calculo-eficiente`, from development `96134c0` (PR #14).

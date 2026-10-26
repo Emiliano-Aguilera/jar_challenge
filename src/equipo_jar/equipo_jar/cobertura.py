@@ -12,6 +12,7 @@ from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import OccupancyGrid, Path
 from rcl_interfaces.msg import SetParametersResult
 from rclpy.node import Node
+from rclpy.executors import ExternalShutdownException
 from rclpy.time import Time
 from tf2_ros import Buffer, TransformException, TransformListener
 
@@ -231,4 +232,7 @@ class Cobertura(Node):
 
 
 def main(args=None):
-    correr(Cobertura, args)
+    try:
+        correr(Cobertura, args)
+    except ExternalShutdownException:
+        pass  # The shared runner has already destroyed the node after ROS shutdown.

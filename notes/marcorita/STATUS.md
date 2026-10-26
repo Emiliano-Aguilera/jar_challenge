@@ -1,9 +1,64 @@
 # Coverage work status
 
-Updated: 2026-10-26. Branch: `cobertura/calculo-eficiente`.
-Base: development `96134c0` (merged PR #14).
+Updated: 2026-10-26. Branch: cobertura/recorrido-laberinto.
+Base: development 3adfaeb (merged PR #15), unchanged on latest fetch.
 
 ## Current task
+
+PR #16 remains DRAFT. Published first candidate 755c891 passed all four CI
+checks, but the authorized server pair scored 100 for baseline and 0 for
+candidate. RTF .973/GPU 0 versus .748/GPU 1 confounds attribution. No merge
+or claimed score improvement. The initial pair is complete. Marco authorized
+one additional recorded 300-s run of corrected 37c2306; run 40402162637 is
+complete. Do not dispatch a fourth without approval. Tailscale installation/login succeeded; full logs and bounded
+recording ranges are accessible. No user connection step remains pending.
+
+The global restart's aggregate checks hid different delayed map regions.
+Its 115.62-s maximum is rejected as the current improvement. The correction
+preserves each original view's predicted deadline at configured clock cuts,
+including zero sampled-gain views. Restarts stay inside original clock
+buckets; two bounded segment sweeps repeat the identity guard. Same views,
+geometry, interfaces and approved coverage-only parameters.
+
+Corrected offline comparison: 5/18 shorter, 13 unchanged; maximum 11.034 s.
+Difficult nominal unchanged; offset 2 saves 10.584 s. Independent comparisons
+check view occurrences, dense/sample counts, final visibility and mission
+selection on all 18 cases. Full verifier passes 118 outer tests, static and
+interface checks and the map-wait audit. Paired planning medians are
+5.687->5.686, 5.441->5.577 and 2.468->2.473 s. Largest single sample 5.732 s.
+The 300-wall-second local smoke reaches 82.2 simulated seconds (RTF .273):
+79 views, 12 successful and two failed navigation actions, no candidates,
+reports or protocol violations. Score 0. Mission and the timeline recorder
+throw RuntimeError during SIGINT cleanup. This is not a behavioral pass;
+see LOCAL_NAVIGATION.md. All four CI checks on 37c2306 pass.
+
+Corrected server test (same GPU 0/slot 0/image as reference) scores 100 with
+RTF .972 versus reference 100 / .973. Report is later, 161.92 versus 74.83 s;
+four navigation failures versus zero. No protocol violations. This does not
+clear behavior: keep PR #16 DRAFT. See SERVER_COMPARISON.md for the full table.
+The four early observations at sigma .15 m become five / .0486 m only on a
+later pass, enabling the report. Actual plans keep the first 37 views identical.
+At the first Nav2 failure, AMCL differs from simulator truth by .5363 m in
+samples 1 ms apart; estimated map cell is occupied, actual cell free. This is
+an actionable localization case for Hans, without excluding route influence.
+
+Native recorded map/static TF plus a recorded AMCL sample reproduce the old
+79-view Path exactly. Correction keeps the first 37 views and the critical
+first-detection transition, saves 6.810 predicted seconds and preserves every
+view at each 60-s cut. This does not establish actual processed frames.
+
+Recorded failure for Bautista: 3 observations / sigma .15 m did not meet
+reporting's 5 / .10 m. Mission could not find an inspection point, marked the
+candidate inspected anyway and did not retry it. Increasing rings/angles did
+not find a point in replay. See INSPECTION_REPLAY.md. No mission source edit.
+
+Evidence under ignored build/verificacion/cobertura/: server-recorrido/,
+recorrido-regiones.json, recorrido-vistas-protegidas/,
+vistas-protegidas-comparacion/, vistas-protegidas-rendimiento/ and
+vistas-protegidas-verificador.log. Historical first-candidate evidence stays
+in recorrido-completo/ and recorrido-rendimiento/. Do not mix the versions.
+
+## Previous milestone: calculation efficiency (merged PR #15)
 
 Marco asked for measurable improvements within coverage while waiting for
 Bautista. Keep mission, navigation and shared interfaces unchanged.
