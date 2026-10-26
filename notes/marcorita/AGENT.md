@@ -5,6 +5,44 @@ and `docs/team/INTERFACES.md`. Read `notes/marcorita/NOTES.md` for decisions.
 
 ## Local planner
 
+- Current task (2026-10-26): `cobertura/espacio-observacion`, from development
+  `71ca3f1` (navigation PR #13 and mission PR #12). Marco authorized correcting
+  the observation geometry first, then route/stops. Keep this change focused.
+- Current combined candidate adds a second bounded relocation sweep, preserving
+  the geometry candidate's complete view set. All 18 routes match the prototype;
+  7 shorten, max 50.96 s, no dense/sample losses at reported budgets relative to
+  geometry-only. Largest planning sample 6.336 s. Pure suites: 99 cases pass;
+  final verifier passes 118 outer tests, including 115 internal coverage cases.
+  Paired CPU medians and the remaining 71.4 s
+  difficult offset-2 regression versus old geometry are in RESULTS.md.
+- Separate transit radius+margin from `view_clearance` for observation centers.
+  Use 0.24 m minimum and prefer 0.30 m; fine recovery exhausts preferred
+  centers before adding a tighter witness. The first strict-0.30 m experiment
+  lost 318 dense cells on the difficult nominal case and was rejected.
+  Coarse candidates, fine recovery and forced start views must obey it. This
+  intentionally changes viewpoints; measure visibility loss and connectivity,
+  not exact route parity. The existing transit approximation is retained.
+- Sixteen geometry cases plus existing pure suites pass (97 pure cases).
+  The full verifier passes 118 outer tests (113 internal coverage cases).
+  Both 18-case evaluations finished. All transit counts and mission selection
+  are preserved; visibility/time tradeoffs remain, especially difficult-map
+  offset 2. Marco explicitly approved the two coverage-only YAML entries on
+  2026-10-26 and they are added. Marco authorized commit/push/PR for the combined
+  candidate, and merge after green checks with no pending issues. GitHub holds
+  the actual publication state. Future unrelated publication/server jobs still
+  need authorization.
+- Real AMCL/Nav2 smoke finished: one 180-wall-second Maze 4 run per policy,
+  both 100 points / one report, no protocol violations or failed nav actions;
+  all parent processes exit 0. Candidate completes 14 actions vs 17. Neither
+  collisions nor RTF measured; no score/efficiency improvement proved. Read
+  RESULTS.md. The original official
+  runner published the map before the team started on this WSL; preserve the
+  failed attempt. The geometry fixture starts the judge after sensor TF and
+  policy readiness, so it does not certify production startup. Do not dispatch
+  shared-server jobs without authorization.
+
+### Previous observation-order milestone (merged PR #11)
+
 - Current work: `cobertura/orden-observacion` from development `10f97ca`.
   The previous evaluation advance was merged as PR #10; the worktree is updated.
   Marco authorized improving viewpoint selection/ordering locally and keeping

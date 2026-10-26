@@ -11,6 +11,10 @@ cobertura:
   ros__parameters:
     robot_radius: 0.18
     safety_margin: 0.03
+    #PARAM: minimum observation clearance, including the padded turning envelope (m, >= 0).
+    view_clearance: 0.24
+    #PARAM: prefer this clearance; tighter views only recover otherwise unseen targets (m, >= 0).
+    view_preferred_clearance: 0.30
     candidate_spacing: 0.45
     target_spacing: 0.15
     view_range: 2.0

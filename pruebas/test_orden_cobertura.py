@@ -8,7 +8,7 @@ from threading import Event
 import pytest
 
 from equipo_jar.cobertura_plan import (
-    Pose, Settings, _order_checkpoints, relocate_order, route_metrics)
+    Pose, Settings, _order_checkpoints, improve_order, relocate_order, route_metrics)
 
 
 class MetricCosts:
@@ -78,6 +78,38 @@ def test_cancelled_ordering_stops_even_without_uncached_travel():
     with pytest.raises(CancelledError):
         relocate_order([view(1, 0, 1)], (0, 0), 0.0, MetricCosts(), settings(), 1,
                        30.0, 0.0, cancel)
+
+
+def test_cleanup_handles_improvements_unlocked_by_later_moves():
+    tasks = [view(x, y, mask, yaw) for x, y, mask, yaw in (
+        (7, 3, 8903, 1.0), (8, 8, 7220, 0.0), (6, 4, 7050, 1.0),
+        (5, 2, 8278, 2.0), (6, 7, 12026, 0.0), (6, 2, 9069, 0.0),
+        (5, 6, 8493, 2.0), (1, 5, 9068, 2.0), (5, 7, 8708, 0.0),
+        (8, 6, 7567, 0.0))]
+    config = replace(settings(), order_check_interval_s=10.0, order_start_delay_s=0.0)
+    result = improve_order(tasks, (0, 0), 0.0, MetricCosts(), config, 16383)
+    metrics = route_metrics(result, (0, 0), 0.0, MetricCosts(), config, 16383)
+    assert sorted(result) == sorted(tasks)
+    # A single relocation sweep stalls at 44.23 s on this generated task.
+    assert metrics.duration < 42.0
+    assert metrics.mean_first_view_time < 9.9
+    assert max(count for seconds, count in metrics.coverage_curve if seconds <= 10.0) >= 8
+    assert max(count for seconds, count in metrics.coverage_curve if seconds <= 20.0) == 14
+
+
+def test_cancellation_during_initial_metrics_stops_before_two_opt_search():
+    cancel = Event()
+    class CancellingCosts(MetricCosts):
+        calls = 0
+        def between(self, first, last):
+            self.calls += 1
+            cancel.set()
+            return super().between(first, last)
+    costs = CancellingCosts()
+    tasks = [view(1, 0, 1), view(0, 2, 2), view(3, 0, 4)]
+    with pytest.raises(CancelledError):
+        improve_order(tasks, (0, 0), 0.0, costs, settings(), 7, cancel)
+    assert costs.calls <= len(tasks) + 1
 
 
 def test_clock_checks_are_bounded_by_view_count_for_long_routes():

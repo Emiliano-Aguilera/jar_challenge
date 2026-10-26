@@ -1,9 +1,61 @@
 # Coverage work status
 
-Updated: 2026-10-23. Branch: `cobertura/orden-observacion`.
-Base: development `10f97ca` (merged coverage evaluation PR #10).
+Updated: 2026-10-26. Branch: `cobertura/espacio-observacion`.
+Base: development `71ca3f1` (navigation PR #13 and mission PR #12).
 
 ## Current task
+
+Fix observation stand-off without applying the same larger clearance to transit.
+Marco authorized starting with geometry, then route/stops. Source changes are
+verified. Marco authorized commit, push and a PR to the team's development,
+with merge after successful checks and no pending issues. GitHub holds the
+publication/merge state; this file records the tested candidate.
+
+The final local candidate also adds one bounded cleanup relocation sweep.
+All 18 routes exactly match the experiment, keep the geometry candidate's
+entire view set/final visibility, and lose no dense/sample coverage at the
+reported budgets relative to it. Seven routes shorten (maximum 50.96 s).
+The difficult offset-2 estimate is now 517.9 s, still 71.4 s above the old
+transit-only policy. Largest planning sample: 6.336 s. Pure suites: 99 passed;
+final full verifier: 118 outer tests, including 115 internal coverage cases,
+all passed. See RESULTS.md for paired CPU cost and limits.
+
+- Added minimum observation clearance 0.24 m and preferred clearance 0.30 m.
+  Preferred centers are exhausted before fine recovery uses a tighter witness.
+  Effective stand-off is never smaller than transit radius+margin. Marco
+  authorized only these two additions under coverage in shared params.yaml.
+- Candidate sampling, fine recovery and optional start observations obey it.
+  Travel/connectivity still use the previous transit approximation.
+- Generated two-room/corridor test proves distant safe observation positions
+  remain reachable through transit cells that are unsuitable for stopping.
+- Empty observation sets emit no unsafe goals. Translated/rotated maps and
+  cancellation are covered. Sixteen geometry cases plus existing pure suites:
+  97 passed. Full verifier: 118 outer tests, including 113 internal coverage
+  cases; no static errors/hardcoding warnings or runtime interface problems.
+- Rejected strict-0.30 m experiment: difficult nominal case lost 318 dense
+  cells and 56 sampled targets. The two-level policy reduces these losses to
+  26 dense cells and 5 targets. All 18 transit counts and mission selections
+  remain unchanged; other maps have small dense visibility gains/losses.
+- Safety changes the viewpoints and has costs: difficult offset 2 grows from
+  446.5 to 524.7 estimated seconds and loses 301 dense cells at 300 s, although
+  final loss is 31 cells. It is not a universal time/visibility improvement.
+- Actual AMCL/Nav2 smoke finished locally: one 180-wall-second Maze 4 run per
+  policy, before the cleanup sweep. Both report one victim / 100 points, with zero protocol violations
+  and zero failed navigation actions. All process parents exit 0. The candidate
+  completes 14 actions versus 17; this does not prove better coverage or score.
+  Collisions and RTF were not measured. The official local runner
+  exposed /map before the team started, invalidating pre-map policy setup.
+  The geometry fixture waits for robot sensor TF and parameters before starting
+  the judge. This isolates geometry and does not validate production startup.
+- Evidence: build/verificacion/cobertura/espacio-observacion/ (rejected strict
+  policy), espacio-preferido/ (current), espacio-verificador.log and
+  nav-espacio-20261026/. Next: address route/stops and validate the changed wall
+  goals in a targeted/full run before claiming fewer stalls. Candidate-box
+  exclusion still needs agreement with Bautista. No server job was launched.
+
+## Previous milestone: observation order (merged PR #11)
+
+The sections below record the earlier ordering advance from development `10f97ca`.
 
 Improve early predicted visibility and estimated route cost. Marco authorized
 local work on selection and ordering, with comparisons and updated notes.
