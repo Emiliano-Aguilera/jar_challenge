@@ -1,5 +1,37 @@
 # Coverage decisions
 
+## 2026-10-26: faster calculations with identical output
+
+Whole-position grouping saved only 0.586 s in 1/18 cases. Guarded pair grouping
+saved at most 2.361 s in 2/18; relaxing sampled mean gives only small gains too.
+Keep these as rejected prototypes. Renamed the local branch calculo-eficiente.
+The current profile has 6.7 million free-cell queries and 2.7 million angular
+differences. Reuse an immutable free mask for the latest threshold and exact
+angular distances within each TravelCosts object. Retain all arithmetic and
+corner/boundary rules; isclose may include a kernel cell beyond exact radius.
+Use local snapshots and atomic cache replacement for different thresholds.
+
+All 18 PR #14 route cases match exactly after integration. Alternating paired
+CPU medians: difficult 6.768->5.493 s, simple 6.831->5.390 s, first maze
+3.135->2.418 s. Pure suites pass 103 cases. Full project verifier passes 118
+outer tests (120 internal coverage cases), including a live ROS threshold
+change. Differential checks match 20,250 rays and 1,575 masks. The 90 s local
+Nav2 smoke exits cleanly, with zero failed actions or protocol violations.
+This reduces computation, not estimated driving
+time or demonstrated score. Shared files/other modules are unchanged.
+
+## 2026-10-26: consolidate repeated-position visits
+
+Marco asked to continue measurable coverage work independently of the pending
+mission agreement. Created cobertura/visitas-agrupadas from merged PR #14,
+development 96134c0. The difficult saved routes have 10-11 repeated visits to
+positions already used at another heading. Prototype whole-position grouping
+with original/reversed heading order and insertion only at visit boundaries,
+so a move never splits an already continuous visit. Keep all poses/headings.
+Accept only shorter estimated search with no increase in search-plus-return or
+sampled mean; compare periodic and strict sampled-curve guards. Check dense
+budgets separately. Production is unchanged until results support a policy.
+
 ## 2026-10-26: bounded cleanup sweep
 
 A second relocation sweep preserves every geometry-candidate pose and heading.

@@ -118,6 +118,19 @@ repetitions. Every execution asserts identical poses, target counts and route
 metrics. Run without another CPU-heavy evaluation; results are machine-specific.
 Timings exclude diagnostic reconstruction and the exhaustive oracle.
 
+## Verify calculation reuse
+
+For calculation-only optimizations, use the paired timing command above
+without `--allow-reordering`: exact route and metric parity is required.
+Free-cell masks are cached per immutable Grid and occupancy threshold; the
+latest threshold replaces the cache. Map updates create a new Grid. The ROS
+suite checks that changing the threshold live creates a new usable plan.
+Generated geometry/cache checks can also run without ROS:
+
+```bash
+python3 -m pytest pruebas/test_calculo_geometrico.py -q
+```
+
 ## Compare fixed-view observation ordering
 
 The runtime keeps the existing selected view set. After 2-opt, two bounded
@@ -181,6 +194,21 @@ new viewpoints can lose visibility or add travel. The exact-view CPU/order
 comparison is not an acceptance test for changed geometry. For a controlled
 baseline replay only, set both observation clearances to zero before /map;
 that restores the previous transit-only candidate policy.
+
+## Compare repeated-position grouping
+
+Whole-position and pair grouping remain offline experiments. They retain every
+saved pose/heading and compare periodic/strict sampled guards; full-grid budgets
+are checked separately. Current prototypes offer too little benefit to add to
+runtime. To reproduce against saved routes:
+
+```bash
+python3 pruebas/experimentar_agrupacion.py \
+  --reference build/verificacion/cobertura/espacio-orden-integrado/budget.json \
+  --simulator "$(ros2 pkg prefix --share yahboom_rosmaster_gazebo)" \
+  --modes pairs-time pairs-mean pairs-dominance pairs-clock \
+  --output build/verificacion/cobertura/agrupacion-experimento
+```
 
 ## Current mission integration
 

@@ -141,6 +141,26 @@ def test_invalid_parameter_transaction_does_not_change_state(ros_pair):
     assert coverage.get_parameter('max_views').value == old['max_views']
 
 
+def test_free_threshold_update_replans_through_newly_free_cells(ros_pair):
+    coverage, peer, executor = ros_pair
+    put_tf(coverage)
+    assert coverage.set_parameters_atomically([
+        Parameter('view_range', value=0.45)]).successful
+    message = map_message()
+    for j in range(1, 17):
+        message.data[j * 18 + 9] = 50
+    received = []
+    peer.create_subscription(Path, '/jar/plan_cobertura', received.append, QOS_ESTADO)
+    coverage.al_recibir_mapa(message)
+    spin_until(executor, lambda: bool(received))
+    assert received[-1].poses
+    assert all(p.pose.position.x < 0.9 for p in received[-1].poses)
+    assert coverage.set_parameters_atomically([
+        Parameter('free_threshold', value=60)]).successful
+    spin_until(executor, lambda: len(received) >= 2)
+    assert any(p.pose.position.x > 0.9 for p in received[-1].poses)
+
+
 def test_repeated_map_does_not_reset_route(ros_pair):
     coverage, _, _ = ros_pair
     msg = map_message()

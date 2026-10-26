@@ -1,5 +1,63 @@
 # Coverage results
 
+## 2026-10-26: faster calculations, identical plans
+
+Branch: `cobertura/calculo-eficiente`, from development `96134c0` (PR #14).
+Marco asked for independent, measurable coverage improvements while waiting
+for the mission agreement. No shared parameters, interfaces or other modules
+were changed. No shared-server job was started.
+
+The baseline profile recorded 6.7 million free-cell queries and 2.7 million
+angular differences. Geometry now reuses one immutable free-cell mask for the
+latest occupancy threshold, with a local snapshot and atomic cache replacement.
+Inflation retains the original boundary/isclose behavior. Route trials reuse
+exact angular distances within each plan. Map data stays immutable; a new map
+gets a new Grid. Interrupted mask construction publishes no partial cache.
+
+Paired elapsed planning time, one warmup and three alternating repetitions:
+
+| Map | PR #14 median | Current median | Time reduction |
+| --- | --- | --- | --- |
+| Difficult labyrinth | 6.768 s | 5.493 s | 18.8% |
+| Simple labyrinth | 6.831 s | 5.390 s | 21.1% |
+| Maze 1 | 3.135 s | 2.418 s | 22.9% |
+
+All runs assert identical poses, target counts and complete route metrics.
+The integrated 18-case comparison exactly retains poses/order, counts,
+predicted route times, dense/sample visibility, all budget snapshots and
+mission selection. Largest single planning sample there: 5.834 s. These are
+local elapsed timings, not a hardware guarantee or a reduction in driving time.
+
+Verification:
+
+- 103 pure cases, including independent disk clearance, alternating thresholds,
+  parallel readers and cancellation/retry during mask construction.
+- Differential comparison against PR #14: 20,250 generated rays and 1,575
+  inflated masks match, including translated/rotated maps and boundary cases.
+- Full `tools/verificar.sh --template`: 118 outer tests, including 120 internal
+  coverage cases; static checks and runtime interfaces pass, no pre-map motion
+  or reports. The new ROS test changes free_threshold live and observes a
+  replacement plan reaching the newly free component.
+- One local Maze 4 smoke, real AMCL/Nav2, 90 wall seconds: 60 published views,
+  three successful navigation actions, zero failed actions/protocol violations,
+  one report / 100 points, all process parents exit 0. Sensors and the coverage
+  policy were ready before the judge started. It does not validate production
+  startup. Collisions and RTF were not measured; no score gain is claimed.
+
+Rejected route experiments: whole-position grouping saves at most 0.586 s in
+1/18 cases. Pair grouping with existing time/mean guards saves at most 2.361 s
+in 2/18 cases. Relaxing mean improves only five cases by small amounts. The
+grouping code stays an offline experiment and does not change runtime routes.
+
+Evidence under ignored `build/verificacion/cobertura/`: `calculo-referencia/`,
+`calculo-rendimiento/timing.*`, `calculo-integrado/budget.*`,
+`calculo-diferencial.log`, `calculo-verificador.log`,
+`nav-calculo-20261026/candidate/`, `agrupacion-prototipos/` and
+`agrupacion-pares/`. Environment-specific helpers are outside the repository
+in `../auditoria-2026-10-26/`. Marco authorized publishing this verified
+candidate and merging after green checks with no pending issues. GitHub holds
+the actual PR/merge state.
+
 ## 2026-10-26: bounded route cleanup after the geometry correction
 
 The current candidate adds one cleanup relocation sweep after the existing
