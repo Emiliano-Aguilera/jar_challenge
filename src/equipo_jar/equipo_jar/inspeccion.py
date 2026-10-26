@@ -26,7 +26,7 @@ def viewpoint_for(grid, cx, cy, robot_x, robot_y, distance, clearance, n_angles,
             best_dist = d
     return best
 
-def pick_doubtful(cands, reported_ids, reported_points, inspected_points, min_obs, dist_min, robot_x, robot_y):
+def pick_doubtful(cands, reported_ids, reported_points, inspected_points, min_obs, dist_min, robot_x, robot_y, failed, max_attempts):
     best = None
     best_dist = None
     remaining = []
@@ -39,6 +39,10 @@ def pick_doubtful(cands, reported_ids, reported_points, inspected_points, min_ob
             continue
         if c.observaciones < min_obs:
             continue
+        if c.id in failed:
+            last_obs, attempts = failed[c.id]
+            if attempts >= max_attempts or c.observaciones <= last_obs:
+                continue
         remaining.append(c)
     for c in remaining:
         dist = math.hypot(c.centro.x - robot_x, c.centro.y - robot_y)

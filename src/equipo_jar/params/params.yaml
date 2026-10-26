@@ -141,3 +141,4 @@ mision:
     stop_wait_s: 1.0
     done_limit_s: 590.0
     turn_in_place_m: 0.20
+    visit_max_attempts: 3

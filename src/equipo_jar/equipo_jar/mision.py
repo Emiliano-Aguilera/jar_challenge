@@ -47,7 +47,7 @@ class Mision(Node):
                                             'visit_min_shift_m': 0.4, 'visit_box_margin_m': 0.25, 
                                             'start_wait_s': 8.0, 'goal_timeout_s': 90.0, 'stuck_time_s': 20.0,
                                             'stuck_distance_m': 0.05, 'stuck_angle_rad': 0.2, 'stop_wait_s': 1.0,
-                                            'done_limit_s': 590.0, 'turn_in_place_m': 0.20})  # parámetros ajustables
+                                            'done_limit_s': 590.0, 'turn_in_place_m': 0.20, 'visit_max_attempts': 3})  # parámetros ajustables
 
         self.mapa = None
         self.plan = None
@@ -63,6 +63,7 @@ class Mision(Node):
         self.reported_ids = set()
         self.reported_points = []
         self.inspected_points = []
+        self.failed_inspections = {}
 
         self.nav_state = 'idle'
         self.state = 'waiting_for_map'
@@ -388,7 +389,8 @@ class Mision(Node):
         if pose is None:
             return None
         return pick_doubtful(self.candidatas, self.reported_ids, self.reported_points, self.inspected_points, 
-                            self.p['visit_min_observations'], self.p['min_report_distance_m'], pose[0], pose[1])
+                            self.p['visit_min_observations'], self.p['min_report_distance_m'], pose[0], pose[1], 
+                            self.failed_inspections, self.p['visit_max_attempts'])
 
     def inspect_doubtful(self):
         c = self.next_doubtful()
@@ -399,8 +401,11 @@ class Mision(Node):
                             self.p['visit_clearance_m'], self.p['visit_angles'], self.p['visit_min_shift_m'],
                             self.p['visit_box_margin_m'])
         if view is None:
-            self.get_logger().info(f'Candidata id: {c.id}. Sin lugar para mirarla')
-            self.inspected_points.append((c.centro.x, c.centro.y))
+            _, attempts = self.failed_inspections.get(c.id, (0, 0))
+            self.failed_inspections[c.id] = (c.observaciones, attempts + 1)
+            self.get_logger().info(f'Candidata id: {c.id} x={c.centro.x:.2f} y={c.centro.y:.2f} '
+                                    f'obs={c.observaciones}. Sin lugar para mirarla (intento {attempts + 1} '
+                                    f'de {self.p["visit_max_attempts"]})')
             return False
         else:
             x, y, yaw = view
