@@ -12,8 +12,25 @@ from rclpy.node import Node
 from rclpy.parameter import Parameter
 
 from equipo_jar.cobertura import Cobertura, camera_from_transform
+import equipo_jar.cobertura as coverage_module
 from equipo_jar.cobertura_plan import Camera, Plan, Pose
 from equipo_jar.comun import QOS_ESTADO
+
+
+def test_main_accepts_ros_context_shutdown_after_shared_cleanup(monkeypatch):
+    from rclpy.executors import ExternalShutdownException
+    def stopped(*args):
+        raise ExternalShutdownException()
+    monkeypatch.setattr(coverage_module, 'correr', stopped)
+    coverage_module.main()
+
+
+def test_main_preserves_unexpected_runtime_errors(monkeypatch):
+    def failed(*args):
+        raise RuntimeError('unexpected worker failure')
+    monkeypatch.setattr(coverage_module, 'correr', failed)
+    with pytest.raises(RuntimeError, match='unexpected worker failure'):
+        coverage_module.main()
 
 
 def map_message():
@@ -114,6 +131,9 @@ def test_plan_is_latched_and_parameters_apply_live(ros_pair):
         Parameter('max_views', value=2),
         Parameter('order_check_interval_s', value=30.0),
         Parameter('order_start_delay_s', value=5.0),
+        Parameter('order_multiview', value=False),
+        Parameter('order_baseline_m', value=0.4),
+        Parameter('order_block_candidates', value=2),
         Parameter('view_clearance', value=0.32),
         Parameter('view_preferred_clearance', value=0.35)])
     assert result.successful
@@ -122,6 +142,9 @@ def test_plan_is_latched_and_parameters_apply_live(ros_pair):
     assert 0 < len(received[-1].poses) <= 2
     assert coverage.p['order_check_interval_s'] == 30.0
     assert coverage.p['order_start_delay_s'] == 5.0
+    assert coverage.p['order_multiview'] is False
+    assert coverage.p['order_baseline_m'] == 0.4
+    assert coverage.p['order_block_candidates'] == 2
     assert coverage.p['view_clearance'] == 0.32
     assert coverage.p['view_preferred_clearance'] == 0.35
     assert coverage.pub_plan.topic_name == '/jar/plan_cobertura'

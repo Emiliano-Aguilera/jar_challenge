@@ -235,3 +235,54 @@ python3 pruebas/capturar_plan_cobertura.py
 Start the simulator and judge separately following the team guide. Pass the
 actual practice world's count instead of 2. The launch now includes real AMCL
 and Nav2. A captured plan alone proves neither travel nor processed images.
+
+## Compare coverage ordering stages
+
+The ordering policy retains all selected positions/headings. To reproduce an
+old-order baseline using the same geometry, generate an ignored parameter copy:
+
+```bash
+python3 - <<'PY'
+from pathlib import Path
+import yaml
+folder = Path('build/verificacion/cobertura/ordering')
+folder.mkdir(parents=True, exist_ok=True)
+values = yaml.safe_load(Path('src/equipo_jar/params/params.yaml').read_text())
+values['cobertura']['ros__parameters'].update(order_multiview=False, order_block_candidates=0)
+(folder / 'baseline.yaml').write_text(yaml.safe_dump(values))
+PY
+python3 pruebas/evaluar_presupuesto.py \
+  --simulator "$(ros2 pkg prefix --share yahboom_rosmaster_gazebo)" \
+  --params build/verificacion/cobertura/ordering/baseline.yaml \
+  --diagnose none --output build/verificacion/cobertura/ordering/baseline
+python3 pruebas/evaluar_presupuesto.py \
+  --simulator "$(ros2 pkg prefix --share yahboom_rosmaster_gazebo)" \
+  --diagnose none --output build/verificacion/cobertura/ordering/candidate
+python3 pruebas/comparar_planes_cobertura.py \
+  --before build/verificacion/cobertura/ordering/baseline/budget.json \
+  --after build/verificacion/cobertura/ordering/candidate/budget.json \
+  --output build/verificacion/cobertura/ordering/comparison
+```
+
+The comparison requires the same geometry, camera, starts, target counts,
+pose/heading multisets, final visibility and mission identity. It checks dense
+and sampled visibility at every configured predicted clock-grid point, as
+well as the saved time budgets. Runtime guards use sampled predictions;
+full-grid preservation on these cases is an evaluation result, not a theorem
+for every possible map. Reports and navigation interruptions are not modelled.
+
+`experimentar_confirmacion.py` compares scarcity/separated-view restarts and
+records rejected policies; `experimentar_bloques.py --modes shortlist` isolates
+the short-segment search. `test_multivista_cobertura.py` covers guard failures,
+independent edge-cost reconstruction, metre/cell baselines and generated routes.
+
+For a simulator-only timeline, start `registrar_ejecucion_cobertura.py --output
+build/verificacion/cobertura/timeline.jsonl` before the judge. It records the
+first candidate, covariance/observation updates, actual reports, Nav2 action
+statuses and both ROS/wall clocks. It never commands the robot.
+`probar_giro_pared.py` is a separate simulator-only action client: run it with
+navigation and coverage, with mission stopped, in a dedicated localhost ROS
+domain. It requires simulator clock/truth and reads a build-directory goal
+fixture; `from_plan: true` selects a short actual Path window around its focus.
+Do not start it alongside mission or on the physical robot. Read RESULTS.md
+and the simulation guide before interpreting action success as physical safety.

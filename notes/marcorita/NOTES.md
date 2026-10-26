@@ -1,5 +1,46 @@
 # Coverage decisions
 
+## 2026-10-26: preserve viewpoints while escaping route local minima
+
+Marco asked to address Hans's HIGH wall/route priorities. Created
+cobertura/recorrido-laberinto from merged PR #15, development 3adfaeb.
+Pruning redundant headings while preserving dense temporal/diverse evidence
+gave no worthwhile benefit; filtering hypothetical box/chassis overlap in the
+offline sensitivity did not help. Do not remove views on that evidence.
+
+Adopted one scarcity/separated-position greedy restart, existing polish,
+and at most two relocations to restore the original sampled clock checks.
+Reject the whole restart if search, search-plus-return, sampled mean or any
+clock check worsens. Then try two short-segment sweeps; precomputed edge
+changes shortlist a few candidates per segment, avoiding brute-force full
+route evaluation. Independent asymmetric full-route cost tests validate
+reversal/start/end delta calculations. All selected views remain intact.
+
+Integrated 18-case comparison: 9 shorter / 9 unchanged; no dense/sample loss
+at any 60-s clock check or saved budget, identical final visibility and all
+mission views selected. Difficult nominal 485.06 -> 477.62 s; offset 2
+517.89 -> 402.27 s. These include the 8-s startup estimate. Extra planning
+medians are 1.497, 0.604 and 0.322 s; largest single sample 6.534 s.
+
+Actual-Path Nav2 windows complete 13/13 goals in Hans's three reported zones;
+the integrated first-zone repeat completes 5/5 and all process parents exit 0.
+The earlier arbitrary cardinal-spin fixture is not a plan replay. Its wrapper
+cleanup required TERM; the final fixture invokes coverage directly and the
+coverage entry point accepts only expected ROS context shutdown after cleanup.
+It still propagates other errors. Collision counts and full score gain remain
+unmeasured. The full-team local smoke completes 18 actions without failures or
+protocol violations; all parents exit 0. It advances only 65.5 simulated seconds
+in 180 wall seconds (RTF 0.367), with no candidates/reports and score 0. This
+is not a score gain. Low RTF prevents treating wall time as simulated time.
+
+Marco approved only the three coverage YAML additions: order_multiview=true,
+order_baseline_m=0.30, order_block_candidates=4. No mission/Nav2/interface
+change. Marco subsequently authorized publication and two sequential recorded
+300-s laberinto_1 server runs, one per version, with merge after green CI and
+no pending comparison/review issues. The repository's SIMULATION.md
+provides the small batch procedure after an authorized push; any later batch
+comparison must keep the baseline commit fixed and check RTF/results.
+
 ## 2026-10-26: faster calculations with identical output
 
 Whole-position grouping saved only 0.586 s in 1/18 cases. Guarded pair grouping

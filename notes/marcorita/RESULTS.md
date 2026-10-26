@@ -1,5 +1,83 @@
 # Coverage results
 
+## 2026-10-26: guarded route restart and short-segment cleanup
+
+Branch: `cobertura/recorrido-laberinto`, from development `3adfaeb` (PR #15).
+Marco authorized addressing Hans's HIGH wall-turn stalls and slow difficult-map
+route. He subsequently authorized publication and two recorded 300-s server
+comparisons in laberinto_1, one per version. Actual dispatch/results remain to
+be verified; no server improvement is claimed here. Merge requires green CI
+and no pending comparison/review issues.
+Marco approved the three coverage-only YAML entries: order_multiview,
+order_baseline_m and order_block_candidates. Their defaults are true, 0.30 m
+and 4 candidates per short segment; changes apply live.
+
+The planner still selects exactly the same views. One alternative ordering
+favors cells visible from fewer distinct positions and a second position at
+least the configured baseline away. Repeated headings at the same position
+do not count as another baseline. The alternative receives the existing
+polish, then at most two deadline-rescue relocations. It is rejected unless
+search duration, search-plus-return, sampled mean first-view time and all
+predicted clock checks are no worse than the original polished route.
+Two short-segment sweeps follow: exact changed-edge costs shortlist candidate
+insertions before evaluating their full coverage profiles. Independent
+full-route cost tests cover reversal, endpoint, start and asymmetric edges.
+All accepted moves repeat the same guards; all views remain in the route.
+
+Compared with the merged PR #15 baseline on six maps / three starts:
+
+| Case | Before, including 8 s startup | Candidate | Saved |
+| --- | --- | --- | --- |
+| Difficult nominal | 485.06 s | 477.62 s | 7.44 s |
+| Difficult offset 1 | 474.88 s | 474.88 s | 0 s |
+| Difficult offset 2 | 517.89 s | 402.27 s | 115.62 s |
+
+Nine of 18 routes shorten; nine are unchanged. Pose/heading multisets, map and
+target counts, final dense/sample visibility and mission selection are exact.
+The independent comparison checks every 60-s predicted clock-grid point, plus
+the saved 60/120/300/480-s budgets: no dense or sampled visibility loss.
+These are planar predictions, not camera-processing or victim-confirmation
+evidence. Retaining all views also preserves final geometric baseline diversity.
+
+Planning adds work. One warmup plus three alternating timed repetitions,
+each requiring exact saved-plan parity:
+
+| Nominal map | Old ordering median | Candidate median | Added calculation |
+| --- | --- | --- | --- |
+| Difficult | 4.900 s | 6.397 s | 1.497 s |
+| Simple | 4.703 s | 5.307 s | 0.604 s |
+| Maze 1 | 2.150 s | 2.472 s | 0.322 s |
+
+Largest single planning sample in the integrated evaluation: 6.534 s.
+These local timings are not a robot/track-station startup guarantee.
+The simple redundant-view pruning and brute-force block prototypes were
+retained but not adopted; the useful cleanup shortlists edges instead.
+
+Wall checks use real local AMCL/Nav2 and the actual published Path. Windows
+around all three reported problem locations completed 13/13 actions after an
+8-s simulated warmup. The integrated first-zone repeat completed another 5/5
+actions with all process-parent exit codes 0. Earlier cardinal-spin probes
+used arbitrary headings and cannot judge the actual selected route. Their
+ros2-run coverage wrappers needed TERM on cleanup; the final fixture starts
+the installed executable directly. Coverage now accepts expected ROS context
+shutdown after shared cleanup and still propagates unexpected errors.
+
+Software-rendered RTF was roughly 0.29-0.39. Action success in these short
+windows does not certify collision-free navigation, all initial poses or the
+full route. The full-team local smoke completed 180 wall seconds, about 65.5
+simulated seconds (RTF 0.367): 79 published goals, 18 successful Nav2 actions,
+zero failed actions/protocol violations and all process parents exiting 0.
+No candidate or report was recorded; score was 0. This is integration evidence,
+not a score gain. The fixture prepares sensor TF before the judge and does not
+certify production startup. The nominal route is still long; no fast-bonus or
+score gain is claimed. Dynamic box-goal exclusion remains the separate mission
+agreement with Bautista. No interface or mission/navigation code was changed.
+
+Evidence under ignored build/verificacion/cobertura/: recorrido-completo/,
+recorrido-comparacion/, recorrido-rendimiento/, recorrido-verificador.log,
+confirmacion-reparada/, bloques-diversos/ and the three pared-plan* folders.
+Reproduce offline comparison using pruebas/comparar_planes_cobertura.py.
+
 ## 2026-10-26: faster calculations, identical plans
 
 Branch: `cobertura/calculo-eficiente`, from development `96134c0` (PR #14).

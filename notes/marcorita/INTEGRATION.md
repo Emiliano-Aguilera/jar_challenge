@@ -121,6 +121,15 @@ unknown-cell, footprint and ray-corner policies before migrating to shared code.
 
 ## Next end-to-end check
 
+The local route-ordering candidate based on merged PR #15 retains every pose and heading;
+only their visiting order can change. No schema/topic or mission change is
+required. The real mission selector accepts all intended views in all 18
+offline cases. The 0.30 m ordering baseline is a geometric heuristic, not proof
+of fusion confirmation at the requested or actual pose. Mission inspections,
+dynamic obstacles and localization corrections can change real execution.
+The occupied-candidate goal filter discussed with Bautista is still pending;
+this ordering work neither implements it nor marks a failed goal as observed.
+
 The first local ordering handoff attempt received the map about 54 s before
 connected robot TF. Fake navigation does not move the robot, and the judge
 ended at its 60 s inactivity limit. The communication fixture now waits for
