@@ -246,6 +246,29 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
   cancels, 70 of 70 finished goals succeeded. Score 100, same as development: the
   other two boxes are in areas the route never enters.
 
+## How does mission keep goals away from boxes?
+
+- Problem: boxes are not in `/map`, so a coverage view can fall on or next to
+  one. In laberinto_simple mission sent the view (0.144, 1.969) with the red box
+  at (0.0, 2.0): 50 s pushing it (hans-die's NOTES). Each collision is -50 (§8).
+- Decided: when mission picks the next plan point, it skips points closer to a
+  candidate than `box_clearance_m` + `box_clearance_sigmas` x its spread
+  (`worst_deviation`). Only candidates with at least `box_min_observations` (2)
+  count: a false single detection must not erase plan areas. A skipped point is
+  not visited: it is checked again every time, so it comes back if fusion moves
+  the candidate. If only skipped points remain, `first_pending` gives None and
+  the robot goes back ("no plan points left"). Turns in place come from plan
+  points, so they are skipped too.
+- Why 0.42 m: at a goal the robot reaches the position and then turns, sweeping
+  the circle of its farthest corner (0.181 + 0.02 back, 0.100 + 0.02 side: 0.234
+  m). Plus half the box diagonal for any box orientation (0.25 x 0.707 = 0.177
+  m): 0.411 m. A fixed 0.30 m rule (marcorita's warning) misses the corners.
+  `test_box_clearance_covers_the_turning_robot_and_the_box` recomputes it from
+  navigation's footprint and padding and perception's `box_side_m`.
+- Not covered: obstacles that are not red candidates (distractors, decoys);
+  those need Nav2's costmap, an interface change with hans-die. A goal already
+  on its way when a candidate appears. Inspection spots near another candidate.
+
 ## Next
 
 - Run it in the simulator once Nav2, localization and coverage are in `development`.
