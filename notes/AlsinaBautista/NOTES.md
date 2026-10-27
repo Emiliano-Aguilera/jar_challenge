@@ -290,6 +290,34 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
   those need Nav2's costmap, an interface change with hans-die. A goal already
   on its way when a candidate appears. Inspection spots near another candidate.
 
+## How does mission skip spots it cannot reach?
+
+- Problem: a free spot with a clear view of the box can be in a closed pocket
+  (laberinto_1, see above). `viewpoint_for` picked the nearest spot without
+  checking a route.
+- Decided: use marcorita's `Grid.reachable_from` from `mapa.py` (#23,
+  `notes/marcorita/MAP_REACHABILITY.md`). Mission builds `self.grid` once per
+  `/map`. In `inspect_doubtful` it computes the reachable cells once, then
+  `viewpoint_for` drops spots whose cell is not in that set, after the clearance
+  and sight checks. Parameters: `visit_transit_radius_m` (0.15, see below)
+  and `visit_free_threshold` (25, an integer).
+- If the robot's own cell is not safe (`ValueError`: too close to a wall, or a
+  bad pose), mission skips the inspection for now and does not count it as a
+  try: the cause is the robot's position, not the candidate. The error text is
+  logged, so a bad parameter (a float threshold also raises `ValueError`) shows.
+- Tests (`test_inspeccion.py`): an unreachable nearest spot inside a pocket
+  with a 10 cm slot is skipped for a farther one; no reachable spot gives None;
+  a robot inside a wall raises.
+- Checked (workshop 10 real-robot bag, 2026-10-27): no crash, same score as
+  `development` (150/200). But the start pose (0, 0) is 0.165 m from a wall
+  there, so with 0.21 every inspection at the start was skipped ("robot pose is
+  outside the safe free space"). With 0.15 that cell is safe.
+- Decided: radius 0.15 m. Coverage's 0.21 is the circle around the whole robot
+  (for turning) and left the workshop start cell unsafe. Nav2 plans with a
+  0.12 m circle (half width + 0.02 padding), so 0.15 is a bit stricter and never
+  sends a goal Nav2 cannot plan. In a 0.55 m corridor the safe band grows from
+  ~15 cm to ~25 cm. Tests pass with 0.15. Pending marcorita's OK.
+
 ## Next
 
 - Run it in the simulator once Nav2, localization and coverage are in `development`.

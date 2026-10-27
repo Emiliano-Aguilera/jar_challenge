@@ -1,6 +1,19 @@
 # Coverage work status
 
-## Current task: shared reachability (2026-10-27)
+## Current task: rotated inspection regression (2026-10-27)
+
+- Branch cobertura/test-inspeccion-alcanzable, based on mission branch 9b9fc1b.
+- Mission PR #26 changes viewpoint_for to require cell_grid and reachable.
+  The rotated-map regression directly uses the new API, as Marco requested.
+  Same assertions, real rotated Grid/reachable cells, no production changes.
+- Marco explicitly requested publication and merge to unblock Bautista.
+  Send our PR to mision/visitas-alcanzables so his #26 picks up the test fix.
+  Bautista remains responsible for merging his overall PR into development.
+- Direct final-API fix: all 147 package tests passed, including nested map and
+  coverage suites, on ROS domain 177. No new manual simulation or parameter edit.
+- PR #23 is already merged (055a559); PR #16 remains a separate draft.
+
+## Previous task: shared reachability (2026-10-27)
 
 - Branch `cobertura/mapa-alcanzable`, based on development `d7e8057` (PRs
   #19-21 merged). The first_pending compatibility fix is already merged in #20.
