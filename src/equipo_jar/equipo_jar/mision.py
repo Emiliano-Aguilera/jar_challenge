@@ -45,7 +45,7 @@ class Mision(Node):
                                             'visit_min_observations': 2, 'visit_distance_m': 0.8, 
                                             'visit_clearance_m': 0.25, 'visit_angles': 12, 
                                             'visit_min_shift_m': 0.4, 'visit_box_margin_m': 0.25, 
-                                            'start_wait_s': 8.0, 'goal_timeout_s': 90.0, 'stuck_time_s': 20.0,
+                                            'start_wait_s': 4.0, 'goal_timeout_s': 90.0, 'stuck_time_s': 20.0,
                                             'stuck_distance_m': 0.05, 'stuck_angle_rad': 0.2, 'stop_wait_s': 1.0,
                                             'done_limit_s': 590.0, 'turn_in_place_m': 0.20, 'visit_max_attempts': 3})  # parámetros ajustables
 
