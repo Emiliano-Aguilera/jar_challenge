@@ -299,8 +299,8 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
   `notes/marcorita/MAP_REACHABILITY.md`). Mission builds `self.grid` once per
   `/map`. In `inspect_doubtful` it computes the reachable cells once, then
   `viewpoint_for` drops spots whose cell is not in that set, after the clearance
-  and sight checks. Parameters: `visit_transit_radius_m` (0.21, coverage's
-  `robot_radius` + `safety_margin`) and `visit_free_threshold` (25, an integer).
+  and sight checks. Parameters: `visit_transit_radius_m` (0.15, see below)
+  and `visit_free_threshold` (25, an integer).
 - If the robot's own cell is not safe (`ValueError`: too close to a wall, or a
   bad pose), mission skips the inspection for now and does not count it as a
   try: the cause is the robot's position, not the candidate. The error text is
@@ -312,9 +312,11 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
   `development` (150/200). But the start pose (0, 0) is 0.165 m from a wall
   there, so with 0.21 every inspection at the start was skipped ("robot pose is
   outside the safe free space"). With 0.15 that cell is safe.
-- Open: 0.21 is the circle around the whole robot (for turning). To pass a gap
-  the robot needs its half width (0.10 m + 0.02 padding), so 0.15 may fit
-  better and leaves more room in 0.55 m corridors. Decide with marcorita.
+- Decided: radius 0.15 m. Coverage's 0.21 is the circle around the whole robot
+  (for turning) and left the workshop start cell unsafe. Nav2 plans with a
+  0.12 m circle (half width + 0.02 padding), so 0.15 is a bit stricter and never
+  sends a goal Nav2 cannot plan. In a 0.55 m corridor the safe band grows from
+  ~15 cm to ~25 cm. Tests pass with 0.15. Pending marcorita's OK.
 
 ## Next
 
