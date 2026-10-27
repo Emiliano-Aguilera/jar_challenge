@@ -40,7 +40,7 @@ def mission_indices(poses, distance, angle):
     lookup = {id(message): index for index, message in enumerate(messages)}
     visited, selected = [], []
     while True:
-        point = first_pending(messages, visited, distance, angle)
+        point = first_pending(messages, visited, distance, angle, [])
         if point is None:
             return tuple(selected)
         index = lookup[id(point)]

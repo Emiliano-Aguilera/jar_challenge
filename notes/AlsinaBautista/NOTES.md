@@ -280,6 +280,12 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
   mission logged "Salteo el punto del plan (0.14,1.97)", the view 0.12 m from
   that box center where hans-die's run pushed the box for 50 s. The robot went
   on to the next view, reported both boxes and sent `/done` at 32 s.
+- Open: 0.42 m + 1 sigma is the worst case (turning in place, box corner toward
+  the robot, plus the spread). Facing the box without turning needs 0.26 m;
+  turning with a box face toward the robot, 0.36 m. Not measured yet how many
+  useful views it skips (laberinto_1 and maze_1 ran before the skip log). If it
+  skips views at 0.42-0.55 m and loses coverage, first lower
+  `box_clearance_sigmas` to 0.5, then `box_clearance_m` to 0.36.
 - Not covered: obstacles that are not red candidates (distractors, decoys);
   those need Nav2's costmap, an interface change with hans-die. A goal already
   on its way when a candidate appears. Inspection spots near another candidate.
