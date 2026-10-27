@@ -89,8 +89,9 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
   `start_wait_s` (4 s) after /map, so AMCL can settle; reports are not delayed.
 - Measured (laberinto_1, 5 runs on 2026-10-26, after /map): AMCL settled at
   2.1-2.2 s, Nav2 active at 2.7-3.2 s, coverage plan at 4.7-5.3 s. With 8 s the
-  first goal went out at 8.2 s, ~3 s after everything was ready. With 4 s it goes
-  out when the plan arrives (~5 s). On the real robot AMCL may need longer: it is
+  first goal went out at 8.2 s, ~3 s after everything was ready. With 4 s it went
+  out at 4.9 s, right after the plan (laberinto_1 120 s check), start pose
+  (-0.05, 0.04), no "not ready" warnings. On the real robot AMCL may need longer: it is
   a parameter, so it can be raised after the delivery cutoff.
 
 ## When does the robot go back?
