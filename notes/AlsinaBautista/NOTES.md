@@ -179,6 +179,13 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
   other candidates or block the return for "no plan points left".
 - Not covered yet: a failed trip still counts as a visit, and with no spot the
   robot does not turn to face the candidate from where it is.
+- Seen (laberinto_1, 300 s, 3 runs on e0f64a4): in run 1 candidate id 2 at
+  (-2.07, 1.53) with 2 observations was the real box at (-1.90, 1.45), 0.19 m off
+  (a report there scores 100). No spot, and no new observations came, so no retry;
+  coverage went on in the same tick. The box is in the small upper-left pocket:
+  probably every free point there is closer than `visit_distance_m` (0.8 m), and
+  points at 0.8 m are behind its walls. Bigger rings did not help in marcorita's
+  replay; smaller ones (0.5-0.6 m) were not tried.
 - Mission does not go back for "no plan points left" while a doubtful candidate is
   still waiting for its visit.
 - To check in the simulator: the robot leaves as soon as it arrives. If fusion
