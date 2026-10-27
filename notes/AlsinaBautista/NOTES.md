@@ -276,6 +276,10 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
   m): 0.411 m. A fixed 0.30 m rule (marcorita's warning) misses the corners.
   `test_box_clearance_covers_the_turning_robot_and_the_box` recomputes it from
   navigation's footprint and padding and perception's `box_side_m`.
+- Checked (laberinto_simple, 120 s): after the first report at (0.03, 2.02),
+  mission logged "Salteo el punto del plan (0.14,1.97)", the view 0.12 m from
+  that box center where hans-die's run pushed the box for 50 s. The robot went
+  on to the next view, reported both boxes and sent `/done` at 32 s.
 - Not covered: obstacles that are not red candidates (distractors, decoys);
   those need Nav2's costmap, an interface change with hans-die. A goal already
   on its way when a candidate appears. Inspection spots near another candidate.
