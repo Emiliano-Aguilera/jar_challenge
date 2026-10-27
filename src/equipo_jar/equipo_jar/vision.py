@@ -8,11 +8,11 @@ Pipeline (LiDAR is the primary range source; the depth cloud is the fallback):
 
     BGR image ──► red_mask ──► find_blobs ──► pixel_ray (bbox edges) ─┐
                                                                        ▼
-    LiDAR scan ──► scan_to_points ──────────────► points_in_wedge ──► nearest_cluster ──► face point
-                                                                                              │
-    cloud (H,W,3) ──► blob_mask ──► robust_3d_point  (fallback when the LiDAR has nothing)    │
-                                                                                              ▼
-                                                                                    center_from_face
+    LiDAR scan ──► scan_to_points ──────────────► central_cluster ──► face point
+                                                                           │
+    cloud (H,W,3) ──► blob_mask ──► robust_3d_point  (fallback)            │
+                                                                           ▼
+    checks: width_is_consistent, area_is_consistent, map_range_along ──► center_from_face
 
 Why LiDAR first: on the real robot the depth cloud is valid only beyond 0.6 m, has ~38 %
 valid pixels and gaps of up to a second (team CLAUDE.md). The LiDAR plane (0.18 m) cuts
@@ -260,6 +260,79 @@ def points_in_wedge(points_xy: np.ndarray, origin_xy: np.ndarray,
     return ok & (ang <= half)
 
 
+def central_cluster(points_xy: np.ndarray, origin_xy: np.ndarray,
+                    dir_left_xy: np.ndarray, dir_right_xy: np.ndarray,
+                    central_fraction: float, depth_m: float, min_points: int,
+                    min_coverage: float) -> Optional[Tuple[np.ndarray, int, int]]:
+    """Range of the box from the LiDAR beams in the CENTRAL part of the blob's angular span.
+
+    Why not the nearest cluster in the whole wedge: when a distant red box peeks past a wall
+    corner, the corner sits at the edge of the blob and is the nearest thing in the wedge, so
+    "nearest cluster" returned the corner's range and produced a box 1 m in front of the real
+    one (false reports on two practice maps, 2026-10-25). The box itself always covers the
+    center of its own blob, and the line of sight to that center is free at camera height,
+    so the central beams hit the box.
+
+    Steps:
+      1. keep the beams within `central_fraction` of the blob's half-angle (no margin),
+      2. group them by range (consecutive ranges closer than `depth_m` are one cluster),
+      3. take the cluster with the MOST beams (ties: the nearest),
+      4. require it to hold at least `min_points` beams and at least `min_coverage` of the
+         central beams; otherwise the central beams are split between two surfaces (box and
+         wall) and the range is ambiguous: return None.
+
+    Returns (median_xy of the cluster, cluster size, central beam count) or None.
+
+    #PARAM: central_fraction = part of the blob's half-angle that is used. Support: (0, 1].
+            0.6 keeps the middle 60 % of the box and leaves out ~0.05 m on each side of a box at
+            1 m; the edges are where a wall corner or the sync error between camera and scan
+            intrude. Below 0.4 a box at 3 m keeps fewer than 3 beams.
+    #PARAM: depth_m = range gap that separates two surfaces. Support: > 0; the box side
+            (0.25 m) plus a little: 0.30, so both faces of a box seen in diagonal stay together.
+    #PARAM: min_points = minimum LiDAR beams on the box. Support: integer >= 1. A 0.25 m box
+            at 3 m spans ~14 beams of 1080, the central 60 % ~8, with 25 % dropouts ~6. 3 is lenient.
+    #PARAM: min_coverage = share of the central beams the chosen cluster must hold. Support:
+            (0.5, 1]. 0.6 rejects a span split about evenly between two surfaces.
+    """
+    if points_xy.shape[0] == 0:
+        return None
+    dl = dir_left_xy / max(np.linalg.norm(dir_left_xy), 1e-9)
+    dr = dir_right_xy / max(np.linalg.norm(dir_right_xy), 1e-9)
+    center = dl + dr
+    n = np.linalg.norm(center)
+    if n < 1e-9:
+        return None
+    center /= n
+    half = math.acos(float(np.clip(dl @ center, -1.0, 1.0))) * central_fraction
+    v = points_xy - origin_xy
+    dist = np.linalg.norm(v, axis=1)
+    ok = dist > 1e-6
+    cosang = np.zeros(dist.shape)
+    cosang[ok] = (v[ok] @ center) / dist[ok]
+    ang = np.arccos(np.clip(cosang, -1.0, 1.0))
+    sel = ok & (ang <= half)
+    n_central = int(sel.sum())
+    if n_central == 0:
+        return None
+    pts = points_xy[sel]
+    r = dist[sel]
+    order = np.argsort(r)
+    r_sorted = r[order]
+    # Split the sorted ranges where consecutive beams are farther apart than depth_m.
+    breaks = np.flatnonzero(np.diff(r_sorted) > depth_m) + 1
+    bounds = [0] + breaks.tolist() + [len(r_sorted)]
+    best = None
+    for a, b in zip(bounds[:-1], bounds[1:]):
+        size = b - a
+        if best is None or size > best[0]:          # strict ">" keeps the nearest on ties
+            best = (size, a, b)
+    size, a, b = best
+    if size < min_points or size < min_coverage * n_central:
+        return None
+    idx = order[a:b]
+    return np.median(pts[idx], axis=0), int(size), n_central
+
+
 def nearest_cluster(points_xy: np.ndarray, origin_xy: np.ndarray, depth_m: float,
                     min_points: int) -> Optional[Tuple[np.ndarray, int]]:
     """Median of the points closest to the origin, within `depth_m` of the nearest one.
@@ -386,6 +459,92 @@ def area_is_consistent(area_px: float, distance_m: float, fx: float, fy: float,
         return False
     ratio = area_px / expected
     return (1.0 / max_factor) <= ratio <= max_factor
+
+
+def width_is_consistent(width_px: float, fx: float, distance_m: float, side_m: float,
+                        ratio_min: float, ratio_max: float) -> bool:
+    """Check that the blob's pixel width matches a box of side L at the LiDAR distance.
+
+        w_expected = fx * L / Z          (one face seen head-on)
+
+    Accepts if ratio_min <= w / w_expected <= ratio_max. Compared with the area check this
+    one ignores the box's height, so a blob clipped at the top or bottom of the image does
+    not fail it. A blob much NARROWER than expected means the LiDAR range belongs to something
+    closer than the red thing (a wall corner in front of a distant box) or the box is mostly
+    hidden: either way the observation is not trustworthy.
+
+    #PARAM: ratio_min = lower bound. Support: (0, 1). A box half hidden by a wall gives 0.5;
+            a wall corner 1 m in front of a box at 2.5-3.5 m gives 0.4-0.6. 0.6 trades the
+            most-occluded views (seen again from elsewhere) for rejecting those corners.
+    #PARAM: ratio_max = upper bound. Support: > 1. Two faces in diagonal give up to 1.41; the
+            blob can also widen by a few pixels of blur. 1.8.
+    """
+    if distance_m <= 0 or side_m <= 0 or fx <= 0:
+        return False
+    expected = fx * side_m / distance_m
+    ratio = width_px / expected
+    return ratio_min <= ratio <= ratio_max
+
+
+def map_range_along(grid: np.ndarray, resolution: float, origin_x: float, origin_y: float,
+                    p0_xy, dir_xy, max_range_m: float, occupied_threshold: int = 65) -> Optional[float]:
+    """Distance from p0 along dir to the first occupied cell of the map, or None.
+
+    Marches in steps of half a cell. Leaving the grid also ends the march (None). Used to
+    tell whether a LiDAR hit is a mapped wall: a box is never drawn in the practice maps, so a
+    hit at the map's own wall distance is not a box.
+    """
+    height, width = grid.shape
+    d = np.asarray(dir_xy, dtype=float)
+    nd = np.linalg.norm(d)
+    if nd < 1e-9 or resolution <= 0:
+        return None
+    d = d / nd
+    step = resolution / 2.0
+    n_steps = int(max_range_m / step) + 1
+    for i in range(n_steps):
+        s = i * step
+        x = p0_xy[0] + d[0] * s
+        y = p0_xy[1] + d[1] * s
+        col = int(math.floor((x - origin_x) / resolution))
+        row = int(math.floor((y - origin_y) / resolution))
+        if not (0 <= col < width and 0 <= row < height):
+            return None
+        if grid[row, col] >= occupied_threshold:
+            return float(s)
+    return None
+
+
+def mapped_obstacle_extent(grid: np.ndarray, resolution: float, origin_x: float, origin_y: float,
+                           p_xy, radius_m: float, occupied_threshold: int = 65) -> float:
+    """Largest side (m) of the bounding box of the occupied cells within radius_m of p.
+
+    A box drawn in the map gives at most ~0.35 m (0.25 m plus a cell on each side); a wall
+    runs through the whole neighborhood and gives ~2 * radius. Lets the wall check spare a
+    box that the competition map might draw.
+    """
+    height, width = grid.shape
+    c0 = int(math.floor((p_xy[0] - radius_m - origin_x) / resolution))
+    c1 = int(math.floor((p_xy[0] + radius_m - origin_x) / resolution)) + 1
+    r0 = int(math.floor((p_xy[1] - radius_m - origin_y) / resolution))
+    r1 = int(math.floor((p_xy[1] + radius_m - origin_y) / resolution)) + 1
+    c0, c1 = max(0, c0), min(width, c1)
+    r0, r1 = max(0, r0), min(height, r1)
+    if c1 <= c0 or r1 <= r0:
+        return 0.0
+    sub = grid[r0:r1, c0:c1] >= occupied_threshold
+    rows, cols = np.nonzero(sub)
+    if rows.size == 0:
+        return 0.0
+    # Keep only the cells inside the circle.
+    cx = origin_x + (c0 + cols + 0.5) * resolution
+    cy = origin_y + (r0 + rows + 0.5) * resolution
+    inside = (cx - p_xy[0]) ** 2 + (cy - p_xy[1]) ** 2 <= radius_m ** 2
+    if not inside.any():
+        return 0.0
+    ex = (cols[inside].max() - cols[inside].min() + 1) * resolution
+    ey = (rows[inside].max() - rows[inside].min() + 1) * resolution
+    return float(max(ex, ey))
 
 
 def observation_sigma(distance_m: float, sigma_base_m: float, sigma_per_m: float) -> float:

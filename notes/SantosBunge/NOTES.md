@@ -114,6 +114,35 @@ One entry per decision: the question, what was tried, what was decided.
   Candidate 1 became reportable only after the robot moved (single-view floor), as
   designed.
 
+## False reports: a wall corner in front of a distant box (2026-10-25 runs)
+
+- Evidence (hans-die's notes and his write-up of 2026-10-25): on two practice maps mission
+  reported a point with no red box near it, 3 of 3 runs on one of them. Each false point lay
+  on the bearing of a real red box but ~1 m closer, and the robot moved away along that
+  bearing, so the observations agreed with each other and passed mission's rule
+  (5 observations, std <= 0.10). Cost: -100 for the missed box and the -200 fast bonus.
+- Cause: `nearest_cluster` took the nearest LiDAR points in the whole blob wedge (plus a
+  0.03 rad margin). When a box peeks past a wall corner, the corner sits at the edge of the
+  blob and is the nearest thing in the wedge, so the range was the corner's. The corner is a
+  real point in space, so more viewpoints do not expose it: a geometric fix is needed, not
+  a statistical one.
+- Decided, three independent defenses in `deteccion` (each alone catches the known cases):
+  1. `central_cluster`: only the beams in the central 60 % of the blob's angular span, no
+     margin, grouped by range; the largest group wins and must cover >= 60 % of those
+     beams. The box always fills the center of its own blob, and that line of sight is free.
+  2. `width_is_consistent`: the blob's pixel width must match a 0.25 m box at the LiDAR
+     range (ratio in [0.6, 1.8]). A corner 1 m in front of a box at 3 m gives ~0.5. Costs the
+     views where the box is more than 40 % hidden, which other viewpoints recover.
+  3. `map_range_along`: the LiDAR hit must not lie on a wall of `/map` (within 0.15 m of the
+     map's own range along that bearing). Boxes are not drawn in the practice maps. If the
+     competition map draws them, a mapped obstacle smaller than 0.40 m is spared, and
+     `map_wall_check: false` turns it off (params only, allowed after the cutoff).
+  Plus `max_range_m: 3.0`: coverage looks from 2.0 m, and far observations are the
+  ambiguous ones.
+- Not done: a perpendicular-baseline rule in fusion. The corner is a real point, so it is
+  consistent from every viewpoint; the baseline would not have helped.
+- Validation: see the next entry (replays of the recorded runs).
+
 ## Next
 
 - Repeat the measurement with localization (AMCL) instead of the fixed map = odom.
