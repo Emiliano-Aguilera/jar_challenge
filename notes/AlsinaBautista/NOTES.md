@@ -286,9 +286,23 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
   useful views it skips (laberinto_1 and maze_1 ran before the skip log). If it
   skips views at 0.42-0.55 m and loses coverage, first lower
   `box_clearance_sigmas` to 0.5, then `box_clearance_m` to 0.36.
+- Problem: the rule only runs when mission picks the next point. A box found
+  during the trip (often while approaching the view that sees it) did not stop
+  the trip, so the robot could still drive into it.
+- Decided: every tick, while a plan goal is `moving`, mission checks the plan
+  point with the same `near_box` rule (`check_goal_near_box`). If it is now in a
+  box zone, mission cancels the trip and sets `current_point` to None, so the
+  point is not marked finished: it stays pending and comes back if fusion moves
+  the candidate. It checks the plan point, not the sent pose (for a turn in
+  place the sent pose is the robot's own x,y). Not checked: inspections, idle
+  turns and the return (no plan point), a trip `check_stuck` already cancelled.
+- Checked (Docker, `nav_falso.py`, 2026-10-27): plan A (1, 0) and B (0, 1.5),
+  robot at the origin. A candidate at (1.2, 0) with 2 observations during the
+  trip to A: mission cancelled it, skipped A and went to B. After the candidate
+  was removed, it went back to A when B ended.
 - Not covered: obstacles that are not red candidates (distractors, decoys);
-  those need Nav2's costmap, an interface change with hans-die. A goal already
-  on its way when a candidate appears. Inspection spots near another candidate.
+  those need Nav2's costmap, an interface change with hans-die. Inspection
+  spots near another candidate.
 
 ## Next
 
