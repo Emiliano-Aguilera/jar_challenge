@@ -142,3 +142,6 @@ mision:
     done_limit_s: 590.0
     turn_in_place_m: 0.20
     visit_max_attempts: 3
+    box_min_observations: 2
+    box_clearance_m: 0.42
+    box_clearance_sigmas: 1.0

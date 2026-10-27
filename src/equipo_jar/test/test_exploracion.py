@@ -1,3 +1,4 @@
+import ast
 import math
 from pathlib import Path
 from types import SimpleNamespace
@@ -5,7 +6,8 @@ from types import SimpleNamespace
 import pytest
 
 from equipo_jar.exploracion import (
-    angle_difference, first_pending, already_visited, yaw_from_quaternion, goal_position)
+    angle_difference, first_pending, already_visited, yaw_from_quaternion, goal_position,
+    box_zones, near_box)
 
 DIST = 0.30
 ANG = 0.5
@@ -84,30 +86,30 @@ def test_same_heading_elsewhere_is_not_visited():
 # --- first_pending ---
 
 def test_empty_plan():
-    assert first_pending([], [], DIST, ANG) is None
+    assert first_pending([], [], DIST, ANG, []) is None
 
 
 def test_no_visited_returns_first():
     poses = [pose(1.0, 0.5, 0.0), pose(2.0, 0.5, 0.0)]
-    assert first_pending(poses, [], DIST, ANG) is poses[0]
+    assert first_pending(poses, [], DIST, ANG, []) is poses[0]
 
 
 def test_skips_visited_and_keeps_order():
     poses = [pose(1.0, 0.5, 0.0), pose(2.0, 0.5, 0.0), pose(3.0, 0.5, 0.0)]
-    assert first_pending(poses, [(1.0, 0.5, 0.0)], DIST, ANG) is poses[1]
+    assert first_pending(poses, [(1.0, 0.5, 0.0)], DIST, ANG, []) is poses[1]
 
 
 def test_all_visited():
     poses = [pose(1.0, 0.5, 0.0), pose(2.0, 0.5, 0.0)]
     visited = [(1.0, 0.5, 0.0), (2.0, 0.5, 0.0)]
-    assert first_pending(poses, visited, DIST, ANG) is None
+    assert first_pending(poses, visited, DIST, ANG, []) is None
 
 
 def test_same_place_other_heading_is_still_pending():
     # El plan de la prueba del paso 8: los dos últimos puntos están en el mismo lugar.
     poses = [pose(1.0, 0.5, 0.0), pose(2.0, 0.5, 0.0), pose(2.0, 0.5, math.pi / 2)]
     visited = [(1.0, 0.5, 0.0), (2.0, 0.5, 0.0)]
-    assert first_pending(poses, visited, DIST, ANG) is poses[2]
+    assert first_pending(poses, visited, DIST, ANG, []) is poses[2]
 
 
 # --- Identidad de una vista del plan de cobertura ---
@@ -125,13 +127,13 @@ def test_coverage_views_25_cm_apart_are_different():
     yaw = 4.71238898038469
     poses = [pose(-2.675, 2.125, yaw), pose(-2.925, 2.125, yaw)]
     visited = [(-2.675, 2.125, yaw_from_quaternion(quaternion(yaw)))]
-    assert first_pending(poses, visited, PLAN_DIST, PLAN_ANG) is poses[1]
+    assert first_pending(poses, visited, PLAN_DIST, PLAN_ANG, []) is poses[1]
 
 
 def test_coverage_headings_45_degrees_apart_are_different():
     poses = [pose(1.025, 0.475, 0.0), pose(1.025, 0.475, math.pi / 4)]
     visited = [(1.025, 0.475, 0.0)]
-    assert first_pending(poses, visited, PLAN_DIST, PLAN_ANG) is poses[1]
+    assert first_pending(poses, visited, PLAN_DIST, PLAN_ANG, []) is poses[1]
 
 
 def test_same_view_in_a_new_plan_is_recognized():
@@ -195,3 +197,92 @@ def test_turn_radius_covers_nav2_arrivals():
     nav = yaml.safe_load((params_dir / 'navegacion.yaml').read_text())
     checker = nav['controller_server']['ros__parameters']['general_goal_checker']
     assert mision['turn_in_place_m'] > checker['xy_goal_tolerance']
+
+
+# --- Zonas alrededor de las cajas ---
+# Las cajas no están en /map: un punto del plan puede caer pegado a una. Misión saltea
+# los puntos a menos de box_clearance_m + sigma_factor * dispersión de una candidata.
+
+CLEARANCE = 0.42
+
+
+def box_cand(id_, x, y, observaciones=3, sigma=0.15):
+    """Candidata falsa con los campos que usa box_zones (covarianza redonda de `sigma`)."""
+    var = sigma ** 2
+    return SimpleNamespace(id=id_, centro=SimpleNamespace(x=x, y=y),
+                           observaciones=observaciones, covarianza_xy=[var, 0.0, 0.0, var])
+
+
+def test_zone_radius_adds_the_uncertainty():
+    zones = box_zones([box_cand(1, 1.0, 2.0, sigma=0.15)], 2, CLEARANCE, 1.0)
+    assert len(zones) == 1
+    x, y, radius = zones[0]
+    assert (x, y) == (1.0, 2.0)
+    assert radius == pytest.approx(CLEARANCE + 0.15)
+
+
+def test_zone_factor_zero_ignores_the_uncertainty():
+    radius = box_zones([box_cand(1, 0.0, 0.0, sigma=0.15)], 2, CLEARANCE, 0.0)[0][2]
+    assert radius == pytest.approx(CLEARANCE)
+
+
+def test_candidate_with_few_observations_makes_no_zone():
+    # Una detección suelta puede ser falsa: no tiene que borrar zonas del plan.
+    assert box_zones([box_cand(1, 0.0, 0.0, observaciones=1)], 2, CLEARANCE, 1.0) == []
+
+
+def test_non_finite_center_makes_no_zone():
+    assert box_zones([box_cand(1, float('nan'), 0.0)], 2, CLEARANCE, 1.0) == []
+
+
+def test_near_box():
+    zones = [(0.0, 0.0, 0.5)]
+    assert near_box(0.3, 0.0, zones)
+    assert not near_box(0.6, 0.0, zones)
+    assert not near_box(0.5, 0.0, zones)   # justo en el borde: la comparación es estricta
+    assert not near_box(0.3, 0.0, [])
+
+
+def test_first_pending_skips_a_point_next_to_a_box():
+    # Caso de Hans en laberinto_simple: vista (0.144, 1.969) con la caja roja en (0.0, 2.0).
+    poses = [pose(0.144, 1.969, 0.0), pose(1.0, 1.0, 0.0)]
+    zones = box_zones([box_cand(1, 0.0, 2.0, sigma=0.10)], 2, CLEARANCE, 1.0)
+    assert first_pending(poses, [], DIST, ANG, zones) is poses[1]
+
+
+def test_a_skipped_point_is_still_pending():
+    # Saltear no es visitar: si fusión corre la caja, el punto vuelve a estar disponible.
+    poses = [pose(0.144, 1.969, 0.0)]
+    near = box_zones([box_cand(1, 0.0, 2.0)], 2, CLEARANCE, 1.0)
+    moved = box_zones([box_cand(1, 0.0, 3.0)], 2, CLEARANCE, 1.0)
+    assert first_pending(poses, [], DIST, ANG, near) is None
+    assert first_pending(poses, [], DIST, ANG, moved) is poses[0]
+
+
+def launch_constants(path):
+    """Constantes numéricas sueltas de un archivo .py, leídas sin importarlo."""
+    values = {}
+    for node in ast.parse(path.read_text()).body:
+        if (isinstance(node, ast.Assign) and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name) and isinstance(node.value, ast.Constant)):
+            values[node.targets[0].id] = node.value.value
+    return values
+
+
+def test_box_clearance_covers_the_turning_robot_and_the_box():
+    # box_clearance_m = radio de la esquina más lejana del robot (al llegar a un objetivo
+    # gira en el lugar y barre ese círculo) + media diagonal de la caja (cualquier
+    # orientación). Si navegación cambia la forma o el margen del robot, o percepción el
+    # tamaño de la caja, este test avisa.
+    yaml = pytest.importorskip('yaml')
+    base = Path(__file__).resolve().parents[1]
+    chassis = launch_constants(base / 'launch' / 'navegacion.launch.py')
+    nav = yaml.safe_load((base / 'params' / 'navegacion.yaml').read_text())
+    padding = max(nav[c][c]['ros__parameters']['footprint_padding']
+                  for c in ('local_costmap', 'global_costmap'))
+    params = yaml.safe_load((base / 'params' / 'params.yaml').read_text())
+    box_side = params['deteccion']['ros__parameters']['box_side_m']
+    corner = math.hypot(max(chassis['ADELANTE'], chassis['ATRAS']) + padding,
+                        chassis['MEDIO_ANCHO'] + padding)
+    needed = corner + box_side * math.sqrt(2) / 2
+    assert params['mision']['ros__parameters']['box_clearance_m'] >= needed

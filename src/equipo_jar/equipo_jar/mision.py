@@ -20,7 +20,7 @@ from equipo_jar.comun import QOS_ESTADO, QOS_MAPA, correr, parametros_en_vivo
 from equipo_jar.reportes import armar_reporte
 from equipo_jar_msgs.msg import Candidatas
 from equipo_jar.confirmacion import select_to_report
-from equipo_jar.exploracion import yaw_from_quaternion, first_pending, angle_difference, goal_position
+from equipo_jar.exploracion import yaw_from_quaternion, first_pending, angle_difference, goal_position, box_zones
 from equipo_jar.inspeccion import pick_doubtful, viewpoint_for
 
 from tf2_ros import Buffer, TransformListener, TransformException
@@ -47,7 +47,9 @@ class Mision(Node):
                                             'visit_min_shift_m': 0.4, 'visit_box_margin_m': 0.25, 
                                             'start_wait_s': 4.0, 'goal_timeout_s': 90.0, 'stuck_time_s': 20.0,
                                             'stuck_distance_m': 0.05, 'stuck_angle_rad': 0.2, 'stop_wait_s': 1.0,
-                                            'done_limit_s': 590.0, 'turn_in_place_m': 0.20, 'visit_max_attempts': 3})  # parámetros ajustables
+                                            'done_limit_s': 590.0, 'turn_in_place_m': 0.20, 
+                                            'visit_max_attempts': 3, 'box_min_observations': 2,
+                                            'box_clearance_m': 0.42, 'box_clearance_sigmas': 1.0})  # parámetros ajustables
 
         self.mapa = None
         self.plan = None
@@ -86,6 +88,8 @@ class Mision(Node):
 
         self.stop_canceling = False
         self.stop_since = None
+
+        self.last_skipped = None
 
         self.create_subscription(OccupancyGrid, '/map', self.al_recibir_mapa, QOS_MAPA)
         self.create_subscription(Path, '/jar/plan_cobertura', self.al_recibir_plan, QOS_ESTADO)
@@ -284,6 +288,12 @@ class Mision(Node):
         except Exception:
             self.get_logger().error(f'Error en step:\n{traceback.format_exc()}', throttle_duration_sec=5.0)
 
+    def current_box_zones(self):
+        if self.candidatas is None:
+            return []
+        return box_zones(self.candidatas, self.p['box_min_observations'],
+                        self.p['box_clearance_m'], self.p['box_clearance_sigmas'])
+
     def explore(self):
         if self.nav_state == 'sending' or self.nav_state == 'moving':
             return
@@ -300,7 +310,16 @@ class Mision(Node):
         if self.plan is None:
             self.spin_if_idle()
             return
-        point = first_pending(self.plan.poses, self.visited, self.p['same_point_distance_m'], self.p['same_point_angle_rad'])
+        zones = self.current_box_zones()
+        point = first_pending(self.plan.poses, self.visited, self.p['same_point_distance_m'], 
+                                self.p['same_point_angle_rad'], zones)
+        first_free = first_pending(self.plan.poses, self.visited, self.p['same_point_distance_m'],
+                                    self.p['same_point_angle_rad'], [])
+        if first_free is not None and first_free is not point and first_free is not self.last_skipped:
+            x = first_free.pose.position.x
+            y = first_free.pose.position.y
+            self.get_logger().info(f'Salteo el punto del plan ({x:.2f},{y:.2f}): cerca de una caja')
+            self.last_skipped = first_free
         if point is None:
             self.spin_if_idle()
             return
@@ -343,7 +362,7 @@ class Mision(Node):
             return 'se termina el tiempo'
         elif (self.plan is not None and self.nav_state != 'sending' and self.nav_state != 'moving' 
                 and first_pending(self.plan.poses, self.visited, self.p['same_point_distance_m'], 
-                    self.p['same_point_angle_rad']) is None and self.next_doubtful() is None):
+                self.p['same_point_angle_rad'], self.current_box_zones()) is None and self.next_doubtful() is None):
             return 'no quedan puntos ni dudosas'
         return None
 

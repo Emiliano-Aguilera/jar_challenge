@@ -188,10 +188,21 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
 - Seen (laberinto_1, 300 s, 3 runs on e0f64a4): in run 1 candidate id 2 at
   (-2.07, 1.53) with 2 observations was the real box at (-1.90, 1.45), 0.19 m off
   (a report there scores 100). No spot, and no new observations came, so no retry;
-  coverage went on in the same tick. The box is in the small upper-left pocket:
-  probably every free point there is closer than `visit_distance_m` (0.8 m), and
-  points at 0.8 m are behind its walls. Bigger rings did not help in marcorita's
-  replay; smaller ones (0.5-0.6 m) were not tried.
+  coverage went on in the same tick. The box is in the small upper-left pocket.
+- marcorita's replay of that case (same simulator map): with 12 angles, rings of
+  0.8, 0.6 and 0.5 m all give no spot. Outside points fail line of sight (the
+  pocket walls), inside points fail the 0.25 m clearance or are walls: smaller
+  rings do not help. The robot cannot enter the pocket (the only opening is one
+  cell, ~5 cm; the robot needs >= 0.24 m). The box is visible from the left
+  corridor only through that slot, in a 172-175 deg window at 0.8 m, and even
+  there the real box is barely visible. With 72 angles `viewpoint_for` would
+  pick 285 deg, inside the pocket and unreachable, because it picks the nearest
+  spot without checking a route.
+- Decided: do not chase the slot (a 3-4 deg window with a 0.19 m center error).
+  Such a candidate is still reported by the final round (>= 1 observation,
+  <= 0.30 m spread) when the run ends. Before adding angles or rings to
+  `viewpoint_for`, it must discard spots not reachable from the robot; coverage
+  already computes reachable areas, so that function goes to `mapa.py` for both.
 - Mission does not go back for "no plan points left" while a doubtful candidate is
   still waiting for its visit.
 - To check in the simulator: the robot leaves as soon as it arrives. If fusion
@@ -245,6 +256,39 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
   each would have needed the approach again. No "Failed to make progress", no
   cancels, 70 of 70 finished goals succeeded. Score 100, same as development: the
   other two boxes are in areas the route never enters.
+
+## How does mission keep goals away from boxes?
+
+- Problem: boxes are not in `/map`, so a coverage view can fall on or next to
+  one. In laberinto_simple mission sent the view (0.144, 1.969) with the red box
+  at (0.0, 2.0): 50 s pushing it (hans-die's NOTES). Each collision is -50 (§8).
+- Decided: when mission picks the next plan point, it skips points closer to a
+  candidate than `box_clearance_m` + `box_clearance_sigmas` x its spread
+  (`worst_deviation`). Only candidates with at least `box_min_observations` (2)
+  count: a false single detection must not erase plan areas. A skipped point is
+  not visited: it is checked again every time, so it comes back if fusion moves
+  the candidate. If only skipped points remain, `first_pending` gives None and
+  the robot goes back ("no plan points left"). Turns in place come from plan
+  points, so they are skipped too.
+- Why 0.42 m: at a goal the robot reaches the position and then turns, sweeping
+  the circle of its farthest corner (0.181 + 0.02 back, 0.100 + 0.02 side: 0.234
+  m). Plus half the box diagonal for any box orientation (0.25 x 0.707 = 0.177
+  m): 0.411 m. A fixed 0.30 m rule (marcorita's warning) misses the corners.
+  `test_box_clearance_covers_the_turning_robot_and_the_box` recomputes it from
+  navigation's footprint and padding and perception's `box_side_m`.
+- Checked (laberinto_simple, 120 s): after the first report at (0.03, 2.02),
+  mission logged "Salteo el punto del plan (0.14,1.97)", the view 0.12 m from
+  that box center where hans-die's run pushed the box for 50 s. The robot went
+  on to the next view, reported both boxes and sent `/done` at 32 s.
+- Open: 0.42 m + 1 sigma is the worst case (turning in place, box corner toward
+  the robot, plus the spread). Facing the box without turning needs 0.26 m;
+  turning with a box face toward the robot, 0.36 m. Not measured yet how many
+  useful views it skips (laberinto_1 and maze_1 ran before the skip log). If it
+  skips views at 0.42-0.55 m and loses coverage, first lower
+  `box_clearance_sigmas` to 0.5, then `box_clearance_m` to 0.36.
+- Not covered: obstacles that are not red candidates (distractors, decoys);
+  those need Nav2's costmap, an interface change with hans-die. A goal already
+  on its way when a candidate appears. Inspection spots near another candidate.
 
 ## Next
 
