@@ -267,3 +267,105 @@ def test_decode_image_bgr8_and_rgb8_with_row_padding():
     assert tuple(out[0, 0]) == (30, 20, 10) and tuple(out[1, 2]) == (60, 50, 40)
     with pytest.raises(ValueError):
         vision.decode_image(img.tobytes(), 2, 3, 9, 'mono8')
+
+
+# ----------------------------------------------------------------------------- false-positive defenses
+
+
+def corner_scan(box_range=2.9, corner_range=1.46, box_half=None):
+    """A distant box straight ahead and a wall corner intruding on the right edge of its blob."""
+    box_half = box_half or math.atan(0.125 / box_range)          # ~0.043 rad at 2.9 m
+    objects = [(0.0, box_range, box_half),
+               (box_half + 0.08, corner_range, 0.10)]            # corner: from +0.02 to +0.22 rad
+    ranges, a0, inc = synthetic_scan(objects)
+    return vision.scan_to_points(ranges, a0, inc, 0.05, 12.0), box_half
+
+
+def test_central_cluster_takes_the_box_not_the_corner():
+    pts, half = corner_scan()
+    origin = np.zeros(2)
+    # The blob spans the box (half-angle) plus the corner that overlaps its right edge.
+    d_left = np.array([math.cos(half), math.sin(half)])
+    d_right = np.array([math.cos(-half), math.sin(-half)])
+    # The old rule picked the corner (1.46 m): the false reports of 2026-10-25.
+    old = vision.points_in_wedge(pts, origin, d_left, d_right, 0.03)
+    face_old, _ = vision.nearest_cluster(pts[old], origin, 0.30, 3)
+    assert np.linalg.norm(face_old) == pytest.approx(1.46, abs=0.03)
+    # The central rule returns the box.
+    res = vision.central_cluster(pts, origin, d_left, d_right, 0.6, 0.30, 3, 0.6)
+    assert res is not None
+    face, n, n_central = res
+    assert np.linalg.norm(face) == pytest.approx(2.9, abs=0.03)
+    assert n >= 0.8 * n_central          # at most a stray corner beam at the very edge
+
+
+def test_central_cluster_rejects_a_span_split_between_two_surfaces():
+    # Wall at 1.5 m covering the whole left half of the span, box at 3 m on the right half.
+    ranges, a0, inc = synthetic_scan([(0.05, 3.0, 0.05), (-0.05, 1.5, 0.05)])
+    pts = vision.scan_to_points(ranges, a0, inc, 0.05, 12.0)
+    d_left = np.array([math.cos(0.1), math.sin(0.1)])
+    d_right = np.array([math.cos(-0.1), math.sin(-0.1)])
+    assert vision.central_cluster(pts, np.zeros(2), d_left, d_right, 1.0, 0.30, 3, 0.6) is None
+
+
+def test_central_cluster_keeps_both_faces_of_a_diagonal_box():
+    # Two faces: ranges 1.50 and 1.65 m across the span, within depth_m of each other.
+    n = 1080
+    inc = 2 * math.pi / n
+    angles = -math.pi + inc * np.arange(n)
+    ranges = np.full(n, 4.0)
+    ranges[np.abs(angles) <= 0.04] = 1.65
+    ranges[(angles > -0.08) & (angles < -0.04)] = 1.5
+    pts = vision.scan_to_points(ranges, -math.pi, inc, 0.05, 12.0)
+    d_left = np.array([math.cos(0.04), math.sin(0.04)])
+    d_right = np.array([math.cos(-0.08), math.sin(-0.08)])
+    res = vision.central_cluster(pts, np.zeros(2), d_left, d_right, 1.0, 0.30, 3, 0.6)
+    assert res is not None and 1.5 <= np.linalg.norm(res[0]) <= 1.65
+
+
+def test_central_cluster_needs_min_points():
+    pts, half = corner_scan()
+    d_left = np.array([math.cos(half), math.sin(half)])
+    d_right = np.array([math.cos(-half), math.sin(-half)])
+    assert vision.central_cluster(pts, np.zeros(2), d_left, d_right, 0.6, 0.30, 500, 0.6) is None
+    assert vision.central_cluster(np.zeros((0, 2)), np.zeros(2), d_left, d_right, 0.6, 0.30, 1, 0.6) is None
+
+
+def test_width_consistency_catches_a_corner_in_front_of_a_box():
+    fx = 271.8
+    w_box_at_2_9 = fx * 0.25 / 2.9                    # ~23 px, what the camera sees
+    # LiDAR says 1.46 m (the corner): expected 47 px, ratio 0.5 -> rejected at ratio_min 0.6
+    assert not vision.width_is_consistent(w_box_at_2_9, fx, 1.46, 0.25, 0.6, 1.8)
+    # LiDAR says 2.9 m (the box): accepted
+    assert vision.width_is_consistent(w_box_at_2_9, fx, 2.9, 0.25, 0.6, 1.8)
+    # Diagonal view (1.4x) accepted, absurd widths rejected
+    assert vision.width_is_consistent(w_box_at_2_9 * 1.4, fx, 2.9, 0.25, 0.6, 1.8)
+    assert not vision.width_is_consistent(w_box_at_2_9 * 3, fx, 2.9, 0.25, 0.6, 1.8)
+    assert not vision.width_is_consistent(10, fx, 0.0, 0.25, 0.6, 1.8)
+
+
+def grid_with_wall():
+    """10 x 10 m map at 0.05 m, origin (-5, -5); a wall along x = 2.0 (column of cells)."""
+    g = np.zeros((200, 200), np.int16)
+    col = int((2.0 + 5.0) / 0.05)
+    g[:, col] = 100
+    return g, 0.05, -5.0, -5.0
+
+
+def test_map_range_along_finds_the_wall_and_free_space():
+    g, res, ox, oy = grid_with_wall()
+    d = vision.map_range_along(g, res, ox, oy, (0.0, 0.0), (1.0, 0.0), 5.0)
+    assert d == pytest.approx(2.0, abs=0.06)
+    assert vision.map_range_along(g, res, ox, oy, (0.0, 0.0), (-1.0, 0.0), 3.0) is None   # free
+    assert vision.map_range_along(g, res, ox, oy, (0.0, 0.0), (1.0, 0.0), 1.0) is None    # too short
+    assert vision.map_range_along(g, res, ox, oy, (0.0, 0.0), (0.0, 0.0), 1.0) is None    # no direction
+
+
+def test_mapped_obstacle_extent_tells_a_wall_from_a_drawn_box():
+    g, res, ox, oy = grid_with_wall()
+    assert vision.mapped_obstacle_extent(g, res, ox, oy, (2.0, 0.0), 0.30) > 0.5
+    box = np.zeros((200, 200), np.int16)
+    c, r = int((0.0 + 5.0) / 0.05), int((0.0 + 5.0) / 0.05)
+    box[r - 2:r + 3, c - 2:c + 3] = 100                     # 5 x 5 cells = 0.25 m
+    assert vision.mapped_obstacle_extent(box, res, ox, oy, (0.0, 0.0), 0.30) == pytest.approx(0.25)
+    assert vision.mapped_obstacle_extent(box, res, ox, oy, (3.0, 3.0), 0.30) == 0.0
