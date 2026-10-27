@@ -89,6 +89,8 @@ class Mision(Node):
         self.stop_canceling = False
         self.stop_since = None
 
+        self.last_skipped = None
+
         self.create_subscription(OccupancyGrid, '/map', self.al_recibir_mapa, QOS_MAPA)
         self.create_subscription(Path, '/jar/plan_cobertura', self.al_recibir_plan, QOS_ESTADO)
         self.create_subscription(
@@ -311,6 +313,13 @@ class Mision(Node):
         zones = self.current_box_zones()
         point = first_pending(self.plan.poses, self.visited, self.p['same_point_distance_m'], 
                                 self.p['same_point_angle_rad'], zones)
+        first_free = first_pending(self.plan.poses, self.visited, self.p['same_point_distance_m'],
+                                    self.p['same_point_angle_rad'], [])
+        if first_free is not None and first_free is not point and first_free is not self.last_skipped:
+            x = first_free.pose.position.x
+            y = first_free.pose.position.y
+            self.get_logger().info(f'Salteo el punto del plan ({x:.2f},{y:.2f}): cerca de una caja')
+            self.last_skipped = first_free
         if point is None:
             self.spin_if_idle()
             return

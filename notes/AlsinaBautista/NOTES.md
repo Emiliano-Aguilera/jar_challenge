@@ -188,10 +188,21 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
 - Seen (laberinto_1, 300 s, 3 runs on e0f64a4): in run 1 candidate id 2 at
   (-2.07, 1.53) with 2 observations was the real box at (-1.90, 1.45), 0.19 m off
   (a report there scores 100). No spot, and no new observations came, so no retry;
-  coverage went on in the same tick. The box is in the small upper-left pocket:
-  probably every free point there is closer than `visit_distance_m` (0.8 m), and
-  points at 0.8 m are behind its walls. Bigger rings did not help in marcorita's
-  replay; smaller ones (0.5-0.6 m) were not tried.
+  coverage went on in the same tick. The box is in the small upper-left pocket.
+- marcorita's replay of that case (same simulator map): with 12 angles, rings of
+  0.8, 0.6 and 0.5 m all give no spot. Outside points fail line of sight (the
+  pocket walls), inside points fail the 0.25 m clearance or are walls: smaller
+  rings do not help. The robot cannot enter the pocket (the only opening is one
+  cell, ~5 cm; the robot needs >= 0.24 m). The box is visible from the left
+  corridor only through that slot, in a 172-175 deg window at 0.8 m, and even
+  there the real box is barely visible. With 72 angles `viewpoint_for` would
+  pick 285 deg, inside the pocket and unreachable, because it picks the nearest
+  spot without checking a route.
+- Decided: do not chase the slot (a 3-4 deg window with a 0.19 m center error).
+  Such a candidate is still reported by the final round (>= 1 observation,
+  <= 0.30 m spread) when the run ends. Before adding angles or rings to
+  `viewpoint_for`, it must discard spots not reachable from the robot; coverage
+  already computes reachable areas, so that function goes to `mapa.py` for both.
 - Mission does not go back for "no plan points left" while a doubtful candidate is
   still waiting for its visit.
 - To check in the simulator: the robot leaves as soon as it arrives. If fusion
