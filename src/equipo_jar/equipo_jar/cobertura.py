@@ -15,20 +15,9 @@ from rclpy.node import Node
 from rclpy.time import Time
 from tf2_ros import Buffer, TransformException, TransformListener
 
+from equipo_jar.mapa import planar_yaw
 from equipo_jar.comun import QOS_ESTADO, QOS_MAPA, correr
 from equipo_jar.cobertura_plan import Camera, Grid, Pose, Settings, angle_difference, make_plan
-
-
-def planar_yaw(q):
-    """Require a normalized quaternion representing a planar rotation."""
-    values = (q.x, q.y, q.z, q.w)
-    if not all(math.isfinite(v) for v in values):
-        raise ValueError('rotation must be finite')
-    if abs(sum(v * v for v in values) - 1.0) > 1e-3:
-        raise ValueError('rotation quaternion must be normalized')
-    if abs(q.x) > 1e-3 or abs(q.y) > 1e-3:
-        raise ValueError('map and robot rotations must be planar')
-    return math.atan2(2 * q.w * q.z, 1 - 2 * q.z * q.z)
 
 
 def camera_from_transform(transform):
@@ -105,12 +94,7 @@ class Cobertura(Node):
 
     def al_recibir_mapa(self, mapa):
         try:
-            if mapa.header.frame_id != 'map':
-                raise ValueError('map frame must be map')
-            origin = mapa.info.origin
-            grid = Grid(mapa.info.width, mapa.info.height, mapa.info.resolution,
-                        list(mapa.data), Pose(origin.position.x, origin.position.y,
-                                              planar_yaw(origin.orientation)))
+            grid = Grid.from_occupancy_grid(mapa)
         except (ValueError, TypeError) as exc:
             self.get_logger().error(f'Map rejected: {exc}')
             return

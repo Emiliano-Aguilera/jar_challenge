@@ -1,5 +1,32 @@
 # Coverage work status
 
+## Current task: shared reachability (2026-10-27)
+
+- Branch `cobertura/mapa-alcanzable`, based on development `d7e8057` (PRs
+  #19-21 merged). The first_pending compatibility fix is already merged in #20.
+- Reused the clean map checkout. The PR #16 checkout and its uncommitted notes
+  remain untouched; PR #16 remains a separate draft with behaviour pending.
+- Shared the existing conservative Grid/Pose/connectivity code through mapa.py,
+  with backward-compatible coverage imports and a ROS-free OccupancyGrid adapter.
+  New `reachable_from` filters a radius-safe connected component; no snapping
+  of an unsafe robot start, no diagonal corner cuts, unknown cells blocked.
+- Focused geometry/planning: 88 tests passed. Full verifier passes, including
+  137 outer tests, build/static checks and map-wait/interface audit (zero issues).
+- Differential check against development d7e8057: all 18 generated plans
+  match exactly, including diagnostics and metrics; all 18 safe components
+  also match. Recorded pocket map: exterior ring points at 174/175 degrees
+  remain connected; the interior point at 285 degrees is rejected. This is
+  static geometry with rounded log inputs, not a new inspection run.
+  Evidence: ignored `build/verificacion/cobertura/mapa-compartido/`.
+- API, integration steps and model limits: `MAP_REACHABILITY.md`.
+  Mission still needs to adopt the helper. Nonempty candidate-box exclusion
+  zones and actual observation execution remain separate validation work.
+- Marco authorized commit/push/PR on 2026-10-27; merge only after all checks pass
+  and no pending issues, as previously requested. No new manual server run.
+  GitHub holds the publication status. Previous milestones below are historical.
+
+## Previous milestone: calculation efficiency
+
 Updated: 2026-10-26. Branch: `cobertura/calculo-eficiente`.
 Base: development `96134c0` (merged PR #14).
 

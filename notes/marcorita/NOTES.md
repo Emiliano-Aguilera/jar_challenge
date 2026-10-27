@@ -332,6 +332,26 @@ can we reduce travel cost without losing useful observations?
   feedback topic until both owners approve the agreement in INTEGRATION.md.
 - Useful range, observation dwell and target geometry still need perception
   experiments. Do not optimize away meaningful gaps using unconfirmed box sizes.
+## Shared map reachability (2026-10-27)
+
+- Bautista merged mission's box filter and the fifth selector argument in #20.
+  Metrics with [] still model no boxes; this does not test actual filtered views.
+- Agreed next need: make coverage's reachable-area implementation reusable by
+  inspection. A free point with clear sight can still be in a disconnected pocket.
+- Moved existing Grid/Pose geometry and connectivity to mapa.py, retaining the
+  coverage import paths. Added a message adapter and an explicit-radius,
+  explicit-threshold component query. No new route algorithm or shared params.
+- Invalid starts raise rather than snapping. Connectivity is computed once
+  outside a candidate loop. Keep observation clearance, sight checks, live
+  obstacle avoidance and box-zone filtering separate.
+- All 18 plans and components exactly match development d7e8057. Pocket-map
+  diagnostic rejects the disconnected interior point; it does not prove a new
+  successful inspection. Full verifier green, 137 outer tests; focused suites
+  88 passed. API/limits and Bautista's adoption steps: MAP_REACHABILITY.md.
+- Marco authorized publication of cobertura/mapa-alcanzable on 2026-10-27,
+  with merge after green checks and no pending issues. PR #16 stays separate
+  and draft; no mission source changes or new manual server run for this task.
+
 ## Mission identity review (2026-10-23)
 
 - Question: does Bautista's merged PR #9 resolve the distinct-view loss?
