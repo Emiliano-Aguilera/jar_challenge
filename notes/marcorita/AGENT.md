@@ -5,7 +5,21 @@ and `docs/team/INTERFACES.md`. Read `notes/marcorita/NOTES.md` for decisions.
 
 ## Local planner
 
-### Current task: shared map reachability (2026-10-27)
+### Current task: unblock mission's inspection tests (2026-10-27)
+
+Marco requested publishing/merging our rotated-map test fix to unblock PR #26,
+then explicitly preferred Bautista's final API without a compatibility layer.
+Branch cobertura/test-inspeccion-alcanzable is based on his pending branch
+mision/visitas-alcanzables (9b9fc1b); send its PR to that branch, not development.
+This keeps the test fix with the function signature change. Bautista remains
+responsible for merging his overall mission PR #26 into development.
+The test directly passes real rotated Grid/reachable cells; same assertions.
+See INSPECTION_ROTATED_TEST.md. No production or mission parameter edits.
+Publish and merge after green checks with no pending issues. Run local ROS
+tests on domain 177; Marco has a manual Gazebo/RViz session on domain 77.
+The shared helper is already merged in PR #23 (055a559). PR #16 stays separate.
+
+### Previous task: shared map reachability (2026-10-27)
 
 Branch cobertura/mapa-alcanzable from origin/development d7e8057. Marco asked
 to continue after Bautista's change. PR #20 is merged (f42cdd8), including the

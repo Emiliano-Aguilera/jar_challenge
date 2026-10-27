@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from equipo_jar.inspeccion import viewpoint_for
-from equipo_jar.mapa import cell_value, is_free, line_is_clear
+from equipo_jar.mapa import Grid, cell_value, is_free, line_is_clear
 
 
 def make_grid(yaw, width=6, height=4, resolution=0.5):
@@ -16,7 +16,8 @@ def make_grid(yaw, width=6, height=4, resolution=0.5):
     )
     info = SimpleNamespace(
         origin=origin, width=width, height=height, resolution=resolution)
-    return SimpleNamespace(info=info, data=list(range(width * height)))
+    return SimpleNamespace(header=SimpleNamespace(frame_id='map'),
+                           info=info, data=list(range(width * height)))
 
 
 def world_point(grid, local_x, local_y, yaw):
@@ -81,8 +82,11 @@ def test_existing_clearance_and_sight_calls_use_the_rotated_wall():
 def test_mission_inspection_finds_a_view_on_a_rotated_map():
     grid = make_grid(math.pi / 2, width=80, height=80, resolution=0.05)
     grid.data = [0] * len(grid.data)
+    cell_grid = Grid.from_occupancy_grid(grid)
+    reachable = cell_grid.reachable_from(0.0, 1.5, radius=0.21, threshold=25)
     view = viewpoint_for(
         grid, cx=0.0, cy=3.0, robot_x=0.0, robot_y=1.5,
-        distance=0.8, clearance=0.25, n_angles=12, min_shift=0.4, box_margin=0.25)
+        distance=0.8, clearance=0.25, n_angles=12, min_shift=0.4, box_margin=0.25,
+        cell_grid=cell_grid, reachable=reachable)
     assert view is not None
     assert view == pytest.approx((0.0, 2.2, math.pi / 2))
