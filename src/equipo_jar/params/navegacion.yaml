@@ -14,7 +14,7 @@ amcl:
     tf_broadcast: true
     transform_tolerance: 0.5          # el LiDAR tiene ~136 ms de latencia
     robot_model_type: nav2_amcl::OmniMotionModel   # mecanum
-    alpha1: 0.2
+    alpha1: 0.8                       # TEST ONLY: heading noise per radian turned
     alpha2: 0.2
     alpha3: 0.2
     # In OmniMotionModel alpha4 is the x/y noise added per radian turned. With 0.2 an
