@@ -145,3 +145,5 @@ mision:
     box_min_observations: 2
     box_clearance_m: 0.42
     box_clearance_sigmas: 1.0
+    visit_transit_radius_m: 0.15
+    visit_free_threshold: 25

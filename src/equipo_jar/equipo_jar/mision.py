@@ -22,6 +22,7 @@ from equipo_jar_msgs.msg import Candidatas
 from equipo_jar.confirmacion import select_to_report
 from equipo_jar.exploracion import yaw_from_quaternion, first_pending, angle_difference, goal_position, box_zones
 from equipo_jar.inspeccion import pick_doubtful, viewpoint_for
+from equipo_jar.mapa import Grid
 
 from tf2_ros import Buffer, TransformListener, TransformException
 from rclpy.time import Time
@@ -49,9 +50,11 @@ class Mision(Node):
                                             'stuck_distance_m': 0.05, 'stuck_angle_rad': 0.2, 'stop_wait_s': 1.0,
                                             'done_limit_s': 590.0, 'turn_in_place_m': 0.20, 
                                             'visit_max_attempts': 3, 'box_min_observations': 2,
-                                            'box_clearance_m': 0.42, 'box_clearance_sigmas': 1.0})  # parámetros ajustables
+                                            'box_clearance_m': 0.42, 'box_clearance_sigmas': 1.0,    
+                                            'visit_transit_radius_m': 0.15, 'visit_free_threshold': 25,})  # parámetros ajustables
 
         self.mapa = None
+        self.grid = None
         self.plan = None
         self.candidatas = None
 
@@ -108,6 +111,11 @@ class Mision(Node):
                 f'resolución {mapa.info.resolution:.3f} m')
             self.t0 = self.get_clock().now()
         self.mapa = mapa
+        try:
+            self.grid = Grid.from_occupancy_grid(mapa)
+        except ValueError as e:
+            self.grid = None
+            self.get_logger().error(f'No pude armar la grilla del mapa: {e}. Sin inspecciones.')
 
     def seconds_since_t0(self):
         if self.t0 is None:
@@ -416,9 +424,18 @@ class Mision(Node):
         if c is None:
             return False
         x_robot, y_robot, _ = self.current_pose()
+        if self.grid is None:
+            return False
+        try:
+            reachable = self.grid.reachable_from(x_robot, y_robot, self.p['visit_transit_radius_m'],
+                                                self.p['visit_free_threshold'])
+        except ValueError as e:
+            self.get_logger().info(f'No calculo zona alcanzable: {e}. Inspecciono más tarde',
+                                    throttle_duration_sec=5.0)
+            return False
         view = viewpoint_for(self.mapa, c.centro.x, c.centro.y, x_robot, y_robot, self.p['visit_distance_m'], 
                             self.p['visit_clearance_m'], self.p['visit_angles'], self.p['visit_min_shift_m'],
-                            self.p['visit_box_margin_m'])
+                            self.p['visit_box_margin_m'], self.grid, reachable)
         if view is None:
             _, attempts = self.failed_inspections.get(c.id, (0, 0))
             self.failed_inspections[c.id] = (c.observaciones, attempts + 1)
