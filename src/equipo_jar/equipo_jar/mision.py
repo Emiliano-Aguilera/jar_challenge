@@ -20,7 +20,7 @@ from equipo_jar.comun import QOS_ESTADO, QOS_MAPA, correr, parametros_en_vivo
 from equipo_jar.reportes import armar_reporte
 from equipo_jar_msgs.msg import Candidatas
 from equipo_jar.confirmacion import select_to_report
-from equipo_jar.exploracion import yaw_from_quaternion, first_pending, angle_difference, goal_position, box_zones
+from equipo_jar.exploracion import yaw_from_quaternion, first_pending, angle_difference, goal_position, box_zones, near_box
 from equipo_jar.inspeccion import pick_doubtful, viewpoint_for
 from equipo_jar.mapa import Grid
 
@@ -211,6 +211,23 @@ class Mision(Node):
             self.stuck_canceling = True
             self.get_logger().warning(f'Cancelo el viaje: {reason}')
 
+    def check_goal_near_box(self):
+        if self.state != 'exploring':
+            return
+        elif self.nav_state != 'moving':
+            return
+        elif self.current_point is None:
+            return
+        elif self.stuck_canceling:
+            return
+        x = self.current_point.pose.position.x
+        y = self.current_point.pose.position.y
+        if near_box(x, y, self.current_box_zones()):
+            self.current_goal.cancel_goal_async()
+            self.get_logger().info(f'Cancelo el viaje: el punto del plan ({x:.2f},{y:.2f}) '
+                                    f'quedó cerca de una caja')
+            self.current_point = None
+
     def handle_on_goal_response(self, future):
         goal_handle = future.result()
         if not goal_handle.accepted:
@@ -280,6 +297,7 @@ class Mision(Node):
         if self.seconds_since_t0() < self.p['start_wait_s']:
             return
         self.check_stuck()
+        self.check_goal_near_box()
         if self.state == 'exploring':
             reason = self.reason_to_return()
             if reason is not None:
