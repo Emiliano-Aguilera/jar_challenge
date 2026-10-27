@@ -360,3 +360,49 @@ Goal (-2.92,1.68, yaw 0) is in the middle of a 0.55 m corridor (west side); the 
 reached it. With 3 s the controller aborted more often, and the BT's spin/backup/wait moved the
 robot inside the narrow corridor until even planning failed. Reverted to bb0f061's 0.3 m / 5 s:
 the final config is bb0f061's (validated above).
+
+## Localization: AMCL drifts after in-place turns (from 2026-10-27)
+
+### Q: why did AMCL put the robot 0.54 m off, inside a wall? (Marco's report)
+
+- Evidence (Marco, laberinto_1, 37c2306, batch 20261026-181111): AMCL fine for 188 s (median
+  0.075 m against the judge's trajectory), then in the left corridor (x ~ -2.8, y 1.6 -> 0.2) the
+  error grows to 0.30 m in 5 s and 0.54 m at t=208.8 s, estimate inside the wall at (-2.27,0.18).
+  The planner then fails with the start inside an obstacle (62 "failed to create plan", 9
+  spin/backup/wait, 7 "backup failed") and the robot stays there until the end (300 s). Iteration
+  11 above (115 planner failures at (-2.88,1.6), same corridor) was most likely the same thing.
+- What it is not: odometry (per AMCL update, odometry and ground truth agree within ~1 mm and
+  0.01 rad: no slip), the map (pgm and world walls agree within 0.10 m there), TF or timing.
+  The scan matches the map perfectly at the true pose (AMCL-like score 18.5 vs 6.7 at AMCL's pose).
+- Mechanism (recording, `/particle_cloud`): the x covariance grows only during in-place turns
+  (0.13 -> 0.45 m). Nav2 Humble `OmniMotionModel` adds x and y noise per radian turned with
+  `alpha4` (`sqrt(alpha4 * dtheta^2)` in both). With 0.2, a 90° turn spreads the particles ~0.2 m
+  per axis. Mission turns a lot at each viewpoint, so 5-10 % of the particles ended 0.8-1.0 m
+  east, in the next corridor across the wall. The likelihood field sums `pz^3` over beams, so a
+  pose that matches half the beams still keeps ~half the weight and those particles survive.
+  AMCL's estimate is the mean of the biggest cluster (0.5 m bins), and the bins bridge both
+  corridors, so the mean slides into the wall.
+- Offline replay (scratchpad `replay_amcl.py`: Nav2's omni motion model, likelihood field,
+  resampling, KLD limit and clustering, fed with the recorded `/scan` and `/odom`, 8 seeds,
+  t=181-211 s):
+
+| alpha4 | min_particles | Median | p90 | Max |
+| --- | --- | --- | --- | --- |
+| 0.2 (before) | 500 | 0.113 | 0.345 | 0.528 |
+| 0.2 | 2000 | 0.078 | 0.213 | 0.340 |
+| 0.1 | 500 | 0.026 | 0.087 | 0.196 |
+| 0.05 | 500 | 0.029 | 0.093 | 0.175 |
+| 0.02 | 500 | 0.029 | 0.060 | 0.114 |
+| **0.01** | 500 | 0.030 | 0.050 | 0.089 |
+| 0.005 | 500 | 0.028 | 0.045 | 0.075 |
+
+  Starting from the drifted cloud (t=188.6): median 0.41 m with 0.2, 0.07 m with 0.01 (it comes
+  back). Start-up with a hand-placement error (initial pose sent at the origin, 10 no-motion
+  updates, then the recorded motion): converges with 0.2 and 0.01 alike up to 0.55 m / 1.0 rad;
+  a 90° yaw error does not converge (5 of 6 seeds 2.5-3 m off).
+- Change: `alpha4` 0.2 -> 0.01 (a full in-place turn adds ~0.09 m per axis, more than the real
+  robot's center drift while turning). The other alphas stay: odometry error while driving is
+  unknown on the real robot, and they did not cause this.
+- Expect: on laberinto_1 no AMCL error above ~0.15 m, no planner failures with the start inside
+  a wall; same scores on the other maps. Server batches queued on 2026-10-27 (runs 40444118089,
+  40444121588, 40444124745, 40444128006); the server was offline, result pending.
