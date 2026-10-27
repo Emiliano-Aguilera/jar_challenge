@@ -473,9 +473,10 @@ def width_is_consistent(width_px: float, fx: float, distance_m: float, side_m: f
     closer than the red thing (a wall corner in front of a distant box) or the box is mostly
     hidden: either way the observation is not trustworthy.
 
-    #PARAM: ratio_min = lower bound. Support: (0, 1). A box half hidden by a wall gives 0.5;
-            a wall corner 1 m in front of a box at 2.5-3.5 m gives 0.4-0.6. 0.6 trades the
-            most-occluded views (seen again from elsewhere) for rejecting those corners.
+    #PARAM: ratio_min = lower bound. Support: (0, 1). A wall corner 1 m in front of a box at
+            2.5-3.5 m gives 0.4-0.6, but central_cluster already handles that case; real boxes
+            seen while passing a doorway at 0.8 m measured 0.53-0.60. 0.45 keeps those and
+            still rejects gross mismatches.
     #PARAM: ratio_max = upper bound. Support: > 1. Two faces in diagonal give up to 1.41; the
             blob can also widen by a few pixels of blur. 1.8.
     """

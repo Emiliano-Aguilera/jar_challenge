@@ -70,8 +70,10 @@ deteccion:
     min_cluster_coverage: 0.6
     # --- Checks against false positives (a false report costs -100 and the -200 bonus) ---
     #PARAM: blob width / expected width of a box at the LiDAR distance (0 < min < 1 < max).
-    #       A corner 1 m in front of a box at 3 m gives ~0.5; a box half hidden ~0.5.
-    width_ratio_min: 0.6
+    #       Coarse sanity check: the central beams already fix the corner case (ratio ~0.5).
+    #       Real boxes seen while passing a doorway at 0.8 m measured 0.53-0.60 (laberinto_1
+    #       replay); 0.45 keeps them. Raise it only if false boxes slip past the central beams.
+    width_ratio_min: 0.45
     width_ratio_max: 1.8
     #PARAM: observations farther than this are dropped, m (> 0). Coverage looks from 2.0 m.
     max_range_m: 3.0
@@ -82,6 +84,13 @@ deteccion:
     map_wall_tolerance_m: 0.15
     #PARAM: a mapped obstacle smaller than this is a drawn box, not a wall, m (> box side).
     map_box_extent_m: 0.40
+    #PARAM: drop a LiDAR range that the depth cloud inside the blob contradicts (true/false).
+    #       Off by default: in the simulator it rejected 16 % of correct observations (the cloud
+    #       disagrees by 0.6-1.5 m beyond ~2.5 m and below 0.6 m) and never a false one, because
+    #       the central beams catch those first. The real depth camera is worse. Extra guard only.
+    cloud_check: false
+    #PARAM: |cloud distance - LiDAR distance| above this is a contradiction, m (> cloud noise at 3 m).
+    cloud_lidar_max_gap_m: 0.5
     #PARAM: use the depth cloud when the LiDAR finds nothing in the wedge.
     use_cloud_fallback: true
     #PARAM: max age of the cloud relative to the scan, s (> 0).

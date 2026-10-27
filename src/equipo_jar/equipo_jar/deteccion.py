@@ -71,12 +71,14 @@ PARAM_DEFAULTS = {
     'min_cluster_coverage': 0.6,
     # Consistency checks against false positives (see vision.width_is_consistent,
     # vision.map_range_along). A false report costs a box (-100) and the fast bonus (-200).
-    'width_ratio_min': 0.6,
+    'width_ratio_min': 0.45,
     'width_ratio_max': 1.8,
     'max_range_m': 3.0,                  # observations farther than this are dropped
     'map_wall_check': True,              # drop a hit that lies on a mapped wall
     'map_wall_tolerance_m': 0.15,        # how close to the map's wall counts as "on the wall"
     'map_box_extent_m': 0.40,            # a mapped obstacle this small is a drawn box, not a wall
+    'cloud_check': False,                # drop a LiDAR range the depth cloud contradicts (see params.yaml)
+    'cloud_lidar_max_gap_m': 0.5,        # |cloud distance - LiDAR distance| above this = contradiction
     # Cloud (fallback range)
     'use_cloud_fallback': True,
     'cloud_max_age_s': 0.5,
@@ -102,7 +104,8 @@ class Detection(Node):
         self.p = parametros_en_vivo(self, PARAM_DEFAULTS)
 
         self.K = None                       # 3x3 intrinsics from camera_info
-        self.last_cloud = None              # latest PointCloud2 (fallback range)
+        self.last_cloud = None              # latest PointCloud2 (fallback range and cross-check)
+        self._cloud_cache = None            # (stamp key, (points (H,W,3), frame)) of the last converted cloud
         self.t_last_proc = None
         self.map = None                     # (grid (h, w) int16, resolution, origin_x, origin_y)
         self.rejections = {}                # reason -> count, logged every 10 s
@@ -302,18 +305,39 @@ class Detection(Node):
             if distance > float(self.p['max_range_m']):
                 self._reject('too_far')
                 continue
-            if not vision.width_is_consistent(
+            # A blob cut by the image border is narrower than the box for a reason that has
+            # nothing to do with the scene (a box passing by at 0.7 m fills the edge of the
+            # frame), so the size checks do not apply to it. Its range still comes from the
+            # central beams, and the other checks still run.
+            at_border = x <= 0 or x + w >= bgr.shape[1]
+            if not at_border and not vision.width_is_consistent(
                     w, self.K[0, 0], distance, side,
                     float(self.p['width_ratio_min']), float(self.p['width_ratio_max'])):
                 self._reject('width')
                 self.get_logger().debug(f'dropped: width {w} px inconsistent at {distance:.2f} m')
                 continue
             factor = float(self.p['max_area_factor'])
-            if factor > 0 and not vision.area_is_consistent(
+            if not at_border and factor > 0 and not vision.area_is_consistent(
                     blob.area, distance, self.K[0, 0], self.K[1, 1], side, factor):
                 self._reject('area')
                 self.get_logger().debug(f'dropped: area {blob.area:.0f} px inconsistent at {distance:.2f} m')
                 continue
+            # Depth cloud as a second opinion on the LiDAR range (Emiliano-Aguilera, 2026-10-27):
+            # on the recorded false reports the cloud inside the red blob was 1-2 m farther
+            # than the LiDAR (it saw the real box, the LiDAR saw the wall end), while on real
+            # boxes both agree within a few cm. No cloud, or too few valid points, never rejects:
+            # the real sensor has gaps of up to a second and ~38 % valid pixels.
+            # Skipped when the LiDAR range is below the cloud's own minimum range: there the
+            # cloud can only show something farther, which is not a contradiction.
+            if source == 'lidar' and self.p['cloud_check'] and distance >= vp.z_min_m:
+                face_cloud = self._face_from_cloud(blob, bgr.shape, vp, cam_frame, robot_frame, scan_stamp)
+                if face_cloud is not None:
+                    d_cloud = float(np.linalg.norm(face_cloud[:2]))
+                    if abs(d_cloud - distance) > float(self.p['cloud_lidar_max_gap_m']):
+                        self._reject('cloud_disagrees')
+                        self.get_logger().debug(
+                            f'dropped: LiDAR {distance:.2f} m vs cloud {d_cloud:.2f} m')
+                        continue
             face_map = self._transform(face_robot, robot_frame, 'map', scan_stamp)
             if face_map is None:
                 self._reject('no_tf_map')
@@ -348,7 +372,11 @@ class Detection(Node):
         cloud_stamp = Time.from_msg(cloud.header.stamp)
         if abs((cloud_stamp - stamp).nanoseconds) * 1e-9 > float(self.p['cloud_max_age_s']):
             return None
-        result = self._cloud_as_image(cloud, shape, cam_frame, cloud_stamp)
+        # One conversion per cloud message, shared by every blob of the frame.
+        key = (cloud.header.stamp.sec, cloud.header.stamp.nanosec)
+        if self._cloud_cache is None or self._cloud_cache[0] != key:
+            self._cloud_cache = (key, self._cloud_as_image(cloud, shape, cam_frame, cloud_stamp))
+        result = self._cloud_cache[1]
         if result is None:
             return None
         points, points_frame = result

@@ -141,7 +141,21 @@ One entry per decision: the question, what was tried, what was decided.
   ambiguous ones.
 - Not done: a perpendicular-baseline rule in fusion. The corner is a real point, so it is
   consistent from every viewpoint; the baseline would not have helped.
-- Validation: see the next entry (replays of the recorded runs).
+- Validation (replays of server recordings, `notes/SantosBunge/replay/`): the same bag through
+  `development` and through this branch, scored against the world's boxes.
+
+  | Recording | development | this branch |
+  | --- | --- | --- |
+  | maze_3 (batch 20261027-112638, the false report) | 69 obs, 16 false, FALSE candidate reported | 60 obs, 0 false, only the 2 real candidates |
+  | maze_4 (batch 20261027-112941) | 59 obs, 0 false | 59 obs, 0 false |
+  | laberinto_1 (batch 20261027-111526-d14d0a4) | 14 obs, 0 false, box 2 candidate at 0.19 m | 13 obs, 0 false, box 2 candidate at 0.06 m |
+
+  Ablation on the maze_3 bag, one defense at a time: the central beams alone give 0 false
+  observations (80 obs). Width, map and range rejected nothing false; the cloud check rejected
+  16 correct observations (cloud vs LiDAR off by 0.6-1.5 m beyond ~2.5 m and below 0.6 m), so
+  it ships OFF. `width_ratio_min` went from 0.6 to 0.45 after it dropped two real views of a
+  box seen through a doorway at 0.8 m (ratios 0.53-0.60). Blobs touching the image border are
+  exempt from the size checks.
 
 ## Next
 
