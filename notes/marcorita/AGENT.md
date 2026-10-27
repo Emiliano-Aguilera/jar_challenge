@@ -5,6 +5,33 @@ and `docs/team/INTERFACES.md`. Read `notes/marcorita/NOTES.md` for decisions.
 
 ## Local planner
 
+### Current task: shared map reachability (2026-10-27)
+
+Branch cobertura/mapa-alcanzable from origin/development d7e8057. Marco asked
+to continue after Bautista's change. PR #20 is merged (f42cdd8), including the
+fifth first_pending argument [] in offline metrics, with four green checks.
+Fresh snapshot metrics/exploration checks passed 56 tests. PR #19 reduced
+mission start_wait_s from 8 to 4; PR #21 records team integration requests.
+
+Grid, Pose, planar_yaw, cancellation and reachable_cells now live in mapa.py;
+old coverage import paths remain aliases. Grid.from_occupancy_grid copies a
+validated map-frame message; reachable_from returns a frozen connected disk-safe
+component, with explicit radius and occupancy threshold. See MAP_REACHABILITY.md.
+Mission source/parameters are untouched. Bautista still needs to use the helper
+in viewpoint_for; do not claim runtime inspection is fixed by this branch.
+Focused geometry/planning: 88 passed. Full verifier: 137 outer tests passed,
+build/static/interface/map-wait checks green. All 18 plans/diagnostics/metrics
+and safe components exactly match development. Recorded pocket-map check
+keeps exterior 174/175-degree points and rejects disconnected 285 degrees;
+static diagnostic only, not a new run. See STATUS and ignored mapa-compartido/.
+Marco authorized publication of this verified helper on 2026-10-27, with the
+standing instruction to merge after all checks pass and no pending issues.
+No new manual server job is authorized. GitHub holds the publication status.
+
+The prior coverage checkout remains on cobertura/recorrido-laberinto (PR #16
+DRAFT), with its pending local notes preserved. Do not merge that PR simply
+because this helper passes. The old task descriptions below are historical.
+
 - Current task: `cobertura/calculo-eficiente`, from development `96134c0`
   (merged PR #14). Marco asked for measurable coverage improvements while
   waiting for Bautista. Work locally in coverage; do not edit mission/Nav2 or
