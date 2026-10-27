@@ -169,8 +169,23 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
     (0.25 m) before its center, in case the map draws the boxes;
   - at least `visit_min_shift_m` (0.4 m) from the robot, so fusion gets a new view;
   - of the valid spots, the nearest to the robot.
-- Each candidate is visited once, even if the trip fails or there is no spot:
-  visited ones are remembered by position, like reports. Visits are not plan points.
+- Each candidate is visited once, even if the trip fails: visited ones are
+  remembered by position, like reports. Visits are not plan points.
+- No spot is not a visit (marcorita's INSPECTION_REPLAY.md, laberinto_1). Mission
+  keeps it apart, by candidate id: the observations it had and the number of tries.
+  It tries again only when the candidate has more observations (a new center can
+  give a spot; the same center gives the same answer) and fewer than
+  `visit_max_attempts` (3) tries. Until then it is skipped, so it does not hide
+  other candidates or block the return for "no plan points left".
+- Not covered yet: a failed trip still counts as a visit, and with no spot the
+  robot does not turn to face the candidate from where it is.
+- Seen (laberinto_1, 300 s, 3 runs on e0f64a4): in run 1 candidate id 2 at
+  (-2.07, 1.53) with 2 observations was the real box at (-1.90, 1.45), 0.19 m off
+  (a report there scores 100). No spot, and no new observations came, so no retry;
+  coverage went on in the same tick. The box is in the small upper-left pocket:
+  probably every free point there is closer than `visit_distance_m` (0.8 m), and
+  points at 0.8 m are behind its walls. Bigger rings did not help in marcorita's
+  replay; smaller ones (0.5-0.6 m) were not tried.
 - Mission does not go back for "no plan points left" while a doubtful candidate is
   still waiting for its visit.
 - To check in the simulator: the robot leaves as soon as it arrives. If fusion

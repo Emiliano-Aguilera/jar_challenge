@@ -81,6 +81,7 @@ def test_box_drawn_in_the_map_is_not_taken_as_a_wall():
 
 MIN_OBS = 2
 DIST_MIN = 0.4
+MAX_ATTEMPTS = 3
 
 
 def cand(id_, x, y, observaciones=3):
@@ -88,10 +89,11 @@ def cand(id_, x, y, observaciones=3):
     return SimpleNamespace(id=id_, centro=SimpleNamespace(x=x, y=y), observaciones=observaciones)
 
 
-def pick(cands, reported_ids=None, reported_points=None, inspected_points=None):
+def pick(cands, reported_ids=None, reported_points=None, inspected_points=None, failed=None):
     # El robot está en (0, 0).
     return pick_doubtful(cands, reported_ids or set(), reported_points or [],
-                         inspected_points or [], MIN_OBS, DIST_MIN, 0.0, 0.0)
+                         inspected_points or [], MIN_OBS, DIST_MIN, 0.0, 0.0,
+                         failed or {}, MAX_ATTEMPTS)
 
 
 TWO = [cand(1, 1.0, 0.0), cand(2, 3.0, 0.0)]
@@ -132,3 +134,39 @@ def test_does_not_modify_the_lists_it_gets():
     assert reported_ids == {9}
     assert reported_points == [(5.0, 5.0)]
     assert inspected_points == [(6.0, 6.0)]
+
+
+# --- Intentos fallidos (sin lugar para mirarla) ---
+# `failed` guarda, por id, (observaciones en el último intento, cantidad de intentos).
+# Una candidata fallida vuelve solo si tiene observaciones nuevas y le quedan intentos.
+
+def test_skips_a_failed_one_without_new_observations():
+    # Mismas 3 observaciones que en el intento: viewpoint_for daría lo mismo.
+    assert pick(TWO, failed={1: (3, 1)}).id == 2
+
+
+def test_retries_a_failed_one_with_new_observations():
+    cands = [cand(1, 1.0, 0.0, observaciones=4), cand(2, 3.0, 0.0)]
+    assert pick(cands, failed={1: (3, 1)}).id == 1
+
+
+def test_skips_a_failed_one_at_max_attempts():
+    cands = [cand(1, 1.0, 0.0, observaciones=10), cand(2, 3.0, 0.0)]
+    assert pick(cands, failed={1: (3, MAX_ATTEMPTS)}).id == 2
+
+
+def test_a_failed_one_does_not_block_the_return():
+    # Sin evidencia nueva no queda ninguna dudosa: la vuelta por "no quedan puntos
+    # ni dudosas" puede salir.
+    assert pick([cand(1, 1.0, 0.0)], failed={1: (3, 1)}) is None
+
+
+def test_failed_is_by_id_not_by_position():
+    # Otra candidata en el mismo lugar, con otro id, no queda salteada.
+    assert pick([cand(5, 1.0, 0.0)], failed={1: (3, 1)}).id == 5
+
+
+def test_does_not_modify_failed():
+    failed = {1: (3, 1)}
+    pick(TWO, failed=failed)
+    assert failed == {1: (3, 1)}
