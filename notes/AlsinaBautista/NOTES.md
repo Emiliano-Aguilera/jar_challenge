@@ -392,6 +392,13 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
   (`test_return_tolerance_is_not_tighter_than_nav2`).
 - Log: "Regreso N: a X m y Y rad de la largada". Compare with the judge's
   `distancia_a_largada` (true pose, simulator) to see the localization error.
+- Checked (300 s, batches 20261028-104330-02aff82 and -2, RTF 0.96-0.97): both
+  returns passed on the first try, the check took 0.5-0.7 s. maze_1: mission measured
+  0.081 m, the judge (true pose) 0.045 m; maze_3: 0.083 m and 0.082 m. Nav2 stops as
+  soon as it is inside its 0.10 m tolerance, so the error is mostly that tolerance, not
+  localization. maze_3's 0.082 m leaves 1.8 cm under the 4-wheel rule (0.10 m): the
+  tighter return tolerance in navigation is needed. Scores 500 and 600, done at 204 s
+  and 159 s, no collisions or close calls.
 
 ## Next (2026-10-28)
 
