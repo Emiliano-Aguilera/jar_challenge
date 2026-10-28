@@ -48,6 +48,7 @@ gh workflow run simular.yml -R Emiliano-Aguilera/jar_challenge \
 | `repeticiones` | `1` | Runs per map, 1–10 |
 | `duracion` | `120` | Seconds per run after the judge publishes `/map`, 10–600 |
 | `grabar` | `false` | `true`: record an MCAP per run for the viewer |
+| `largada` | `0,0,0` | Robot start `x,y,yaw` (m, m, rad), as if placed by hand. At most 0.25 m from the origin |
 
 - Each run (one map × one repetition) is one job. At most 12 runs per request and 2 of
   them at once. The server has 4 runners for runs, shared by everyone through GitHub's
@@ -57,6 +58,24 @@ gh workflow run simular.yml -R Emiliano-Aguilera/jar_challenge \
 - **Keep requests small:** 1 map, 1 run, the shortest duration that shows what you
   want to see. Ask for more runs only to compare options or before a merge. Everyone
   shares the 4 runners.
+
+### Start offset (`largada`)
+
+In the competition the robot is placed by hand near the origin, with no exact pose and no
+known yaw. `largada` reproduces that: the simulator starts the robot at `x,y,yaw` in `map`,
+and your code is not told (as in the competition). Up to 3 decimals, e.g.
+`-f largada=0.15,-0.1,0.2` (the organizers' example). Use it to test localization:
+
+- **AMCL's error against the true pose**, mostly in the first seconds after `/map`. Use
+  `grabar=true` and compare `/amcl_pose` with `/ground_truth/odom` in the recording (its
+  `world` frame equals `map`), or look at it in the viewer (below).
+- **The return check.** If AMCL has not converged when `mision` saves the start pose, the
+  return check is fooled the same way. Compare `mision`'s `Regreso` line in `equipo.log` with
+  `distancia_a_largada_en_done` in `resultado.json` (the judge's real distance).
+- Starts worth trying: `0,0,0`, `0.15,-0.1,0.2`, and a sloppy one such as `0.2,0.15,0.5`.
+
+Scores are not affected: the judge measures from the true start. The summary's header shows
+the offset.
 
 ### Results
 
@@ -174,6 +193,10 @@ odometry's origin, where the robot starts; it is exact at the start. So:
   simulator aligns the true pose with the **first** `map → odom` it sees, so an error in your
   first localization estimate stays in the true pose for the rest of the run
   (`pruebas.launch.py`'s fixed one is exact).
+- **Runs with `largada`:** the copy of `/map` is placed by the known offset, so it is still
+  exact at the start. The true pose stays aligned with the real start for the whole run, so
+  its gap to `base_footprint` is odometry drift only. Localization error is the gap between
+  `/map` (turn it on) and the copy.
 - **"Missing transform from frame `laser_link` to frame `odom`"** in the `/scan` settings:
   harmless if the lidar draws. The TF chain is there; Lichtblick keeps an error from the first
   moment (or a seek) before the transforms arrived.
