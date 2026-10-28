@@ -5,7 +5,23 @@ and `docs/team/INTERFACES.md`. Read `notes/marcorita/NOTES.md` for decisions.
 
 ## Local planner
 
-### Current task: execution audit and organizer tips (2026-10-28)
+### Current task: blind spots (2026-10-28)
+
+Marco requested correcting Hans's laberinto_1 gap. Branch cobertura/puntos-ciegos
+starts at development be2ab90 in jar_challenge-ciegos. CPU optimization remains
+uncommitted/unpublished in the separate mapa checkout, cobertura/orden-eficiente.
+Read BLIND_SPOTS.md. Actual recorded images show the box is seen during two
+planned views and generates two observations, followed by failed inspection.
+The earlier approximate-point-only conclusion was incomplete. Do not hardcode
+practice box coordinates or claim a fix from point geometry alone. Marco
+authorized the mission integration, publication as a draft PR and one recorded
+600 s laberinto_1 run. No other new server run is authorized. Marco reconnected
+Tailscale. Read REVISIT_INTEGRATION.md: 33 focused tests and the full verifier
+(170 package tests) passed. Recorded mission replay sends the fallback but
+never credits missing new observations. Behavior/score validation is pending.
+PR #16 remains separate and draft.
+
+### Previous task: execution audit and organizer tips (2026-10-28)
 
 Branch cobertura/auditoria-robusta started from development 93bdd59 and was
 fast-forwarded to b271132 (#31), then 90a4fca (#32), as Marco flagged merges. Marco requested
