@@ -249,7 +249,9 @@ planner_server:
       # Con 0.2 el camino terminaba hasta 0.28 m lejos y el robot quedaba ahí sin llegar nunca
       # (punto de vista sobre una caja: 50 s). Con 0 rechazaba objetivos en el borde (+9 s).
       tolerance: 0.05
-      use_astar: true
+      # Dijkstra (Nav2's default). With A*, NavFn sometimes fails to extract a path that
+      # exists ("Failed to create plan from potential"): maze_1's return lost ~16 s.
+      use_astar: false
       allow_unknown: false
 
 behavior_server:
