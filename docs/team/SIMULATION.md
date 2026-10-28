@@ -65,14 +65,18 @@ Each run's job has a **summary** (the run's page on GitHub, scroll down), in Spa
 | Column | Meaning |
 | --- | --- |
 | Estado | `ok`; `fallo` (there is a result, but the run reported an error, e.g. violations or your launch died); `timeout`, `cancelada`, `sin_resultado` (no result) |
-| Puntaje | The practice score (`tools/puntaje.py`). Collisions are not counted (nobody calls `/juez/colision`) |
+| Puntaje | The practice score (`tools/puntaje.py`). It does not subtract collisions (nobody calls `/juez/colision`): see Choques |
+| Choques | Collisions with walls or boxes, e.g. `2 (1 pared, 1 caja)`. Counted in the simulator from the robot's true pose (gap ≤ 5 mm). The competition takes 50 points for each. A bounce can count as several. `-`: no count |
+| Casi | Close calls: within 3 cm of a wall or box without touching |
 | Fin | Why the run ended: `tiempo` (time up), `done`, `inmovil` (60 s still), `salida`, `vuelco` |
 | Violaciones | Protocol errors the judge saw: motion or reports before `/map`, wrong QoS, malformed reports |
 | RTF | Real-time factor: simulated time / real time. Under ~0.9 the PC is overloaded and results may differ |
 
 Below that, per victim: points, distance from the report to the box, and which report
-counted. Links: a plot (`gráfico`), the full summary (`resumen`), the run's files (logs:
-`equipo.log` is your launch's output) and, with `grabar=true`, the recording (`grabación`).
+counted. Links: a plot (`gráfico`), the full summary (`resumen`), each collision's time
+and place (`choques`; its times are simulated time, the judge's are real time), the run's
+files (logs: `equipo.log` is your launch's output) and, with `grabar=true`, the recording
+(`grabación`).
 
 **To watch a recording:** Actions tab → "simular" → your run → the job (one per map and
 repetition) → scroll to the summary → `grabación` (Tailscale on). It opens in the browser
@@ -191,7 +195,7 @@ gh run list -R Emiliano-Aguilera/jar_challenge --workflow simular.yml --user <yo
 gh run watch <run-id> -R Emiliano-Aguilera/jar_challenge --exit-status
 # 3. Read the results: score (total) and RTF of each run.
 gh run download <run-id> -R Emiliano-Aguilera/jar_challenge -D /tmp/sim-<run-id>
-jq '.corridas[] | {nombre, estado, total, rtf, termino_por, violaciones}' /tmp/sim-<run-id>/*/resumen.json
+jq '.corridas[] | {nombre, estado, total, choques, rtf, termino_por, violaciones}' /tmp/sim-<run-id>/*/resumen.json
 # (no jq? read /tmp/sim-<run-id>/*/resumen.md: same numbers, as tables)
 # Recording links (only with grabar=true; give them to your user, they need Tailscale):
 jq -r '.corridas[] | "\(.nombre) \(.enlaces.grabacion // "no recording")"' /tmp/sim-<run-id>/*/resumen.json
@@ -204,7 +208,8 @@ gh run cancel <run-id> -R Emiliano-Aguilera/jar_challenge
 - The run waits in the queue if the runners are busy; `gh run watch` keeps waiting.
 - One artifact per run, a folder `lote-<batch id>` (a date and commit, not the run id) with
   `resumen.json` and, per run, `corridas/<map>-r01/` (`resultado.json`, `grafico.png`).
-- `total` is the score, `rtf` the real-time factor, `estado` must be `ok`. `null` values
+- `total` is the score, `choques` the collisions (not subtracted from `total`; each costs 50
+  points in the competition), `rtf` the real-time factor, `estado` must be `ok`. `null` values
   mean the run gave no result: read the log. A score of 0 is normal for code that doesn't
   find and report victims yet (e.g. the template).
 - Limits: 12 runs per request, `duracion` 10–600, maps from the table above.
