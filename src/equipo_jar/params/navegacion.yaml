@@ -216,6 +216,9 @@ global_costmap:
                                       # por el medio igual, por la inflación
       track_unknown_space: true
       transform_tolerance: 0.5
+      # Full grid on /global_costmap/costmap every publish (1 Hz, ~14 KB). Without it Nav2 sends
+      # it once and then only costmap_updates: a reader of costmap would never see the boxes.
+      always_send_full_costmap: true
       plugins: [static_layer, obstacle_layer, inflation_layer]
       static_layer:
         plugin: nav2_costmap_2d::StaticLayer
