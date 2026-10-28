@@ -1,5 +1,11 @@
 # Coverage checks
 
+Current command-position/time proxies, explicit goal-result records and noise
+sensitivity tools are documented in
+[`EXECUTION_AUDIT.md`](../notes/marcorita/EXECUTION_AUDIT.md).
+Historical identity-only metrics remain for comparisons; they do not model
+mission's in-place command substitution, dynamic boxes or actual camera frames.
+
 From the repository root, in Ubuntu 22.04 with ROS 2 Humble:
 
 ```bash
