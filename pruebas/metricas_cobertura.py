@@ -27,8 +27,11 @@ class Trace:
         return self.events[-1].elapsed if self.events else self.startup_delay
 
 
-def mission_indices(poses, distance, angle):
-    """Use mission's function unchanged, assuming each sent goal succeeds."""
+def mission_indices(poses, distance, angle, zones=()):
+    """Real selector with fixed box zones, assuming each sent goal succeeds.
+
+    Fixed zones are a diagnostic scenario, not a dynamic detection replay.
+    """
     if not all(math.isfinite(v) and v > 0 for v in (distance, angle)):
         raise ValueError('mission tolerances must be finite and positive')
     messages = []
@@ -40,7 +43,7 @@ def mission_indices(poses, distance, angle):
     lookup = {id(message): index for index, message in enumerate(messages)}
     visited, selected = [], []
     while True:
-        point = first_pending(messages, visited, distance, angle, [])
+        point = first_pending(messages, visited, distance, angle, zones)
         if point is None:
             return tuple(selected)
         index = lookup[id(point)]

@@ -5,7 +5,45 @@ and `docs/team/INTERFACES.md`. Read `notes/marcorita/NOTES.md` for decisions.
 
 ## Local planner
 
-### Current task: unblock mission's inspection tests (2026-10-27)
+### Current task: execution audit and organizer tips (2026-10-28)
+
+Branch cobertura/auditoria-robusta started from development 93bdd59 and was
+fast-forwarded to b271132 (#31), then 90a4fca (#32), as Marco flagged merges. Marco requested
+local coverage improvements and supplied the organizer email. Read EXECUTION_AUDIT.md,
+ORGANIZER_TIPS.md and EXECUTION_RESULTS.md before continuing. Marco authorized
+publishing the small evaluator/auditor/tests/notes PR and merging after all checks
+pass with no pending issues on 2026-10-28. Heading experiment scripts/tests are
+excluded and remain local. No new manual server run is authorized; three earlier
+authorized runs were consumed.
+PR #16 remains separate and draft; this audit does not unblock its merge.
+
+New pure tools use the real mission selector and command-position substitution,
+optional fixed box zones, current start/settle waits, explicit failed/canceled
+records and clock/pose provenance. The normal budget report now adds the
+mission_execution command proxy; legacy fields remain for historical comparison.
+All visibility is geometric, not an image ack. No runtime algorithm/parameter,
+launch, message, navigation, perception or mission source change in this branch.
+
+All 18 regenerated plans exactly match the saved reference. The actual-command
+proxy reproduces 19/43/30 lost dense cells in the three difficult starts; 58
+commands are position-shifted across 18 cases. Tests/static/CLI checks pass;
+see EXECUTION_RESULTS.md for counts. Heading-only full-grid experiments preserve
+regions at clock cuts and sampled 5/10/15-degree yaw envelopes, but remain offline:
+the complete search is slow and the bounded 16-trial search gained nothing.
+Do not activate it or claim score/detection gains. The Workshop 10 bag was not
+replayed. Test on ROS domain 177, separate from a possible manual domain-77 run.
+
+PR #31 adds cancellation after max_recoveries=10, excluding the return trip;
+selector/goal-position APIs and the prediction parameters remain unchanged.
+Explicit record audit now retains optional recovery counts without calling
+missing data zero. Canceled/failed goals still get no view credit. Prior 18-case
+geometry results are from 93bdd59; the modeled successful-goal logic is unchanged.
+PR #32 adds return checks and up to three tries, without changing the view
+selector/command transform. Return tolerance remains 0.10 m; Bautista/Hans's
+tighter return-only checker is still pending. Do not repeat the stale message
+asking him to implement a return check; ORGANIZER_TIPS.md is updated.
+
+### Previous task: unblock mission's inspection tests (2026-10-27)
 
 Marco requested publishing/merging our rotated-map test fix to unblock PR #26,
 then explicitly preferred Bautista's final API without a compatibility layer.

@@ -1,6 +1,32 @@
 # Coverage work status
 
-## Current task: rotated inspection regression (2026-10-27)
+## Current task: execution audit (2026-10-28)
+
+- Branch cobertura/auditoria-robusta, started at 93bdd59, now updated to b271132
+  after mission #31 (10-recovery cancellation, except return). Mission #25,
+  #26, #28 and collision counter #29 are merged, with four green checks each.
+- Implemented pure command prediction, fixed-zone scenarios, explicit result
+  record audit and sampled-error visibility. Budget JSON/CSV now include a
+  current command proxy; the human report uses it, retaining old proxy fields.
+- Re-evaluated all 18 cases with dense geometry: all saved plans match exactly;
+  three difficult starts lose 19/43/30 cells after command substitution; the
+  other 15 have no final geometric loss. These are cells, not missed boxes.
+- Added heading-only experiments with set-based early-clock guards, real
+  selector equivalence and error samples at 5/10/15 degrees. Complete search
+  improves three tested cases but is too costly to activate; the bounded
+  16-trial version gained nothing and was rejected as a runtime improvement.
+- Marco authorized publishing only the small evaluator/auditor/tests/notes PR
+  on 2026-10-28, then merging after all checks pass with no pending issues.
+  Heading experiment scripts/tests remain local and are excluded. No production
+  algorithm/shared parameter change or new manual simulation is part of it.
+  See EXECUTION_AUDIT.md, EXECUTION_RESULTS.md and ORGANIZER_TIPS.md.
+- #31 does not alter selection/command geometry or the modeled waits. Actual
+  audit records retain recovery counts when provided; missing counts stay unknown.
+- Updated again to 90a4fca (#32, return checks/retries). View selection/geometry
+  stays unchanged; return-only navigation precision is still coordinated by
+  Bautista/Hans. Organizer handoff drafts are updated to acknowledge this work.
+
+## Previous task: rotated inspection regression (2026-10-27)
 
 - Branch cobertura/test-inspeccion-alcanzable, based on mission branch 9b9fc1b.
 - Mission PR #26 changes viewpoint_for to require cell_grid and reachable.
