@@ -229,6 +229,21 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
   as with any failed goal; a stuck return ends the run.
 - Not covered: Nav2 never answering a goal (`sending` forever). Nav2 is down then,
   and no new goal would help.
+- Problem (2026-10-28): the motion test never fired in 23 server runs. Nav2's own
+  recoveries (spin, backup) move the robot and reset the stuck timer, so a goal on an
+  obstacle that is not in `/map` took 27-44 s to fail.
+- Decided: mission reads `number_of_recoveries` from Nav2's feedback (it counts each
+  costmap clear, spin, wait and backup in the trip) and cancels an exploration trip
+  when it reaches `max_recoveries` (10, an integer). Not for the trip back. Each
+  trip's count is logged with its status, to tune the limit.
+- Checked (maze_1, 300 s, batch 20261028-100454-363bade, RTF 0.96): the goal next to
+  the blue box was cancelled at 21 s with 10 recoveries (27-28 s before at the same
+  RTF). The trip through the narrow gap next to the red box reached 7 and went on, as
+  it should. The return reached 10 and was not cut. Score 500, back, done at 209 s
+  (220-233 s before). Healthy trips: 0 recoveries.
+- Why not lower: the gap trip needs 7 before it passes; 8 would save ~5 s on blocked
+  goals but leaves no margin. The real fix for blocked goals is checking them against
+  Nav2's costmap (see Next).
 
 ## How does mission turn at a viewpoint?
 
@@ -364,11 +379,8 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
 
 ## Next (2026-10-28)
 
-Now (mission):
-- Cancel exploration trips when Nav2's feedback reports `max_recoveries` recoveries
-  (start at 10). `check_stuck`'s motion test never fired in 23 server runs: Nav2's
-  recovery spins reset it. In run #72 healthy trips had 0-2 recoveries, stuck ones 9-19.
-  Not for the trip back.
+Done (mission): cancel exploration trips at `max_recoveries` Nav2 recoveries (see
+"What if navigation gets stuck?").
 
 Pending, in this order:
 1. Precise return. A person judges if the robot is inside the start circle
