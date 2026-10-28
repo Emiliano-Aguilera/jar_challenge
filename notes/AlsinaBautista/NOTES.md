@@ -229,6 +229,21 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
   as with any failed goal; a stuck return ends the run.
 - Not covered: Nav2 never answering a goal (`sending` forever). Nav2 is down then,
   and no new goal would help.
+- Problem (2026-10-28): the motion test never fired in 23 server runs. Nav2's own
+  recoveries (spin, backup) move the robot and reset the stuck timer, so a goal on an
+  obstacle that is not in `/map` took 27-44 s to fail.
+- Decided: mission reads `number_of_recoveries` from Nav2's feedback (it counts each
+  costmap clear, spin, wait and backup in the trip) and cancels an exploration trip
+  when it reaches `max_recoveries` (10, an integer). Not for the trip back. Each
+  trip's count is logged with its status, to tune the limit.
+- Checked (maze_1, 300 s, batch 20261028-100454-363bade, RTF 0.96): the goal next to
+  the blue box was cancelled at 21 s with 10 recoveries (27-28 s before at the same
+  RTF). The trip through the narrow gap next to the red box reached 7 and went on, as
+  it should. The return reached 10 and was not cut. Score 500, back, done at 209 s
+  (220-233 s before). Healthy trips: 0 recoveries.
+- Why not lower: the gap trip needs 7 before it passes; 8 would save ~5 s on blocked
+  goals but leaves no margin. The real fix for blocked goals is checking them against
+  Nav2's costmap (see Next).
 
 ## How does mission turn at a viewpoint?
 
@@ -362,9 +377,49 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
   2.17 s between the end of trip A and the start of trip B (0.15 s without the
   wait). The trip back started 0.19 s after the last trip, as designed.
 
-## Next
+## Next (2026-10-28)
 
-- Run it in the simulator once Nav2, localization and coverage are in `development`.
+Done (mission): cancel exploration trips at `max_recoveries` Nav2 recoveries (see
+"What if navigation gets stuck?").
+
+Pending, in this order:
+1. Precise return. A person judges if the robot is inside the start circle
+   (`tools/juez.py`); the rules only say "<= 0.25 m". If the whole robot (or the
+   wheels) must be inside, the centre within 0.25 m is not enough: the farthest
+   footprint corner is 0.207 m from `base_footprint`, ~4 cm of margin. Nav2 accepts
+   0.10 m today (`xy_goal_tolerance`). To do: ask the organizers what "inside" means
+   and how the circle is centred; a final check before `stopping` (recent pose,
+   position and heading near the start, robot still, one bounded correction if time
+   is left); with hans-die, a tighter tolerance only for the return (Humble: a second
+   goal checker picked by `goal_checker_id` in a return BT, sent in the goal's
+   `behavior_tree`), so exploration does not slow down.
+2. Start pose after a stable localization. Today `start_pose` is fixed with the first
+   goal, after `start_wait_s` (4 s). Agree with hans-die on a "ready" signal (e.g. after
+   AMCL's no-motion updates), with a max wait, and fix the start pose then.
+3. Turn error on the real robot. Localization asks AMCL for no-motion updates only at
+   the start (`actualizaciones_quieto`), so `settle_s` alone does not fix the heading
+   after a turn. Needs: updates after each turn and stop (localization), mission holds
+   reports meanwhile, perception/fusion drop observations taken in that window.
+4. Goals on obstacles that are not in `/map` (blue boxes, decoys): check the goal against
+   Nav2's global costmap before sending and while moving (interface change with
+   hans-die). maze_1 (4.08,0.78) failed in 3 of 3 runs, 27-44 s each.
+5. Planner (hans-die): NavFn with `use_astar: true` fails to extract paths that exist
+   (offline, Nav2's NavFn on the practice maps: 6-13% of start positions; 0% with
+   Dijkstra). NavFn also caps paths at ~2x the map's longest side (~12 m on maze_1), so
+   the trip back can fail from far away. Mission fallback: go back through visited points.
+6. Tests: shifted and turned starts, unmapped obstacles, Nav2 failures (retries, return).
+
+For other modules:
+- Perception: the point cloud subscription is always created (`deteccion.py`;
+  `use_cloud_fallback` is true by default). §7.1 warns it can add latency. Create it only
+  when the fallback is on, and decide if it stays on.
+- Navigation: speed limits are per axis (0.5 m/s in x and y), so a diagonal can reach
+  0.71 m/s. Measure sqrt(vx^2 + vy^2) on `/cmd_vel`.
+- Coverage/perception: a box seen through a gap may be unreachable (laberinto_1 V2).
+  Check how walls with gaps look in `/map`.
+
+Before the cutoff (Tue 3/11 9:00): every wait, tolerance, max tries and threshold as a
+named parameter in `params/`.
 
 ## Testing without the other modules
 

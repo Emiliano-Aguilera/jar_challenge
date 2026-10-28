@@ -52,7 +52,7 @@ class Mision(Node):
                                             'visit_max_attempts': 3, 'box_min_observations': 2,
                                             'box_clearance_m': 0.42, 'box_clearance_sigmas': 1.0,    
                                             'visit_transit_radius_m': 0.15, 'visit_free_threshold': 25,
-                                            'settle_s': 0.0})  # parámetros ajustables
+                                            'settle_s': 0.0, 'max_recoveries': 10})  # parámetros ajustables
 
         self.mapa = None
         self.grid = None
@@ -95,6 +95,8 @@ class Mision(Node):
         self.stop_since = None
 
         self.last_skipped = None
+
+        self.recoveries = 0
 
         self.create_subscription(OccupancyGrid, '/map', self.al_recibir_mapa, QOS_MAPA)
         self.create_subscription(Path, '/jar/plan_cobertura', self.al_recibir_plan, QOS_ESTADO)
@@ -169,7 +171,8 @@ class Mision(Node):
         goal = NavigateToPose.Goal()
         goal.pose = pose
         self.nav_state = "sending"
-        future = self.navegacion.send_goal_async(goal)
+        self.recoveries = 0
+        future = self.navegacion.send_goal_async(goal, feedback_callback=self.on_feedback)
         future.add_done_callback(self.on_goal_response)
         now = self.seconds_since_t0()
         self.goal_start_time = now
@@ -208,6 +211,8 @@ class Mision(Node):
             reason = 'viaje demasiado largo'
         elif now - self.last_motion_time > self.p['stuck_time_s']:
             reason = 'robot quieto'
+        elif self.state != 'returning' and self.recoveries >= self.p['max_recoveries']:
+            reason = f'Nav2 lleva {self.recoveries} recuperaciones'
         if reason is not None:
             self.current_goal.cancel_goal_async()
             self.stuck_canceling = True
@@ -254,10 +259,10 @@ class Mision(Node):
         status = future.result().status
         if status == GoalStatus.STATUS_SUCCEEDED:
             self.nav_state = 'arrived'
-            self.get_logger().info('Status succeded')
+            self.get_logger().info(f'Status succeded (recuperaciones: {self.recoveries})')
         else:
             self.nav_state = 'failed'
-            self.get_logger().info('Status failed')
+            self.get_logger().info(f'Status failed (recuperaciones: {self.recoveries})')
 
     def on_goal_result(self, future):
         try:
@@ -265,6 +270,18 @@ class Mision(Node):
         except Exception:
             self.nav_state = 'failed'
             self.get_logger().error(f'Error en on_goal_result:\n{traceback.format_exc()}', throttle_duration_sec=5.0)
+
+    def handle_on_feedback(self, msg):
+        if self.nav_state != 'moving':
+            return
+        self.recoveries = msg.feedback.number_of_recoveries
+
+    def on_feedback(self, msg):
+        try:
+            self.handle_on_feedback(msg)
+        except Exception:
+            self.get_logger().error(f'Error en on_feedback:\n{traceback.format_exc()}',
+                                    throttle_duration_sec=5.0)
 
     def change_state(self, new_state):
         self.get_logger().info(f'Estado: <{self.state}> -> <{new_state}>')
