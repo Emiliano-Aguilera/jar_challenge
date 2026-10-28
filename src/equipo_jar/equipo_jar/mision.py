@@ -51,7 +51,8 @@ class Mision(Node):
                                             'done_limit_s': 590.0, 'turn_in_place_m': 0.20, 
                                             'visit_max_attempts': 3, 'box_min_observations': 2,
                                             'box_clearance_m': 0.42, 'box_clearance_sigmas': 1.0,    
-                                            'visit_transit_radius_m': 0.15, 'visit_free_threshold': 25,})  # parámetros ajustables
+                                            'visit_transit_radius_m': 0.15, 'visit_free_threshold': 25,
+                                            'settle_s': 0.0})  # parámetros ajustables
 
         self.mapa = None
         self.grid = None
@@ -75,6 +76,7 @@ class Mision(Node):
 
         self.visited = []
         self.current_point = None
+        self.settle_until = None
         self.current_goal = None
 
         self.return_sent = False
@@ -331,6 +333,9 @@ class Mision(Node):
                 self.visited.append((x, y, yaw))
             self.current_point = None
             self.nav_state = 'idle'
+            self.settle_until = self.seconds_since_t0() + self.p['settle_s']
+        if self.settle_until is not None and self.seconds_since_t0() < self.settle_until: 
+            return
         if self.inspect_doubtful():
             return
         if self.plan is None:

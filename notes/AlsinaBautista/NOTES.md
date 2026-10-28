@@ -332,6 +332,36 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
   sends a goal Nav2 cannot plan. In a 0.55 m corridor the safe band grows from
   ~15 cm to ~25 cm. Tests pass with 0.15. Pending marcorita's OK.
 
+## How does mission let localization correct after a stop?
+
+- Problem (hans-die, real-robot bag from the workshop): the wheels count turns
+  ~25 % too much, so after a turn the robot believes it faces 10-20 deg past its
+  real heading. AMCL fixes it with the LiDAR only while the robot moves. If the
+  camera sees a box right after the stop, the box lands off in the map (one at
+  0.30 m, plus a false box). The simulator's wheels are exact, so simulated runs
+  do not show it.
+- hans-die's side: localization detects a turn followed by a stop and asks AMCL
+  for an update without motion. The heading is fixed in ~1 s (offline on the
+  bag: 11 deg -> 3.6 deg at stops).
+- Decided (mission side): after every trip that ends (arrived or failed: Nav2's
+  recoveries also turn), mission waits `settle_s` before the next goal
+  (`explore()`, `settle_until`). Reports are still checked during the wait, and
+  a reason to go back ends it: the trip back starts without the wait (AMCL
+  corrects while moving). `settle_s` 0 = no wait (simulator); ~1 s planned for
+  the real robot.
+- Cost: per trip, not per viewpoint. Turns in place are separate trips: ~70
+  trips in a 300 s laberinto_1 run, so 1 s adds ~70 s against the 300 s bonus.
+  Tune it in Rosario (0.5 s may be enough). Write it as a float (`1.0`): an
+  integer makes the node fail at start.
+- Not covered: observations taken right after the stop, before AMCL corrects,
+  still reach fusion. Dropping them needs perception to know when localization
+  is correcting (an interface change; asked hans-die).
+- The same wait gives fusion more time at inspection spots (see "How does
+  mission look at doubtful candidates?").
+- Checked (Docker, `nav_falso.py`, 3 s trips, `settle_s` 2.0, 2026-10-27):
+  2.17 s between the end of trip A and the start of trip B (0.15 s without the
+  wait). The trip back started 0.19 s after the last trip, as designed.
+
 ## Next
 
 - Run it in the simulator once Nav2, localization and coverage are in `development`.
