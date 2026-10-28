@@ -56,6 +56,14 @@ localizacion:
     desvio_xy_inicial: 0.20
     desvio_yaw_inicial: 0.30
     actualizaciones_quieto: 10
+    # Heading fix after turns (real robot: /odom overcounts turns ~25 %). 0 = off.
+    # Bag replay: 5 updates -> heading at stops 10.9° -> 5.9° (with alpha1 0.5: 4.8°).
+    actualizaciones_giro: 5
+    giro_minimo_rad: 0.3              # odometry rotation since the last stop that needs a fix
+    girando_rads: 0.3                 # above this the robot is turning, not just correcting
+    quieto_lineal_ms: 0.02            # still: below the judge's limits
+    quieto_angular_rads: 0.05
+    max_correccion_s: 3.0             # stop waiting after this
     plazo_arranque_s: 5.0             # s sin respuesta de un nodo de Nav2 antes de volver a preguntar
 
 # ---------------------------------------------------------------------------

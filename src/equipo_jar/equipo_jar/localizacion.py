@@ -1,6 +1,6 @@
 """Localización: arranca Nav2 y le da a AMCL la pose de inicio (docs/team/INTERFACES.md).
 
-Dos tareas:
+Tres tareas:
 
 1. Arranque: lleva AMCL y los nodos de Nav2 a activos, en orden. Reemplaza al
    lifecycle_manager de Nav2, que en Humble espera la respuesta de cada cambio de
@@ -13,6 +13,12 @@ Dos tareas:
    error de colocar el robot a mano. Este nodo manda la pose de inicio con un margen
    de error, y después le pide a AMCL unas actualizaciones sin movimiento para que el
    filtro se acomode antes de que el robot se mueva.
+
+3. Heading fix after turns (real robot: /odom overcounts turns ~25 %). After a turn the
+   heading is in doubt until AMCL has used a few scans taken after the turn; while the
+   robot is still the node asks AMCL for no-motion updates (logic in correccion_giro.py).
+   `/jar/localizacion_lista` (Bool, transient local) is false until the start-up fix is
+   done and while the heading is in doubt: mission can wait and detection can skip frames.
 """
 import math
 import time
@@ -20,12 +26,14 @@ import time
 from geometry_msgs.msg import PoseWithCovarianceStamped
 from lifecycle_msgs.msg import State, Transition
 from lifecycle_msgs.srv import ChangeState, GetState
-from nav_msgs.msg import OccupancyGrid
+from nav_msgs.msg import OccupancyGrid, Odometry
 from rclpy.clock import Clock, ClockType
 from rclpy.node import Node
+from std_msgs.msg import Bool
 from std_srvs.srv import Empty
 
-from equipo_jar.comun import QOS_MAPA, correr, parametros_en_vivo
+from equipo_jar.comun import QOS_ESTADO, QOS_MAPA, correr, parametros_en_vivo
+from equipo_jar.correccion_giro import CorreccionGiro
 
 
 class Arranque:
@@ -105,6 +113,13 @@ class Localizacion(Node):
             'desvio_xy_inicial': 0.20,    # m, error de colocar el robot a mano
             'desvio_yaw_inicial': 0.30,   # rad
             'actualizaciones_quieto': 10,  # actualizaciones de AMCL sin movimiento al inicio
+            # Heading fix after turns (correccion_giro.py). 0 = off: the flag covers start-up only.
+            'actualizaciones_giro': 5,    # AMCL updates after the turn before trusting it again
+            'giro_minimo_rad': 0.3,       # odometry rotation since the last stop that needs a fix
+            'girando_rads': 0.3,          # above this the robot is turning (not driving corrections)
+            'quieto_lineal_ms': 0.02,     # below this the robot counts as still (judge's limits)
+            'quieto_angular_rads': 0.05,
+            'max_correccion_s': 3.0,      # stop waiting after this (no scans, robot never still)
         })
         # Los pone navegacion.launch.py. Sin AMCL (pruebas.launch.py) otro publica map -> odom.
         self.usar_amcl = self.declare_parameter('usar_amcl', True).value
@@ -126,19 +141,62 @@ class Localizacion(Node):
         self.pub_pose = self.create_publisher(PoseWithCovarianceStamped, '/initialpose', 10)
         # AMCL crea este servicio con nombre relativo: queda en el namespace raíz.
         self.sin_movimiento = self.create_client(Empty, '/request_nomotion_update')
+        self.correccion = CorreccionGiro(self.p)
+        self.create_subscription(Odometry, '/odom', self.al_recibir_odom, 10)
+        self.pub_lista = self.create_publisher(Bool, '/jar/localizacion_lista', QOS_ESTADO)
+        self.lista = None
+        self.lista_una_vez = False
+        self.ticks_sin_publicar = 0
+        self.correcciones_logueadas = 0
         # 0.2 s: un poco más que un barrido del LiDAR (~0.14 s), así cada pedido usa uno nuevo.
         self.create_timer(0.2, self.tick)
 
     def al_recibir_mapa(self, _msg):
         self.mapa_recibido = True
 
-    def al_recibir_pose_amcl(self, _msg):
+    def al_recibir_pose_amcl(self, msg):
         # AMCL tomó la pose de inicio: dejar de mandarla y empezar a acomodar.
         if self.pose_enviada and self.faltan == 0:
             self.faltan = self.p['actualizaciones_quieto']
+        elif self.faltan < 0:
+            self.correccion.con_actualizacion_amcl(segundos(msg.header.stamp))
+
+    def al_recibir_odom(self, msg):
+        if not self.usar_amcl or self.faltan >= 0:
+            return
+        q = msg.pose.pose.orientation
+        yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))
+        v = msg.twist.twist
+        self.correccion.con_odom(
+            segundos(msg.header.stamp), yaw, v.linear.x, v.linear.y, v.angular.z)
+
+    def publicar_lista(self):
+        lista = self.mapa_recibido and self.faltan < 0 and not self.correccion.en_duda
+        c = self.correccion
+        if c.correcciones > self.correcciones_logueadas:
+            self.correcciones_logueadas = c.correcciones
+            n, s = c.ultima
+            self.get_logger().info(
+                f'Heading fix after a turn: {n} AMCL updates in {s:.1f} s '
+                f'(fixes {c.correcciones}, timed out {c.vencidas})')
+        # On change, and once per second so a late subscriber also sees it.
+        self.ticks_sin_publicar += 1
+        if lista != self.lista or self.ticks_sin_publicar >= 5:
+            if lista and not self.lista_una_vez:
+                self.lista_una_vez = True
+                self.get_logger().info('Localization ready (/jar/localizacion_lista true)')
+            self.lista = lista
+            self.ticks_sin_publicar = 0
+            self.pub_lista.publish(Bool(data=lista))
 
     def tick(self):
-        if not self.mapa_recibido or self.faltan < 0:
+        self.publicar_lista()
+        if self.faltan < 0:
+            if (self.usar_amcl and self.correccion.pedir_actualizacion()
+                    and self.sin_movimiento.service_is_ready()):
+                self.sin_movimiento.call_async(Empty.Request())
+            return
+        if not self.mapa_recibido:
             return
         if self.faltan == 0:
             # Se reenvía en cada tick hasta que AMCL conteste: puede no estar activo todavía.
@@ -168,6 +226,10 @@ class Localizacion(Node):
         if not self.pose_enviada:
             self.get_logger().info('pose de inicio enviada a AMCL')
         self.pose_enviada = True
+
+
+def segundos(stamp):
+    return stamp.sec + stamp.nanosec * 1e-9
 
 
 def main(args=None):
