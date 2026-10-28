@@ -20,7 +20,7 @@ from equipo_jar.comun import QOS_ESTADO, QOS_MAPA, correr, parametros_en_vivo
 from equipo_jar.reportes import armar_reporte
 from equipo_jar_msgs.msg import Candidatas
 from equipo_jar.confirmacion import select_to_report
-from equipo_jar.exploracion import yaw_from_quaternion, first_pending, angle_difference, goal_position, box_zones, near_box
+from equipo_jar.exploracion import yaw_from_quaternion, first_pending, angle_difference, goal_position, box_zones, near_box, return_verdict
 from equipo_jar.inspeccion import pick_doubtful, viewpoint_for
 from equipo_jar.mapa import Grid
 
@@ -52,7 +52,9 @@ class Mision(Node):
                                             'visit_max_attempts': 3, 'box_min_observations': 2,
                                             'box_clearance_m': 0.42, 'box_clearance_sigmas': 1.0,    
                                             'visit_transit_radius_m': 0.15, 'visit_free_threshold': 25,
-                                            'settle_s': 0.0, 'max_recoveries': 10})  # parámetros ajustables
+                                            'settle_s': 0.0, 'max_recoveries': 10, 'return_tolerance_m': 0.10,
+                                            'return_yaw_tolerance_rad': 0.25, 'return_max_tries': 3,
+                                            'return_still_s': 0.5, 'return_still_m': 0.01})  # parámetros ajustables
 
         self.mapa = None
         self.grid = None
@@ -80,6 +82,9 @@ class Mision(Node):
         self.current_goal = None
 
         self.return_sent = False
+        self.return_tries = 0
+        self.check_since = None
+        self.check_pose = None
         self.canceling = False
 
         self.idle_since = None
@@ -326,6 +331,8 @@ class Mision(Node):
                 self.explore()
         if self.state == 'returning':
             self.return_to_start()
+        if self.state == 'checking':
+            self.check_return()
 
     def step(self):
         try:
@@ -443,11 +450,46 @@ class Mision(Node):
                 sent = self.go_to(self.make_pose(x, y, yaw))
                 if sent:
                     self.return_sent = True
+                    self.return_tries += 1
                     return
         if self.return_sent and (self.nav_state == 'arrived' or self.nav_state == 'failed'):
             self.get_logger().info(f'Vuelta terminada: {self.nav_state}')
-            self.change_state('stopping')
+            self.check_since = None
+            self.change_state('checking')
             return
+
+    def check_return(self):
+        now = self.seconds_since_t0()
+        odom = self.odom_pose()
+        if odom is None:
+            return
+        if (self.check_since is None or 
+            math.hypot(odom[0] - self.check_pose[0], odom[1] - self.check_pose[1]) > self.p['return_still_m']):
+            self.check_since = now
+            self.check_pose = odom
+            return
+        if now - self.check_since < self.p['return_still_s']:
+            return
+        pose = self.current_pose()
+        if pose is None:
+            return
+        x, y, yaw = pose
+        x0, y0, yaw0 = self.start_pose
+        error = math.hypot(x - x0, y - y0)
+        error_yaw = angle_difference(yaw, yaw0)
+        self.get_logger().info(f'Regreso {self.return_tries}: a {error:.3f} m y '
+                                f'{error_yaw:.2f} rad de la largada')
+        verdict = return_verdict(error, error_yaw, self.return_tries, self.p['return_tolerance_m'],
+                                self.p['return_yaw_tolerance_rad'], self.p['return_max_tries'])
+        if verdict == 'ok':
+            self.change_state('stopping')
+        elif verdict == 'retry':
+            self.get_logger().info('Lejos de la largada: vuelvo a intentar')
+            self.return_sent = False
+            self.change_state('returning')
+        else:
+            self.get_logger().warning('Termino lejos de la largada')
+            self.change_state('stopping')
 
     def next_doubtful(self):
         if self.candidatas is None:
