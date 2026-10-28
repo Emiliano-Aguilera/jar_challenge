@@ -68,3 +68,9 @@ def near_box(x, y, zones):
             return True
     return False
 
+def return_verdict(error, tries, tolerance, max_tries):
+    if error <= tolerance:
+        return 'ok'
+    if tries < max_tries:
+        return 'retry'
+    return 'give_up'

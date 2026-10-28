@@ -175,8 +175,7 @@ mision:
     visit_free_threshold: 25
     settle_s: 0.0
     max_recoveries: 10
-    return_tolerance_m: 0.10
-    return_yaw_tolerance_rad: 0.25 
+    return_tolerance_m: 0.05
     return_max_tries: 3
     return_still_s: 0.5
     return_still_m: 0.01
