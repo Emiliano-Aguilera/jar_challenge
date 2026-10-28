@@ -68,7 +68,7 @@ def generate_launch_description():
         # navegar.xml: Humble's default tree, with the goal checker named (there are two).
         nodo('nav2_bt_navigator', 'bt_navigator', 'bt_navigator', extra={
             'default_nav_to_pose_bt_xml': os.path.join(
-                compartido, 'behavior_trees', 'navegar.xml')}),
+                compartido, 'behavior_trees', 'vuelta_precisa.xml')}),  # TEST ONLY
     ]
     con_amcl = LaunchConfiguration('localizacion')
 
