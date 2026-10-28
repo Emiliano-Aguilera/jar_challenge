@@ -7,7 +7,7 @@ import pytest
 
 from equipo_jar.exploracion import (
     angle_difference, first_pending, already_visited, yaw_from_quaternion, goal_position,
-    box_zones, near_box)
+    box_zones, near_box, return_verdict)
 
 DIST = 0.30
 ANG = 0.5
@@ -286,3 +286,61 @@ def test_box_clearance_covers_the_turning_robot_and_the_box():
                         chassis['MEDIO_ANCHO'] + padding)
     needed = corner + box_side * math.sqrt(2) / 2
     assert params['mision']['ros__parameters']['box_clearance_m'] >= needed
+
+
+# --- Regreso a la largada ---
+# Al terminar la vuelta, misión mide cuánto quedó de la pose de largada y decide:
+# 'ok' (termina), 'retry' (vuelve a mandar la largada) o 'give_up' (termina igual).
+# Argumentos: error (m), error de orientación (rad), vueltas ya mandadas, tolerancia (m),
+# tolerancia de orientación (rad), máximo de vueltas.
+
+def test_return_close_enough_is_ok():
+    assert return_verdict(0.05, 0.10, 1, 0.10, 0.25, 3) == 'ok'
+
+
+def test_return_exactly_at_the_tolerance_is_ok():
+    assert return_verdict(0.10, 0.25, 1, 0.10, 0.25, 3) == 'ok'
+
+
+def test_return_far_with_tries_left_retries():
+    assert return_verdict(0.15, 0.10, 1, 0.10, 0.25, 3) == 'retry'
+
+
+def test_return_with_wrong_heading_retries():
+    assert return_verdict(0.05, 0.40, 2, 0.10, 0.25, 3) == 'retry'
+
+
+def test_return_far_on_the_last_try_gives_up():
+    assert return_verdict(0.15, 0.10, 3, 0.10, 0.25, 3) == 'give_up'
+
+
+def test_return_close_enough_on_the_last_try_is_ok():
+    assert return_verdict(0.05, 0.10, 3, 0.10, 0.25, 3) == 'ok'
+
+
+def test_return_tolerance_is_not_tighter_than_nav2():
+    # Hoy la vuelta usa el mismo goal checker que la exploración. Si misión pidiera menos
+    # error que Nav2, reintentaría una vuelta que Nav2 ya da por cumplida sin mover el
+    # robot: gastaría los intentos sin acercarse. Cuando navegación agregue un goal checker
+    # fino para la vuelta, este test tiene que compararse contra ese.
+    yaml = pytest.importorskip('yaml')
+    params_dir = Path(__file__).resolve().parents[1] / 'params'
+    params = yaml.safe_load((params_dir / 'params.yaml').read_text())
+    mision = params['mision']['ros__parameters']
+    nav = yaml.safe_load((params_dir / 'navegacion.yaml').read_text())
+    checker = nav['controller_server']['ros__parameters']['general_goal_checker']
+    assert mision['return_tolerance_m'] >= checker['xy_goal_tolerance']
+    assert mision['return_yaw_tolerance_rad'] >= checker['yaw_goal_tolerance']
+
+
+def test_return_params_have_the_types_mision_declares():
+    # parametros_en_vivo declara cada parámetro con el tipo de su valor por defecto: un
+    # entero en el YAML para un float (o al revés) hace fallar el nodo al arrancar.
+    yaml = pytest.importorskip('yaml')
+    params_dir = Path(__file__).resolve().parents[1] / 'params'
+    mision = yaml.safe_load((params_dir / 'params.yaml').read_text())['mision']['ros__parameters']
+    for name in ('return_tolerance_m', 'return_yaw_tolerance_rad', 'return_still_s',
+                 'return_still_m'):
+        assert isinstance(mision[name], float), name
+    assert isinstance(mision['return_max_tries'], int)
+    assert mision['return_max_tries'] >= 1
