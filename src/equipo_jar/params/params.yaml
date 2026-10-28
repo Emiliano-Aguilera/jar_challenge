@@ -173,3 +173,4 @@ mision:
     box_clearance_sigmas: 1.0
     visit_transit_radius_m: 0.15
     visit_free_threshold: 25
+    settle_s: 0.0
