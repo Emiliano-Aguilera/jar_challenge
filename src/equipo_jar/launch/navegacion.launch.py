@@ -42,8 +42,8 @@ def footprint():
 
 
 def generate_launch_description():
-    params = os.path.join(
-        get_package_share_directory('equipo_jar'), 'params', 'navegacion.yaml')
+    compartido = get_package_share_directory('equipo_jar')
+    params = os.path.join(compartido, 'params', 'navegacion.yaml')
     use_sim_time = LaunchConfiguration('use_sim_time')
     # Un dict de parámetros le llega a todos los nodos del proceso (launch_ros lo
     # escribe para /**), también a los costmaps que corren dentro del controller y
@@ -65,7 +65,10 @@ def generate_launch_description():
         nodo('nav2_velocity_smoother', 'velocity_smoother', 'velocity_smoother', [
             ('cmd_vel', 'cmd_vel_nav'),
             ('cmd_vel_smoothed', '/cmd_vel')]),
-        nodo('nav2_bt_navigator', 'bt_navigator', 'bt_navigator'),
+        # navegar.xml: Humble's default tree, with the goal checker named (there are two).
+        nodo('nav2_bt_navigator', 'bt_navigator', 'bt_navigator', extra={
+            'default_nav_to_pose_bt_xml': os.path.join(
+                compartido, 'behavior_trees', 'navegar.xml')}),
     ]
     con_amcl = LaunchConfiguration('localizacion')
 
