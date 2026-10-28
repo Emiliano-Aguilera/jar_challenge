@@ -17,7 +17,10 @@ amcl:
     alpha1: 0.2
     alpha2: 0.2
     alpha3: 0.2
-    alpha4: 0.2
+    # In OmniMotionModel alpha4 is the x/y noise added per radian turned. With 0.2 an
+    # in-place 90° turn spread the particles ~0.2 m per axis, across walls into the next
+    # corridor (laberinto_1: AMCL 0.54 m off, inside a wall). 0.01: ~0.05 m.
+    alpha4: 0.01
     alpha5: 0.2                       # solo lo usa el modelo omni
     laser_model_type: likelihood_field
     laser_min_range: 0.10

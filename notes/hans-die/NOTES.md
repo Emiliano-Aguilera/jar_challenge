@@ -360,3 +360,96 @@ Goal (-2.92,1.68, yaw 0) is in the middle of a 0.55 m corridor (west side); the 
 reached it. With 3 s the controller aborted more often, and the BT's spin/backup/wait moved the
 robot inside the narrow corridor until even planning failed. Reverted to bb0f061's 0.3 m / 5 s:
 the final config is bb0f061's (validated above).
+
+## Localization: AMCL drifts after in-place turns (from 2026-10-27)
+
+### Q: why did AMCL put the robot 0.54 m off, inside a wall? (Marco's report)
+
+- Evidence (Marco, laberinto_1, 37c2306, batch 20261026-181111): AMCL fine for 188 s (median
+  0.075 m against the judge's trajectory), then in the left corridor (x ~ -2.8, y 1.6 -> 0.2) the
+  error grows to 0.30 m in 5 s and 0.54 m at t=208.8 s, estimate inside the wall at (-2.27,0.18).
+  The planner then fails with the start inside an obstacle (62 "failed to create plan", 9
+  spin/backup/wait, 7 "backup failed") and the robot stays there until the end (300 s). Iteration
+  11 above (115 planner failures at (-2.88,1.6), same corridor) was most likely the same thing.
+- What it is not: odometry (per AMCL update, odometry and ground truth agree within ~1 mm and
+  0.01 rad: no slip), the map (pgm and world walls agree within 0.10 m there), TF or timing.
+  The scan matches the map perfectly at the true pose (AMCL-like score 18.5 vs 6.7 at AMCL's pose).
+- Mechanism (recording, `/particle_cloud`): the x covariance grows only during in-place turns
+  (0.13 -> 0.45 m). Nav2 Humble `OmniMotionModel` adds x and y noise per radian turned with
+  `alpha4` (`sqrt(alpha4 * dtheta^2)` in both). With 0.2, a 90° turn spreads the particles ~0.2 m
+  per axis. Mission turns a lot at each viewpoint, so 5-10 % of the particles ended 0.8-1.0 m
+  east, in the next corridor across the wall. The likelihood field sums `pz^3` over beams, so a
+  pose that matches half the beams still keeps ~half the weight and those particles survive.
+  AMCL's estimate is the mean of the biggest cluster (0.5 m bins), and the bins bridge both
+  corridors, so the mean slides into the wall.
+- Offline replay (scratchpad `replay_amcl.py`: Nav2's omni motion model, likelihood field,
+  resampling, KLD limit and clustering, fed with the recorded `/scan` and `/odom`, 8 seeds,
+  t=181-211 s):
+
+| alpha4 | min_particles | Median | p90 | Max |
+| --- | --- | --- | --- | --- |
+| 0.2 (before) | 500 | 0.113 | 0.345 | 0.528 |
+| 0.2 | 2000 | 0.078 | 0.213 | 0.340 |
+| 0.1 | 500 | 0.026 | 0.087 | 0.196 |
+| 0.05 | 500 | 0.029 | 0.093 | 0.175 |
+| 0.02 | 500 | 0.029 | 0.060 | 0.114 |
+| **0.01** | 500 | 0.030 | 0.050 | 0.089 |
+| 0.005 | 500 | 0.028 | 0.045 | 0.075 |
+
+  Starting from the drifted cloud (t=188.6): median 0.41 m with 0.2, 0.07 m with 0.01 (it comes
+  back). Start-up with a hand-placement error (initial pose sent at the origin, 10 no-motion
+  updates, then the recorded motion): converges with 0.2 and 0.01 alike up to 0.55 m / 1.0 rad;
+  a 90° yaw error does not converge (5 of 6 seeds 2.5-3 m off).
+- Change: `alpha4` 0.2 -> 0.01 (a full in-place turn adds ~0.09 m per axis, more than the real
+  robot's center drift while turning). The other alphas stay: they did not cause this. The real
+  robot's odometry error is a separate problem (next section).
+- Checked (server, 600 s, 2026-10-27; AMCL error = `Begin navigating` poses vs the judge's
+  trajectory):
+
+| Code | Map | Score | AMCL error median / max | Planner failures |
+| --- | --- | --- | --- | --- |
+| d14d0a4 (this change) | laberinto_1 run 1 | 300 | 0.055 / 0.126 m | 0 |
+| d14d0a4 | laberinto_1 run 2 | 300 | 0.048 / 0.128 m | 0 |
+| 055a559 (development, alpha4 0.2) | laberinto_1 run 1 | 300 | 0.076 / 0.183 m | 0 |
+| 055a559 | laberinto_1 run 2 | 200 | 0.087 / **0.922 m** | **193** |
+| 37c2306 + this change (Marco's code) | laberinto_1, 300 s | 100 | 0.057 / 0.121 m | 0 |
+| d14d0a4 | maze_1 / maze_2 / maze_4 / laberinto_simple | 500 / 600 / 500 / 500 | <= 0.10 m max | 3 / 0 / 22 / 0 |
+| d14d0a4 | maze_3 | 300 of 600 | 0.024 / 0.097 m | 0 |
+
+  Without the change, run 2 drifted like Marco's run (AMCL ~0.9 m off from t=274 s, no return).
+  maze_3: one report on a spot with no red box and the third box never found; development does
+  the same (run 40520732066), so it is not localization. Heading error from the recordings
+  (`/amcl_pose` vs `/ground_truth/odom`, 320 samples per run): median 0.8°, p90 2.4°, max 5.4°.
+
+## Localization: the real robot's odometry overcounts (from 2026-10-27)
+
+### Q: why does AMCL's heading stay 10-26° off after turns on the real robot? (friend's report)
+
+- Evidence (workshop week-10 bag `laberinto_victimas`, real X3): `/odom` counts ~25 % too much.
+  Turns: the IMU gyro measures 0.80 of `/odom` (22 turns, most 0.77-0.83). Straight: `/odom` says
+  0.948 m, the lidar (front and rear rays) 0.744 m (0.785). Same factor at slow and fast turns
+  (0.800 / 0.802), so it is not slip. `/imu/data` angular_velocity.z has the wrong sign; its
+  orientation is right. The simulator has no such error: no sim run can show it.
+- Mechanism: per update the `alpha1` noise covers the bias, but the bias adds up and the noise
+  does not: after 90° the bias is ~18° and the cloud ~10° wide. Scans smear ~9° at 1.2 rad/s.
+  When the robot stops, AMCL stops updating (`update_min_d/a`), so the error stays exactly when
+  the camera looks. 15° at 1.5 m puts a box ~0.39 m off.
+- Organizers (2026-10-27): they will not calibrate it; the error is hardware (slow motors, not
+  identical) and part of the challenge. Use the bag to tune; more bags from all robots may come.
+  So no fixed scale correction (another robot can have another error).
+- Offline replay of the bag (side session, 10 seeds, error at the stop after each turn):
+
+| Variant | Heading at stops, median | Stops with a box at 1.5 m > 0.25 m off |
+| --- | --- | --- |
+| today (alpha1 0.2) | 10.9° | 59 % |
+| alpha1 0.8 | 8.4° | 38 % |
+| 5 no-motion updates after a turn | 5.9° | 15 % |
+| alpha1 0.5 + 5 updates | 4.8° | 2.9 % |
+| alpha1 0.8 + 10 updates | 3.6° | 0 % |
+| odom x0.8 (not deployable, ceiling) | 1.8° | 0 % |
+
+- alpha1 0.8 in the simulator (branch `localizacion/test-alpha1`, 2026-10-27, laberinto_1 x2,
+  maze_1, maze_4, 600 s): same scores (300, 300, 500, 500), same position error (max 0.15 m);
+  heading median 1.1-1.2° (0.8° with 0.2), p90 3.2-3.4° (2.4°), max 5.9-7.3° (5.4°).
+  Decided: `alpha1` stays 0.2 for now; set it for the real robot with the new bags or in
+  Rosario (it is a param).
