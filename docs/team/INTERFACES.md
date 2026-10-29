@@ -45,6 +45,10 @@ the change process at the end.
 ## Localization → all
 
 **TF `map → odom`.** With it any node transforms what it sees into `map`.
+The tree is `map → odom_fused → odom → base_footprint`: AMCL publishes
+`map → odom_fused`, and `odometria_imu` publishes `odom_fused → odom` (the
+wheels' steps turned with the IMU heading). Look up `map → odom` or
+`map → base_footprint` as before; `odom → base_footprint` is the robot's own.
 
 **`/jar/localizacion_lista`** (`std_msgs/Bool`, reliable + transient local, on
 change and once per second):
