@@ -88,21 +88,29 @@ class PoseInicial:
             salida[b] = np.exp(-k * d * d).mean(axis=1)
         return salida
 
-    def buscar(self, puntos, x0, y0, yaw0):
+    def buscar(self, puntos, x0, y0, yaw0, radio_m=None, rango_yaw_rad=math.pi):
         """Best pose for `puntos` (N x 2, in base_footprint, metres) near (x0, y0, yaw0).
 
-        Returns (x, y, yaw, score, score_at_guess). Score: mean point score, 0..1.
+        Searches positions within `radio_m` (default p['radio_m']) and headings within
+        `rango_yaw_rad` of yaw0 (default: all). Returns (x, y, yaw, score, score_at_guess).
+        Score: mean point score, 0..1.
         """
         p = self.p
+        radio = p['radio_m'] if radio_m is None else radio_m
         puntos = np.asarray(puntos, dtype=float)
-        # Coarse grid: positions in a disk, every heading.
-        n = int(math.floor(p['radio_m'] / p['paso_m']))
+        # Coarse grid: positions in a disk, headings in the range.
+        n = int(math.floor(radio / p['paso_m']))
         g = np.arange(-n, n + 1) * p['paso_m']
         gx, gy = np.meshgrid(g, g)
-        en_disco = np.hypot(gx, gy) <= p['radio_m'] + 1e-9
+        en_disco = np.hypot(gx, gy) <= radio + 1e-9
         px, py = x0 + gx[en_disco], y0 + gy[en_disco]
-        nyaw = max(1, int(round(2 * math.pi / p['paso_yaw_rad'])))
-        yaws = yaw0 + np.arange(nyaw) * (2 * math.pi / nyaw)
+        if rango_yaw_rad >= math.pi:
+            nyaw = max(1, int(round(2 * math.pi / p['paso_yaw_rad'])))
+            yaws = yaw0 + np.arange(nyaw) * (2 * math.pi / nyaw)
+        else:
+            m = int(math.floor(rango_yaw_rad / p['paso_yaw_rad']))
+            yaws = yaw0 + np.arange(-m, m + 1) * p['paso_yaw_rad']
+            nyaw = len(yaws)
         X = np.repeat(px, nyaw)
         Y = np.repeat(py, nyaw)
         T = np.tile(yaws, len(px))

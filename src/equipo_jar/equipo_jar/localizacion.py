@@ -15,7 +15,11 @@ Tres tareas:
    a small spread; if the match fails it sends the guess with a wide spread. Then it asks
    AMCL for a few no-motion updates so the filter settles before the robot moves.
 
-3. Heading fix after turns (real robot: /odom overcounts turns ~25 %). After a turn the
+3. Watch (vigia.py): while the robot is still, every `vigia_periodo_s` it scores the last
+   sweep at AMCL's pose against /map, logs the score, and moves AMCL to a clearly better
+   nearby pose if AMCL is lost.
+
+4. Heading fix after turns (real robot: /odom overcounts turns ~25 %). After a turn the
    heading is in doubt until AMCL has used a few scans taken after the turn; once the turn
    ends the node asks AMCL for no-motion updates (logic in correccion_giro.py).
    `/jar/localizacion_lista` (Bool, transient local) is false until the start-up fix is
@@ -42,6 +46,7 @@ from tf2_ros import Buffer, TransformException, TransformListener
 from equipo_jar.comun import QOS_ESTADO, QOS_MAPA, correr, parametros_en_vivo
 from equipo_jar.correccion_giro import CorreccionGiro
 from equipo_jar.pose_inicial import PoseInicial, puntos_del_scan
+from equipo_jar.vigia import Vigia
 
 
 class Arranque:
@@ -132,6 +137,16 @@ class Localizacion(Node):
             'desvio_xy_encontrada': 0.05,     # spread sent to AMCL with a matched pose
             'desvio_yaw_encontrada': 0.05,
             'espera_scan_s': 3.0,         # s after /map without scan or TF: use the guess
+            # Watch AMCL with the LiDAR (vigia.py). 0 = off.
+            'vigia_periodo_s': 2.0,
+            'vigia_puntaje_bajo': 0.5,    # below this at AMCL's pose: search nearby
+            'vigia_puntaje_bueno': 0.7,   # a nearby pose must score at least this
+            'vigia_mejora_minima': 0.2,   # and this much more than AMCL's pose
+            'vigia_distancia_minima_m': 0.10,  # and be this far (or 0.1 rad) from it
+            'vigia_coincidencia_m': 0.05,  # same place in two checks
+            'vigia_confirmaciones': 2,
+            'vigia_radio_m': 0.5,
+            'vigia_rango_yaw_rad': 0.35,
             'actualizaciones_quieto': 10,  # actualizaciones de AMCL sin movimiento al inicio (0 = ninguna)
             # Heading fix after turns (correccion_giro.py). 0 = off: the flag covers start-up only.
             'actualizaciones_giro': 10,    # AMCL updates after the turn before trusting it again
@@ -154,6 +169,14 @@ class Localizacion(Node):
         self.t_mapa = None
         self.pose_inicio = None       # (x, y, yaw, desvio_xy, desvio_yaw) sent to AMCL
         self.scans = []               # last sweeps, for the start match
+        self.ultimo_scan = None
+        self.buscador = None          # PoseInicial, built from /map
+        self.laser = None             # (x, y, yaw) of the LiDAR in base_footprint
+        self.vigia = Vigia(self.p)
+        self.quieto_desde = None      # stamp since the robot is still (from /odom)
+        self.vigia_puntajes = []
+        self.vigia_ultimo_log = None
+        self.pedidos_vigia = 0
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
         self.create_subscription(LaserScan, '/scan', self.al_recibir_scan, qos_profile_sensor_data)
@@ -177,6 +200,7 @@ class Localizacion(Node):
         self.correcciones_logueadas = 0
         # 0.2 s: un poco más que un barrido del LiDAR (~0.14 s), así cada pedido usa uno nuevo.
         self.create_timer(0.2, self.tick)
+        self.t_vigia = 0.0
 
     def al_recibir_mapa(self, msg):
         if not self.mapa_recibido:
@@ -185,8 +209,36 @@ class Localizacion(Node):
         self.mapa_recibido = True
 
     def al_recibir_scan(self, msg):
+        self.ultimo_scan = msg
         if self.pose_inicio is None:
             self.scans = (self.scans + [msg])[-3:]
+
+    def preparar_buscador(self):
+        """PoseInicial from /map and the LiDAR pose from TF. False if not possible yet."""
+        if self.buscador is None and self.mapa is not None:
+            p, m = self.p, self.mapa.info
+            self.buscador = PoseInicial(self.mapa.data, m.width, m.height, m.resolution,
+                                        m.origin.position.x, m.origin.position.y, {
+                                            'radio_m': p['radio_busqueda_m'],
+                                            'paso_m': p['paso_busqueda_m'],
+                                            'paso_yaw_rad': p['paso_yaw_busqueda_rad'],
+                                            'sigma_m': p['sigma_busqueda_m'],
+                                            'rumbo_cercano_rad': p['rumbo_cercano_rad'],
+                                            'margen_otro_rumbo': p['margen_otro_rumbo']})
+        if self.laser is None and self.ultimo_scan is not None:
+            try:
+                tf = self.tf_buffer.lookup_transform(
+                    'base_footprint', self.ultimo_scan.header.frame_id, Time())
+            except TransformException:
+                return False
+            t, q = tf.transform.translation, tf.transform.rotation
+            self.laser = (t.x, t.y, math.atan2(2.0 * (q.w * q.z + q.x * q.y),
+                                               1.0 - 2.0 * (q.y * q.y + q.z * q.z)))
+        return self.buscador is not None and self.laser is not None
+
+    def puntos(self, scan, maximo):
+        return puntos_del_scan(scan.ranges, scan.angle_min, scan.angle_increment, *self.laser,
+                               max(scan.range_min, 0.10), min(scan.range_max, 10.0), maximo)
 
     def elegir_pose_inicio(self):
         """Start pose for AMCL: the scan match if it works, else the guess. None: wait."""
@@ -196,37 +248,18 @@ class Localizacion(Node):
         if not self.usar_amcl or not p['buscar_pose_inicial']:
             return guess
         vencido = time.monotonic() - self.t_mapa > p['espera_scan_s']
-        if not self.scans:
+        if not self.scans or not self.preparar_buscador():
             if vencido:
-                self.get_logger().warning('No /scan for the start match: using the guessed start pose')
+                self.get_logger().warning('No /scan or LiDAR TF for the start match: '
+                                          'using the guessed start pose')
                 return guess
             return None
-        try:
-            tf = self.tf_buffer.lookup_transform(
-                'base_footprint', self.scans[-1].header.frame_id, Time())
-        except TransformException as e:
-            if vencido:
-                self.get_logger().warning(f'No LiDAR TF ({e}): using the guessed start pose')
-                return guess
-            return None
-        t, q = tf.transform.translation, tf.transform.rotation
-        laser_yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))
-        puntos = [puntos_del_scan(s.ranges, s.angle_min, s.angle_increment, t.x, t.y, laser_yaw,
-                                  max(s.range_min, 0.10), min(s.range_max, 10.0), 120)
-                  for s in self.scans]
-        puntos = np.concatenate(puntos)
+        puntos = np.concatenate([self.puntos(s, 120) for s in self.scans])
         if len(puntos) < 50:
             self.get_logger().warning(f'Only {len(puntos)} LiDAR points: using the guessed start pose')
             return guess
-        m = self.mapa.info
         inicio = time.monotonic()
-        buscador = PoseInicial(self.mapa.data, m.width, m.height, m.resolution,
-                               m.origin.position.x, m.origin.position.y, {
-                                   'radio_m': p['radio_busqueda_m'], 'paso_m': p['paso_busqueda_m'],
-                                   'paso_yaw_rad': p['paso_yaw_busqueda_rad'],
-                                   'sigma_m': p['sigma_busqueda_m'],
-                                   'rumbo_cercano_rad': p['rumbo_cercano_rad'],
-                                   'margen_otro_rumbo': p['margen_otro_rumbo']})
+        buscador = self.buscador
         x, y, yaw, puntaje, en_guess = buscador.buscar(puntos, *guess[:3])
         self.get_logger().info(
             f'Start pose from the LiDAR: x={x:.3f} y={y:.3f} yaw={yaw:.3f} (score {puntaje:.2f}, '
@@ -252,6 +285,14 @@ class Localizacion(Node):
             self.correccion.con_actualizacion_amcl(segundos(msg.header.stamp))
 
     def al_recibir_odom(self, msg):
+        tw = msg.twist.twist
+        quieto = (abs(tw.linear.x) < 0.02 and abs(tw.linear.y) < 0.02
+                  and abs(tw.angular.z) < 0.05)
+        if not quieto:
+            self.quieto_desde = None
+            self.vigia.descartar()
+        elif self.quieto_desde is None:
+            self.quieto_desde = segundos(msg.header.stamp)
         if not self.usar_amcl or self.faltan >= 0:
             return
         q = msg.pose.pose.orientation
@@ -280,9 +321,14 @@ class Localizacion(Node):
     def tick(self):
         self.publicar_lista()
         if self.faltan < 0:
-            if (self.usar_amcl and self.correccion.pedir_actualizacion()
-                    and self.sin_movimiento.service_is_ready()):
+            pedir = self.correccion.pedir_actualizacion() or self.pedidos_vigia > 0
+            if self.usar_amcl and pedir and self.sin_movimiento.service_is_ready():
                 self.sin_movimiento.call_async(Empty.Request())
+                self.pedidos_vigia = max(0, self.pedidos_vigia - 1)
+            periodo = self.p['vigia_periodo_s']
+            if self.usar_amcl and periodo > 0 and time.monotonic() - self.t_vigia >= periodo:
+                self.t_vigia = time.monotonic()
+                self.vigilar()
             return
         if not self.mapa_recibido:
             return
@@ -303,6 +349,53 @@ class Localizacion(Node):
                 self.terminar_arranque(
                     f'AMCL hizo solo {self.p["actualizaciones_quieto"] - self.faltan} de '
                     f'{self.p["actualizaciones_quieto"]} actualizaciones al inicio; sigo igual')
+
+    def vigilar(self):
+        """Score the last still sweep at AMCL's pose; move AMCL if it is clearly lost."""
+        scan = self.ultimo_scan
+        if (scan is None or self.quieto_desde is None
+                or segundos(scan.header.stamp) < self.quieto_desde + 0.3
+                or not self.preparar_buscador()):
+            return
+        try:
+            tf = self.tf_buffer.lookup_transform('map', 'base_footprint', Time())
+        except TransformException:
+            return
+        t, q = tf.transform.translation, tf.transform.rotation
+        pose = (t.x, t.y, math.atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z)))
+        puntos = self.puntos(scan, 360)
+        if len(puntos) < 50:
+            return
+        b = self.buscador
+        puntaje = float(b.puntajes(puntos, np.array([pose[0]]), np.array([pose[1]]),
+                                   np.array([pose[2]]))[0])
+        self.vigia_puntajes.append(puntaje)
+        ahora = time.monotonic()
+        if self.vigia_ultimo_log is None:
+            self.vigia_ultimo_log = ahora
+        if ahora - self.vigia_ultimo_log >= 30.0:
+            v = sorted(self.vigia_puntajes)
+            self.get_logger().info(
+                f'Localization check, last 30 s: {len(v)} still sweeps, LiDAR-map score at '
+                f'AMCL pose median {v[len(v) // 2]:.2f} min {v[0]:.2f} (right: ~0.8-0.9)')
+            self.vigia_puntajes, self.vigia_ultimo_log = [], ahora
+        if not self.vigia.hace_falta_buscar(puntaje):
+            self.vigia.descartar()
+            return
+        x, y, yaw, mejor, _ = b.buscar(puntos, *pose, radio_m=self.p['vigia_radio_m'],
+                                       rango_yaw_rad=self.p['vigia_rango_yaw_rad'])
+        self.get_logger().warning(
+            f'Localization check: score {puntaje:.2f} at AMCL pose ({pose[0]:.2f}, {pose[1]:.2f}, '
+            f'{pose[2]:.2f}); best nearby {mejor:.2f} at ({x:.2f}, {y:.2f}, {yaw:.2f})')
+        nueva = self.vigia.revisar(pose, puntaje, (x, y, yaw, mejor))
+        if nueva is not None:
+            self.get_logger().warning(
+                f'AMCL lost: moving it to ({nueva[0]:.2f}, {nueva[1]:.2f}, {nueva[2]:.2f}) '
+                f'(move {self.vigia.reubicaciones})')
+            self.pose_inicio = (float(nueva[0]), float(nueva[1]), float(nueva[2]),
+                                self.p['desvio_xy_encontrada'], self.p['desvio_yaw_encontrada'])
+            self.enviar_pose_inicial()
+            self.pedidos_vigia = 5
 
     def terminar_arranque(self, motivo):
         self.get_logger().info(motivo)
