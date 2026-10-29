@@ -165,7 +165,7 @@ class RumboImu:
                 elif self.signo:
                     d_imu = self.signo * (integrales[0] - self.integrales[0])
             if d_imu is None:
-                if d_ruedas:
+                if abs(d_ruedas) > 1e-3:        # for the log: still steps don't matter
                     self.pasos_ruedas += 1
             else:
                 d_yaw = d_imu
