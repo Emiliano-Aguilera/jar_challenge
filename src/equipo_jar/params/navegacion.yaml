@@ -3,6 +3,17 @@
 # El mapa llega solo del juez por /map. No hay map_server.
 # Los nombres de los parámetros de amcl son los de Nav2: no se pueden traducir.
 
+# Speed limits: set them only here. navegacion.launch.py copies them into MPPI (vx_max,
+# vy_max, vx_min, wz_max) and the velocity smoother (max/min_velocity). If the robot has
+# its own lower limit (factory), put that limit here: MPPI plans with these numbers, and
+# a robot slower than planned turns late and stops late. Hard limit of the X3: 1.0 m/s, 5 rad/s.
+limites:
+  ros__parameters:
+    lineal_max_ms: 0.5                # forward and sideways
+    reversa_max_ms: 0.35
+    giro_max_rads: 1.9
+    margen_giro_smoother: 1.05        # smoother turn limit = giro_max_rads x this
+
 amcl:
   ros__parameters:
     global_frame_id: map
@@ -65,8 +76,43 @@ localizacion:
     x_inicial: 0.0
     y_inicial: 0.0
     yaw_inicial: 0.0
-    desvio_xy_inicial: 0.20
+    desvio_xy_inicial: 0.20           # spread sent with the guess (only if the LiDAR match fails)
     desvio_yaw_inicial: 0.30
+    # Start pose from one LiDAR sweep matched against /map, all headings (pose_inicial.py).
+    # Practice maps, robot up to 0.25 m off and any heading: ~1-2 cm, < 1.5°. false: the guess.
+    buscar_pose_inicial: true
+    radio_busqueda_m: 0.5             # positions searched around the guess
+    paso_busqueda_m: 0.05             # coarse grid, then two finer ones
+    paso_yaw_busqueda_rad: 0.035      # 2°
+    sigma_busqueda_m: 0.05            # a point this far from a wall scores ~0.6
+    rumbo_cercano_rad: 0.8            # a heading farther than this from yaw_inicial must
+    margen_otro_rumbo: 0.10           # score 10 % better to win (symmetric spots)
+    puntaje_minimo_busqueda: 0.5      # practice maps 0.8-0.9, real bag 0.88
+    desvio_xy_encontrada: 0.05        # spread sent to AMCL with the matched pose
+    desvio_yaw_encontrada: 0.05
+    espera_scan_s: 3.0                # no scan or LiDAR TF this long after /map: use the guess
+    # Watch AMCL while still (vigia.py): score the sweep at AMCL's pose, 0..1 (right: 0.8-0.9;
+    # real bag at the reference pose: median 0.71, 0.1 m off 0.33). Below vigia_puntaje_bajo,
+    # search nearby; move AMCL only to a pose seen vigia_confirmaciones times at the same spot.
+    vigia_periodo_s: 2.0
+    vigia_puntaje_bajo: 0.5
+    vigia_puntaje_bueno: 0.7          # the new pose must score at least this
+    vigia_mejora_minima: 0.2          # and this much more than AMCL's pose
+    vigia_distancia_minima_m: 0.10    # and be this far from it (or 0.1 rad)
+    vigia_coincidencia_m: 0.05
+    vigia_confirmaciones: 2
+    vigia_radio_m: 0.5
+    vigia_rango_yaw_rad: 0.35
+    # Fine-tune AMCL while still: if the score is fine, move AMCL to the best pose within
+    # afinar_radio_m when the fit is good and sharp (a plain corridor slides: no fix).
+    afinar_quieto: true
+    afinar_radio_m: 0.15
+    afinar_rango_yaw_rad: 0.1
+    afinar_puntaje_minimo: 0.75
+    afinar_nitidez_minima: 0.03       # score drop 5 cm / 2° away from the best pose
+    afinar_distancia_minima_m: 0.015  # move AMCL only if this far (or 0.015 rad)
+    desvio_xy_afinada: 0.02           # spread sent to AMCL with the fine-tuned pose
+    desvio_yaw_afinada: 0.02
     actualizaciones_quieto: 10        # 0 = none: ready as soon as AMCL takes the start pose
     # Heading fix after turns (real robot: /odom overcounts turns ~25 %). 0 = off.
     # Week-10 bag replay, heading when the flag turns true again: 10.9° without the fix,
@@ -130,10 +176,7 @@ controller_server:
       vx_std: 0.2
       vy_std: 0.2
       wz_std: 0.8                     # con 0.4 giraba a ~0.7 rad/s (180° en 4.5 s)
-      vx_max: 0.5
-      vx_min: -0.35
-      vy_max: 0.5
-      wz_max: 1.9
+      # vx_max, vx_min, vy_max, wz_max: from `limites` (top of this file)
       temperature: 0.3
       gamma: 0.015
       prune_distance: 1.7
@@ -308,8 +351,7 @@ velocity_smoother:
     smoothing_frequency: 20.0         # /cmd_vel a >= 10 Hz mientras se mueve
     scale_velocities: false
     feedback: OPEN_LOOP
-    max_velocity: [0.5, 0.5, 2.0]     # x, y, yaw. 3 números: el CI acepta hasta 3
-    min_velocity: [-0.5, -0.5, -2.0]
+    # max_velocity, min_velocity: from `limites` (top of this file)
     max_accel: [1.5, 1.5, 3.2]
     # Frenar rápido: al llegar, el controller manda cero y el smoother baja en rampa. Con -3.2
     # el giro final (~0.85 rad/s) tardaba 0.27 s en parar, y la misión manda /done 0.17-0.24 s
