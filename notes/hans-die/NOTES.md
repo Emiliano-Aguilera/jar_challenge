@@ -534,10 +534,11 @@ Asked by mission (Bautista, 2026-10-27/28).
   mission would wait is much less. The IMU heading (PR #44) removes most of the error without
   waiting; with it `actualizaciones_giro` can go lower.
 - Checked in the simulator (branch at 4ff5abd, second version with 5 updates, 600 s):
-  laberinto_1 200, maze_1 500, maze_3 300 (same as before: laberinto_1's second box is found only on some return paths, maze_3 always
-  300). Fixes 35 / 21 / 9, each 0.9 s on average (max 1.2 s), none timed out. "Localization
-  ready" once at start-up. AMCL error unchanged (max 0.13 / 0.09 / 0.07 m). If mission waited
-  at every fix the cost would be at most ~30 / 20 / 9 s.
+  laberinto_1 200, maze_1 500, maze_3 300 (same as before: laberinto_1's second box is
+  found only on some return paths, maze_3 always 300). Fixes 35 / 21 / 9, each 0.9 s on
+  average (max 1.2 s), none timed out. "Localization ready" once at start-up. AMCL error
+  unchanged (max 0.13 / 0.09 / 0.07 m). If mission waited at every fix the cost would be at
+  most ~30 / 20 / 9 s.
 - Checked in the simulator again (3830adf, current logic, 10 updates, development with #37/#43,
   600 s): laberinto_1 300, maze_1 500, maze_3 600, all with `/done` and the return bonus.
   Fixes 28 / 14 / 17, 1.2 / 1.5 / 1.7 s on average (max 2.1 s). Timeouts 9 / 2 / 1, all from
@@ -545,3 +546,48 @@ Asked by mission (Bautista, 2026-10-27/28).
   error max 0.13 / 0.06 / 0.10 m. If mission waited at every fix: at most ~34 / 21 / 29 s.
 - Pending: mission waits on the flag (Bautista), detection skips frames (Santos). Then set
   `settle_s` 0. alpha1 for the real robot with the new bags.
+
+### Q: can AMCL take the heading from the IMU instead of the wheels? (from 2026-10-29)
+
+- Idea (Emiliano): a second odometry, `odom_fused`, that keeps the wheels' steps in the robot
+  frame but turns them with the IMU heading. AMCL uses it as its odom frame. The real IMU
+  measures turns well (0.80 of `/odom`, like the lidar), so AMCL no longer sees the 25 % excess.
+- Decided (`odometria_imu.py` node, logic in `rumbo_imu.py`): publishes TF `odom_fused -> odom`
+  with each `/odom` stamp; AMCL `odom_frame_id: odom_fused`. Tree: map -> odom_fused -> odom ->
+  base_footprint. The robot's `odom`, `/odom` and everything that uses them (local costmap,
+  behaviors, mission, detection's fixed frame) are unchanged. Launched only with AMCL.
+  - Heading: gyro z integrated, each sample's rate over the interval that ends at its stamp
+    (the trapezoid rule gave 3.1° instead of 1.8° at stops on the bag). The real gyro has the
+    wrong sign: the sign is learned from the wheels (correlation >= 0.7 after 0.5 rad of
+    turning faster than 0.2 rad/s; bag: -0.95). Until then, and when the IMU is silent for
+    `imu_vieja_s`, a step uses the wheels' heading.
+  - On the robot `/imu/data` has the same stamps as `/odom` and comes within ~1 ms: each
+    `/odom` waits for its IMU sample (TF ~1.3 ms after `/odom` on the bag, max 5 ms).
+  - Params under `odometria_imu` in `navegacion.yaml`. `fuente_rumbo: ruedas` turns it off
+    (identity transform); `orientacion` uses the IMU orientation's yaw instead of the gyro.
+- Checked on the week-10 bag (`bag_replay/eval_rumbo_imu.py`, the node's class fed in bag
+  order, 10 seeds). Same stops as above (end of each stop after a turn):
+
+| Variant | Heading at stops: median / p90 / max | Box 1.5 m > 0.25 m off | Heading, whole run: median / p90 |
+| --- | --- | --- | --- |
+| wheels (today) | 10.9° / 14.6° / 18.2° | 59 % | 4.1° / 13.1° |
+| wheels + PR #34 fix (5 updates) | 6.5° / 11.5° / 14.1° | 32 % | 3.1° / 10.5° |
+| `ruedas` (off) | 10.9° / 14.6° / 18.2° | 59 % | 4.1° / 13.1° |
+| **gyro, learned sign** | **1.8° / 4.0° / 6.1°** | **0 %** | 1.3° / 3.9° |
+| gyro + PR #34 fix | 1.3° / 3.3° / 5.5° | 0 % | 1.2° / 3.7° |
+| IMU orientation | 1.8° / 4.1° / 7.1° | 0 % | 1.2° / 4.0° |
+
+  Sign learned at 24 s (first real turn); before that the wheels' heading put odom_fused ~6°
+  off, which AMCL fixed. Caveat: the reference pose was seeded with the IMU, so it favours the
+  IMU; its own error is ~1-3°.
+- Checked in the simulator (6731f9f, 600 s): laberinto_1 300, maze_1 500, maze_3 600 (dev +
+  PR #34 at 4ff5abd: 200, 500, 300; laberinto_1 varies with the return path, maze_3 found its
+  third box this time). Reports 0.01-0.09 m from the box centers, return 0.04-0.09 m. AMCL
+  position error at each "Begin navigating" vs the true trajectory: max 0.159 / 0.054 /
+  0.060 m (4ff5abd: 0.137 / 0.062 / 0.065). Gyro sign learned -1 in the sim too, 6-12 s after
+  `/map`. Start-up TF warnings are the same as development. New: detection logged 2 (maze_1)
+  and 5 (maze_3) "no transform base_footprint -> map ... extrapolation into the future" by
+  10-20 ms (throttled to one per 5 s): the chain now waits for `odom_fused -> odom` too, which
+  comes with `/odom` (10 Hz). It drops a few camera frames; scores were not affected.
+- With this, PR #34's fix after turns adds little on the bag (1.8° -> 1.3°). Its flag
+  (`/jar/localizacion_lista`) is still useful; `actualizaciones_giro` can be lowered or set to 0.

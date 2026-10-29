@@ -76,7 +76,10 @@ def generate_launch_description():
         DeclareLaunchArgument('use_sim_time', default_value='false'),
         DeclareLaunchArgument('localizacion', default_value='true',
                               description='false: sin AMCL (otro publica map -> odom)'),
-        GroupAction(condition=IfCondition(con_amcl), actions=[nodo('nav2_amcl', 'amcl', 'amcl')]),
+        # AMCL's odom frame is odom_fused (odometria_imu.py): both go only with AMCL.
+        GroupAction(condition=IfCondition(con_amcl), actions=[
+            nodo('nav2_amcl', 'amcl', 'amcl'),
+            nodo('equipo_jar', 'odometria_imu', 'odometria_imu')]),
         *navegacion,
         # Activa los nodos en el orden de la lista (AMCL primero si está). bt_navigator
         # último: cuando aparece navigate_to_pose, todo lo demás ya está activo.
