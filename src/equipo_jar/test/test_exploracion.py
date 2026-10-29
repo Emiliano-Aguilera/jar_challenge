@@ -7,7 +7,7 @@ import pytest
 
 from equipo_jar.exploracion import (
     angle_difference, first_pending, already_visited, yaw_from_quaternion, goal_position,
-    box_zones, near_box, return_verdict)
+    box_zones, near_box, return_verdict, goal_blocked)
 
 DIST = 0.30
 ANG = 0.5
@@ -360,3 +360,65 @@ def test_mision_params_in_yaml_match_the_ones_declared_in_code():
             declared = {key.value for key in node.args[1].keys}
     assert declared is not None, 'parametros_en_vivo call not found in mision.py'
     assert set(mision) == declared
+
+
+# --- Objetivos sobre obstáculos que no están en /map ---
+# goal_blocked lee el costmap global de Nav2 (/global_costmap/costmap) en el punto del
+# objetivo. Valores: 100 obstáculo, 99 el centro del robot ahí tocaría algo, 1-98 solo
+# margen, 0 libre, -1 desconocido. Desconocido o fuera de la grilla: no bloquea (decide Nav2).
+# Grilla de prueba: 3 x 2 celdas de 0.5 m, origen en (-1.0, 0.0).
+
+def costmap(values):
+    return SimpleNamespace(
+        info=SimpleNamespace(width=3, height=2, resolution=0.5,
+                             origin=SimpleNamespace(position=SimpleNamespace(x=-1.0, y=0.0))),
+        data=values)
+
+
+def test_goal_on_an_obstacle_is_blocked():
+    grid = costmap([0, 100, 0,
+                    0, 0, 0])
+    assert goal_blocked(grid, -0.25, 0.25, 99)
+
+
+def test_goal_where_the_robot_would_touch_is_blocked():
+    grid = costmap([0, 99, 0,
+                    0, 0, 0])
+    assert goal_blocked(grid, -0.25, 0.25, 99)
+
+
+def test_goal_in_the_safety_margin_is_not_blocked():
+    grid = costmap([0, 98, 0,
+                    0, 0, 0])
+    assert not goal_blocked(grid, -0.25, 0.25, 99)
+
+
+def test_free_goal_is_not_blocked():
+    grid = costmap([100, 0, 100,
+                    100, 100, 100])
+    assert not goal_blocked(grid, -0.25, 0.25, 99)
+
+
+def test_unknown_goal_is_not_blocked():
+    grid = costmap([0, -1, 0,
+                    0, 0, 0])
+    assert not goal_blocked(grid, -0.25, 0.25, 99)
+
+
+def test_goal_outside_the_costmap_is_not_blocked():
+    grid = costmap([100] * 6)
+    assert not goal_blocked(grid, 5.0, 5.0, 99)
+
+
+def test_no_costmap_yet_is_not_blocked():
+    assert not goal_blocked(None, 0.0, 0.0, 99)
+
+
+def test_costmap_blocked_value_is_an_int_cost():
+    # parametros_en_vivo declara el tipo con el valor por defecto (int): 99.0 en el YAML
+    # haría fallar el nodo al arrancar. Fuera de 1-100 nunca bloquearía o bloquearía todo.
+    yaml = pytest.importorskip('yaml')
+    params_dir = Path(__file__).resolve().parents[1] / 'params'
+    mision = yaml.safe_load((params_dir / 'params.yaml').read_text())['mision']['ros__parameters']
+    value = mision['costmap_blocked_value']
+    assert isinstance(value, int) and 1 <= value <= 100

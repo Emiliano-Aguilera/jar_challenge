@@ -184,3 +184,4 @@ mision:
     return_max_tries: 3
     return_still_s: 0.5
     return_still_m: 0.01
+    costmap_blocked_value: 99

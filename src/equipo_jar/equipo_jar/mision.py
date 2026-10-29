@@ -23,7 +23,7 @@ from equipo_jar.comun import QOS_ESTADO, QOS_MAPA, correr, parametros_en_vivo
 from equipo_jar.reportes import armar_reporte
 from equipo_jar_msgs.msg import Candidatas
 from equipo_jar.confirmacion import select_to_report
-from equipo_jar.exploracion import yaw_from_quaternion, first_pending, angle_difference, goal_position, box_zones, near_box, return_verdict
+from equipo_jar.exploracion import yaw_from_quaternion, first_pending, angle_difference, goal_position, box_zones, near_box, return_verdict, goal_blocked
 from equipo_jar.inspeccion import pick_doubtful, viewpoint_for
 from equipo_jar.mapa import Grid
 
@@ -56,12 +56,15 @@ class Mision(Node):
                                             'box_clearance_m': 0.42, 'box_clearance_sigmas': 1.0,    
                                             'visit_transit_radius_m': 0.15, 'visit_free_threshold': 25,
                                             'settle_s': 0.0, 'max_recoveries': 10, 'return_tolerance_m': 0.05,
-                                            'return_max_tries': 3, 'return_still_s': 0.5, 'return_still_m': 0.01})  # parámetros ajustables
+                                            'return_max_tries': 3, 'return_still_s': 0.5, 'return_still_m': 0.01,
+                                            'costmap_blocked_value': 99})  # parámetros ajustables
 
         self.mapa = None
         self.grid = None
         self.plan = None
         self.candidatas = None
+
+        self.costmap = None
 
         self.t0 = None
         self.create_timer(0.1, self.step)
@@ -82,6 +85,7 @@ class Mision(Node):
         self.current_point = None
         self.settle_until = None
         self.current_goal = None
+        self.current_in_place = False
 
         self.return_sent = False
         self.return_tree = os.path.join(get_package_share_directory('equipo_jar'),
@@ -116,6 +120,7 @@ class Mision(Node):
         self.pub_done = self.create_publisher(Empty, '/done', 10)
         self.get_logger().info(
             f'Hay que encontrar {self.cantidad_victimas} víctimas. Esperando el mapa en /map...')
+        self.create_subscription(OccupancyGrid, '/global_costmap/costmap', self.on_costmap, QOS_MAPA)
 
     def al_recibir_mapa(self, mapa):
         if self.mapa is None:
@@ -129,6 +134,9 @@ class Mision(Node):
         except ValueError as e:
             self.grid = None
             self.get_logger().error(f'No pude armar la grilla del mapa: {e}. Sin inspecciones.')
+
+    def on_costmap(self, msg):
+        self.costmap = msg
 
     def seconds_since_t0(self):
         if self.t0 is None:
@@ -245,6 +253,23 @@ class Mision(Node):
                                     f'quedó cerca de una caja')
             self.current_point = None
 
+    def check_goal_blocked(self):
+        if self.state != 'exploring':
+            return
+        elif self.nav_state != 'moving':
+            return
+        elif self.current_point is None or self.current_in_place:
+            return
+        elif self.stuck_canceling:
+            return
+        x = self.current_point.pose.position.x
+        y = self.current_point.pose.position.y
+        if goal_blocked(self.costmap, x, y, self.p['costmap_blocked_value']):
+            self.current_goal.cancel_goal_async()
+            self.get_logger().info(f'Cancelo el viaje: el punto del plan ({x:.2f},{y:.2f}) '
+                                f'quedó ocupado en el costmap')
+            self.current_point = None
+
     def handle_on_goal_response(self, future):
         goal_handle = future.result()
         if not goal_handle.accepted:
@@ -327,6 +352,7 @@ class Mision(Node):
             return
         self.check_stuck()
         self.check_goal_near_box()
+        self.check_goal_blocked()
         if self.state == 'exploring':
             reason = self.reason_to_return()
             if reason is not None:
@@ -388,10 +414,15 @@ class Mision(Node):
         q = point.pose.orientation
         yaw = yaw_from_quaternion(q)
         x, y, in_place = goal_position(plan_x, plan_y, self.current_pose(), self.p['turn_in_place_m'])
+        if not in_place and goal_blocked(self.costmap, x, y, self.p['costmap_blocked_value']):
+            self.visited.append((plan_x, plan_y, yaw))
+            self.get_logger().info(f'Salteo el punto del plan ({plan_x:.2f},{plan_y:.2f}): ocupado en el costmap')
+            return
         goal = self.make_pose(x, y, yaw)
         sent = self.go_to(goal)
         if sent:
             self.current_point = point
+            self.current_in_place = in_place
             if in_place:
                 self.get_logger().info(f'Giro en el lugar: yaw={yaw:.2f} desde ({x:.2f},{y:.2f}), '
                                         f'punto del plan ({plan_x:.2f},{plan_y:.2f})')
@@ -521,6 +552,9 @@ class Mision(Node):
         view = viewpoint_for(self.mapa, c.centro.x, c.centro.y, x_robot, y_robot, self.p['visit_distance_m'], 
                             self.p['visit_clearance_m'], self.p['visit_angles'], self.p['visit_min_shift_m'],
                             self.p['visit_box_margin_m'], self.grid, reachable)
+        if view is not None and goal_blocked(self.costmap, view[0], view[1], self.p['costmap_blocked_value']):
+            self.get_logger().info(f'El lugar para mirar la candidata id={c.id} está ocupado en el costmap')
+            view = None
         if view is None:
             _, attempts = self.failed_inspections.get(c.id, (0, 0))
             self.failed_inspections[c.id] = (c.observaciones, attempts + 1)

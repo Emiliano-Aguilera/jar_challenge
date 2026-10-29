@@ -413,15 +413,46 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
   tolerance, so the error is mostly that tolerance, not localization. maze_3's 0.082 m
   leaves 1.8 cm under the 4-wheel rule (0.10 m): that is why the precise tree was
   needed. Scores 500 and 600, done at 204 s and 159 s, no collisions or close calls.
+- Checked with the precise tree (2026-10-29, runs of `mision/objetivos-ocupados`, 300 s):
+  both returns passed on the first try; mission measured 0.034 m (maze_1) and 0.045 m
+  (maze_3); +100 in both.
+
+## How does mission skip goals on obstacles that are not in `/map`?
+
+- Problem: blue boxes and decoys are not drawn in `/map`. A plan point on top of one was
+  sent anyway and Nav2 spent time until it failed: maze_1 (4.08,0.78) failed in 3 of 3
+  runs, 27-44 s each.
+- Decided (2026-10-29): mission reads Nav2's global costmap, `/global_costmap/costmap`
+  (`OccupancyGrid`, reliable + transient local, full grid at 1 Hz since #33; values 0-100:
+  100 obstacle, 99 the robot's center there would touch, 1-98 margin only, 0 free, -1
+  unknown). `goal_blocked` (`exploracion.py`): a point is blocked if its cell is >=
+  `costmap_blocked_value` (99). Unknown or outside the grid is not blocked: Nav2 decides.
+- Before sending: a blocked plan point is marked visited and skipped; a blocked inspection
+  view counts as a failed attempt (same as "no place to look"). Turns in place are not
+  checked: the robot stays where it is.
+- While moving (`check_goal_blocked`, like `check_goal_near_box`): if the plan point
+  becomes blocked, mission cancels the trip; the next `explore()` sees it blocked and
+  skips it. Not for turns in place, inspection trips or the trip back.
+- Limit: `viewpoint_for` returns its first valid view from `/map`; if that one is
+  blocked, mission does not try the next one.
+- Checked (2026-10-29, 300 s, 1 run per map): maze_1 500 of 500, done at 182 s (before:
+  196-250 s); the trip to (4.08,0.78) was cancelled 1 s after it started and the point
+  skipped. maze_3 600 of 600, done at 153 s, 3 of 3 reports (before: always 300); the
+  trip to (-0.30,-3.15) was cancelled with the robot already within 0.20 m, so it
+  turned in place there and saw the third box. One run per map: part of the maze_3
+  gain may be run-to-run variation.
 
 ## Next (2026-10-28)
 
 Done (mission): cancel exploration trips at `max_recoveries` Nav2 recoveries (see
 "What if navigation gets stuck?"); precise return (see "How does mission check the
-return?").
+return?"); goals on unmapped obstacles (see "How does mission skip goals on obstacles
+that are not in `/map`?").
 
 Pending, in this order:
-1. Wait for localization (hans-die, PR #34). Localization publishes
+1. Wait for localization (hans-die, PR #34). On hold (2026-10-29): localization may fix
+   the odometry before AMCL instead (`localizacion/rumbo-imu`, or a x0.79 scale).
+   Localization publishes
    `/jar/localizacion_lista` (`std_msgs/Bool`, reliable + transient local): false until
    AMCL settles at the start, and after each big turn until the heading is fixed
    (~0.9 s, max 3 s). Why: on the real robot `/odom` overcounts turns ~25 %, so after a
@@ -433,15 +464,10 @@ Pending, in this order:
    off when it turns `true` (11° before). If perception drops frames while it is
    `false`, mission's wait must be merged first, or the robot leaves each viewpoint
    before a valid frame.
-2. Goals on obstacles that are not in `/map` (blue boxes, decoys): check the goal against
-   Nav2's global costmap before sending and while moving. maze_1 (4.08,0.78) failed in 3
-   of 3 runs, 27-44 s each. Available since #33: `/global_costmap/costmap`
-   (`OccupancyGrid`, reliable + transient local, full grid at 1 Hz; values 0-100:
-   obstacle >= 99, 1-98 inflation only, 0 free, -1 unknown).
-3. Long trips back: NavFn caps paths at ~2x the map's longest side (~12 m on maze_1), so
+2. Long trips back: NavFn caps paths at ~2x the map's longest side (~12 m on maze_1), so
    the trip back can fail from far away. Mission fallback: go back through visited
    points. (The A* failures to extract existing paths were fixed in #33: Dijkstra.)
-4. Tests: shifted and turned starts, unmapped obstacles, Nav2 failures (retries, return).
+3. Tests: shifted and turned starts, unmapped obstacles, Nav2 failures (retries, return).
 
 For other modules:
 - Perception: the point cloud subscription is always created (`deteccion.py`;
