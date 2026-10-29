@@ -8,6 +8,9 @@ navegación. No publica /cmd_vel: eso es solo de navegación.
 Esqueleto: espera el mapa y no hace nada más. Hasta recibir /map no se puede
 mover el robot ni reportar (§5).
 """
+import os
+from ament_index_python.packages import get_package_share_directory
+
 from geometry_msgs.msg import PointStamped
 from nav2_msgs.action import NavigateToPose
 from nav_msgs.msg import OccupancyGrid, Path
@@ -52,9 +55,8 @@ class Mision(Node):
                                             'visit_max_attempts': 3, 'box_min_observations': 2,
                                             'box_clearance_m': 0.42, 'box_clearance_sigmas': 1.0,    
                                             'visit_transit_radius_m': 0.15, 'visit_free_threshold': 25,
-                                            'settle_s': 0.0, 'max_recoveries': 10, 'return_tolerance_m': 0.10,
-                                            'return_yaw_tolerance_rad': 0.25, 'return_max_tries': 3,
-                                            'return_still_s': 0.5, 'return_still_m': 0.01})  # parámetros ajustables
+                                            'settle_s': 0.0, 'max_recoveries': 10, 'return_tolerance_m': 0.05,
+                                            'return_max_tries': 3, 'return_still_s': 0.5, 'return_still_m': 0.01})  # parámetros ajustables
 
         self.mapa = None
         self.grid = None
@@ -82,6 +84,8 @@ class Mision(Node):
         self.current_goal = None
 
         self.return_sent = False
+        self.return_tree = os.path.join(get_package_share_directory('equipo_jar'),
+                                'behavior_trees', 'vuelta_precisa.xml')
         self.return_tries = 0
         self.check_since = None
         self.check_pose = None
@@ -169,12 +173,13 @@ class Mision(Node):
             i = len(self.reported_points)
             self.get_logger().info(f'Reporte {i}. id={c.id} x={c.centro.x :.2f} y={c.centro.y:.2f}')
 
-    def go_to(self, pose):
+    def go_to(self, pose, tree=''):
         if not self.navegacion.server_is_ready():
             self.get_logger().warn('!!! El servidor de navegacion no esta listo !!!', throttle_duration_sec=5.0)
             return False
         goal = NavigateToPose.Goal()
         goal.pose = pose
+        goal.behavior_tree = tree
         self.nav_state = "sending"
         self.recoveries = 0
         future = self.navegacion.send_goal_async(goal, feedback_callback=self.on_feedback)
@@ -447,7 +452,7 @@ class Mision(Node):
                 return
             else:
                 x, y, yaw = self.start_pose
-                sent = self.go_to(self.make_pose(x, y, yaw))
+                sent = self.go_to(self.make_pose(x, y, yaw), self.return_tree)
                 if sent:
                     self.return_sent = True
                     self.return_tries += 1
@@ -473,14 +478,12 @@ class Mision(Node):
         pose = self.current_pose()
         if pose is None:
             return
-        x, y, yaw = pose
-        x0, y0, yaw0 = self.start_pose
+        x, y, _ = pose
+        x0, y0, _ = self.start_pose
         error = math.hypot(x - x0, y - y0)
-        error_yaw = angle_difference(yaw, yaw0)
-        self.get_logger().info(f'Regreso {self.return_tries}: a {error:.3f} m y '
-                                f'{error_yaw:.2f} rad de la largada')
-        verdict = return_verdict(error, error_yaw, self.return_tries, self.p['return_tolerance_m'],
-                                self.p['return_yaw_tolerance_rad'], self.p['return_max_tries'])
+        self.get_logger().info(f'Regreso {self.return_tries}: a {error:.3f} m de la largada')
+        verdict = return_verdict(error, self.return_tries, self.p['return_tolerance_m'],
+                                self.p['return_max_tries'])
         if verdict == 'ok':
             self.change_state('stopping')
         elif verdict == 'retry':

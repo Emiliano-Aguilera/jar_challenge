@@ -8,13 +8,6 @@ def yaw_from_quaternion(q):
 def angle_difference(a, b):
     return abs(math.atan2(math.sin(a - b), math.cos(a - b)))
 
-def return_verdict(error, error_yaw, tries, tolerance, yaw_tolerance, max_tries):
-    if error <= tolerance and error_yaw <= yaw_tolerance:
-        return 'ok'
-    if tries < max_tries:
-        return 'retry'
-    return 'give_up'
-
 def already_visited(x, y, yaw, visited, dist_min, ang_min):
     for tup in visited:
         xi = tup[0]
@@ -68,3 +61,9 @@ def near_box(x, y, zones):
             return True
     return False
 
+def return_verdict(error, tries, tolerance, max_tries):
+    if error <= tolerance:
+        return 'ok'
+    if tries < max_tries:
+        return 'retry'
+    return 'give_up'
