@@ -12,7 +12,7 @@ is in the rules (§7.1), in [`docs/QOS.md`](../QOS.md) and in the root
 | Localization | All | Robot pose in the map | TF `map → odom` | `tf2` |
 | Coverage | Mission | Pending viewpoints, in order | `/jar/plan_cobertura` | `nav_msgs/Path` |
 | Mission | Navigation | Go to a pose | `navigate_to_pose` | `nav2_msgs/action/NavigateToPose` |
-| Detection | Fusion | What it sees, frame by frame | defined by the perception owners | — |
+| Detection | Fusion | Each box seen, frame by frame | `/jar/observaciones` | `geometry_msgs/PoseWithCovarianceStamped` |
 | Fusion | Mission | Victim candidates | `/jar/candidatas` | `equipo_jar_msgs/Candidatas` (ours) |
 | Mission | Judge | Reports and end | `/victimas`, `/done` | official |
 | Navigation | Robot | Velocity | `/cmd_vel` | official |
@@ -54,6 +54,15 @@ only sees 61°. Each message replaces the previous one.
 
 **Nav2's `NavigateToPose` action** (`bt_navigator`): a goal pose in `map`, with
 orientation. Mission can cancel it.
+
+## Detection → Fusion
+
+**`/jar/observaciones`** (`geometry_msgs/PoseWithCovarianceStamped`, frame `map`):
+one message per box seen in one camera frame. Position: the estimated box center.
+`covariance[0]` and `covariance[7]`: the variance (sigma², m²) of this single
+observation. `header.stamp`: the time of the LiDAR scan it came from; fusion
+uses it to look up where the robot was. Details: the top comment of
+`deteccion.py`.
 
 ## Fusion → Mission
 

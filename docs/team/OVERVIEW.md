@@ -194,7 +194,7 @@ flowchart LR
   S["Sensors<br/>/scan /odom /imu/data<br/>/cam_1/... /tf"] --> LOC & DET
   J["Judge"] -->|"/map"| LOC & COB
   LOC["Localization<br/>where am I? (AMCL)"] -->|"TF map → odom<br/>(used by every node)"| NAV
-  DET["Detection<br/>red in camera<br/>+ LiDAR distance"] --> FUS["Fusion<br/>candidates"]
+  DET["Detection<br/>red in camera<br/>+ LiDAR distance"] -->|"/jar/observaciones"| FUS["Fusion<br/>candidates"]
   FUS -->|"/jar/candidatas"| MIS
   COB["Coverage<br/>where to look from"] -->|"/jar/plan_cobertura"| MIS
   MIS["Mission<br/>what now?<br/>when to report?"] -->|"navigate_to_pose"| NAV["Navigation<br/>Nav2"]
@@ -218,16 +218,15 @@ flowchart LR
 - **Mission**: "what do I do now?" Sends navigation its goals, decides when to report each
   candidate, and when to return and publish `/done`. The only one that reports.
 
-Integration: one launch, `competencia.launch.py`, starts everything; tunable values live in
-`src/equipo_jar/params/params.yaml`. Today `src/equipo_jar` has skeleton nodes `cobertura`,
-`deteccion`, `fusion` and `mision` (they wait for `/map` and do nothing yet);
-localization and Nav2 are added to the launch later. `src/equipo_jar_msgs` holds our own
-message types (`Candidatas`). Who owns each module: root `CLAUDE.md`, "Team". What each one
-passes to the others: [`INTERFACES.md`](INTERFACES.md).
+Integration: one launch, `competencia.launch.py`, starts everything: one node per module,
+plus `navegacion.launch.py` for localization (AMCL) and Nav2. Tunable values live in
+`src/equipo_jar/params/` (only that folder may change after the delivery cutoff).
+`src/equipo_jar_msgs` holds our own message types. Who owns each module: root `CLAUDE.md`,
+"Team". What each one passes to the others: [`INTERFACES.md`](INTERFACES.md).
 
 > [!NOTE]
 > **In JAR.** `pruebas.launch.py` is `competencia.launch.py` plus a fixed `map → odom`, so
-> every module can be tested in the simulator before localization exists. It never goes
+> every module can be tested in the simulator without AMCL. It never goes
 > into the competition launch.
 
 ## Where each thing runs
