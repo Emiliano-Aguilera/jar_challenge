@@ -30,13 +30,13 @@ for k in range(1, len(st)):
 post_turn &= t > 16
 stop_end = post_turn & ~np.roll(post_turn, -1)
 
-VARIANTS = [('today a1 0.2, off', {}, 0), ('node: 3 updates', {}, 3), ('node: 5 updates', {}, 5), ('node: 10 updates', {}, 10),
-            ('node: a1 0.5 + 5 updates', dict(alpha1=0.5), 5), ('node: a1 0.8 + 10 updates', dict(alpha1=0.8), 10)]
+VARIANTS = [('today a1 0.2, off', {}, 0), ('node: 5 updates', {}, 5), ('node: 10 updates', {}, 10),
+            ('node: 15 updates', {}, 15), ('node: a1 0.5 + 10 updates', dict(alpha1=0.5), 10)]
 
 def run(P, F, seed, n_upd):
     rng = np.random.default_rng(seed)
-    c = CorreccionGiro({'actualizaciones_giro': n_upd, 'giro_minimo_rad': 0.3, 'girando_rads': 0.3, 'quieto_lineal_ms': 0.02,
-                        'quieto_angular_rads': 0.05, 'max_correccion_s': 3.0})
+    c = CorreccionGiro({'actualizaciones_giro': n_upd, 'giro_minimo_rad': 0.3, 'girando_rads': 0.3,
+                        'max_correccion_s': 4.0, 'max_duda_s': 15.0})
     a = amcl.Amcl(P, F, rng); a.init(P['init'], P['init_sxy'], P['init_syaw'])
     n = len(st); est = np.full((n, 3), np.nan); upd = np.zeros(n, int)
     rb = [amcl.beams(D['scan_r'][k], P) for k in range(n)]
@@ -45,7 +45,7 @@ def run(P, F, seed, n_upd):
     for k in range(n):
         # odom messages (10 Hz, header stamp col 1, twist cols 5-7) up to this scan
         while oi < len(O) and O[oi, 1] <= st[k]:
-            r = O[oi]; c.con_odom(r[1], r[4], r[5], r[6], r[7]); oi += 1
+            r = O[oi]; c.con_odom(r[1], r[4], r[7]); oi += 1
             # node tick every 0.2 s: one request while it asks
             if c.pedir_actualizacion() and r[1] - ultimo_pedido >= 0.2:
                 pedido = True; ultimo_pedido = r[1]
@@ -87,8 +87,8 @@ if __name__ == '__main__':
             ehf.append(h[fin]); ebf.append(np.hypot(bx, by)[fin])
         eh, eb = np.concatenate(eh), np.concatenate(eb)
         ehf, ebf = np.concatenate(ehf), np.concatenate(ebf)
-        if len(ehf):
-            print(f"{'':28s} when the flag turns true: heading med {np.median(ehf):5.1f} p90 {np.percentile(ehf, 90):5.1f} | box >0.25 m {np.mean(ebf > 0.25) * 100:5.1f}%")
         print(f"{name:28s} heading at stops med {np.median(eh):5.1f} p90 {np.percentile(eh, 90):5.1f} | "
               f"box >0.25 m {np.mean(eb > 0.25) * 100:5.1f}% | flag false {np.mean(dsec):5.1f} s of {st[-1]-st[0]:.0f} s, "
               f"fixes {np.mean(fixes):.0f} (timed out {np.mean(venc):.0f}) | flag true at stop end {np.mean(flag_at_stop):.0f}%")
+        if len(ehf):    # same variant as the line above
+            print(f"{'':28s} when the flag turns true: heading med {np.median(ehf):5.1f} p90 {np.percentile(ehf, 90):5.1f} | box >0.25 m {np.mean(ebf > 0.25) * 100:5.1f}%")

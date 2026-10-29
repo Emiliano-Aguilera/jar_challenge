@@ -15,8 +15,8 @@ Tres tareas:
    filtro se acomode antes de que el robot se mueva.
 
 3. Heading fix after turns (real robot: /odom overcounts turns ~25 %). After a turn the
-   heading is in doubt until AMCL has used a few scans taken after the turn; while the
-   robot is still the node asks AMCL for no-motion updates (logic in correccion_giro.py).
+   heading is in doubt until AMCL has used a few scans taken after the turn; once the turn
+   ends the node asks AMCL for no-motion updates (logic in correccion_giro.py).
    `/jar/localizacion_lista` (Bool, transient local) is false until the start-up fix is
    done and while the heading is in doubt: mission can wait and detection can skip frames.
 """
@@ -112,14 +112,13 @@ class Localizacion(Node):
             'yaw_inicial': 0.0,
             'desvio_xy_inicial': 0.20,    # m, error de colocar el robot a mano
             'desvio_yaw_inicial': 0.30,   # rad
-            'actualizaciones_quieto': 10,  # actualizaciones de AMCL sin movimiento al inicio
+            'actualizaciones_quieto': 10,  # actualizaciones de AMCL sin movimiento al inicio (0 = ninguna)
             # Heading fix after turns (correccion_giro.py). 0 = off: the flag covers start-up only.
-            'actualizaciones_giro': 5,    # AMCL updates after the turn before trusting it again
-            'giro_minimo_rad': 0.3,       # odometry rotation since the last stop that needs a fix
+            'actualizaciones_giro': 10,    # AMCL updates after the turn before trusting it again
+            'giro_minimo_rad': 0.3,       # signed rotation of one turn that needs a fix
             'girando_rads': 0.3,          # above this the robot is turning (not driving corrections)
-            'quieto_lineal_ms': 0.02,     # below this the robot counts as still (judge's limits)
-            'quieto_angular_rads': 0.05,
-            'max_correccion_s': 3.0,      # stop waiting after this (no scans, robot never still)
+            'max_correccion_s': 4.0,      # stop waiting this long after the turn ends (no scans)
+            'max_duda_s': 15.0,           # stop waiting this long after the doubt starts
         })
         # Los pone navegacion.launch.py. Sin AMCL (pruebas.launch.py) otro publica map -> odom.
         self.usar_amcl = self.declare_parameter('usar_amcl', True).value
@@ -132,8 +131,9 @@ class Localizacion(Node):
 
         self.mapa_recibido = False
         self.pose_enviada = False
-        # > 0: actualizaciones que faltan pedir; 0: todavía no empezó; -1: terminado.
+        # > 0: actualizaciones que AMCL todavía tiene que hacer; 0: todavía no empezó; -1: terminado.
         self.faltan = 0 if self.usar_amcl else -1
+        self.pedidos = 0    # pedidos sin movimiento al inicio, por si AMCL no contesta
         self.create_subscription(OccupancyGrid, '/map', self.al_recibir_mapa, QOS_MAPA)
         # AMCL publica /amcl_pose reliable + transient local, igual que /map.
         self.create_subscription(
@@ -158,6 +158,13 @@ class Localizacion(Node):
         # AMCL tomó la pose de inicio: dejar de mandarla y empezar a acomodar.
         if self.pose_enviada and self.faltan == 0:
             self.faltan = self.p['actualizaciones_quieto']
+            if self.faltan <= 0:
+                self.terminar_arranque('AMCL tomó la pose de inicio (sin actualizaciones extra)')
+        elif self.faltan > 0:
+            # Cada pose que publica AMCL es una actualización hecha.
+            self.faltan -= 1
+            if self.faltan == 0:
+                self.terminar_arranque('AMCL acomodado')
         elif self.faltan < 0:
             self.correccion.con_actualizacion_amcl(segundos(msg.header.stamp))
 
@@ -166,9 +173,7 @@ class Localizacion(Node):
             return
         q = msg.pose.pose.orientation
         yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))
-        v = msg.twist.twist
-        self.correccion.con_odom(
-            segundos(msg.header.stamp), yaw, v.linear.x, v.linear.y, v.angular.z)
+        self.correccion.con_odom(segundos(msg.header.stamp), yaw, msg.twist.twist.angular.z)
 
     def publicar_lista(self):
         lista = self.mapa_recibido and self.faltan < 0 and not self.correccion.en_duda
@@ -204,10 +209,16 @@ class Localizacion(Node):
             return
         if self.sin_movimiento.service_is_ready():
             self.sin_movimiento.call_async(Empty.Request())
-            self.faltan -= 1
-            if self.faltan == 0:
-                self.get_logger().info('AMCL acomodado')
-                self.faltan = -1
+            self.pedidos += 1
+            # Si AMCL no publica una pose por cada pedido, no esperar para siempre.
+            if self.pedidos >= 3 * self.p['actualizaciones_quieto']:
+                self.terminar_arranque(
+                    f'AMCL hizo solo {self.p["actualizaciones_quieto"] - self.faltan} de '
+                    f'{self.p["actualizaciones_quieto"]} actualizaciones al inicio; sigo igual')
+
+    def terminar_arranque(self, motivo):
+        self.get_logger().info(motivo)
+        self.faltan = -1
 
     def enviar_pose_inicial(self):
         msg = PoseWithCovarianceStamped()

@@ -456,33 +456,45 @@ the final config is bb0f061's (validated above).
 
 ### Q: how does the node fix the heading after a turn? (from 2026-10-28)
 
-- Decided (`correccion_giro.py`, used by `localizacion.py`): after >= `giro_minimo_rad` (0.3)
-  of odometry rotation since the last stop, the heading is in doubt. When the turn ends
-  (|wz| < `girando_rads`, 0.3 rad/s) the node asks AMCL for a no-motion update every 0.2 s
-  tick, and trusts the heading again after `actualizaciones_giro` (5) AMCL updates with scans
-  taken after the turn (motion updates count too), or after `max_correccion_s` (3 s).
+- Decided (`correccion_giro.py`, used by `localizacion.py`): a turn is a run of /odom samples
+  with |wz| >= `girando_rads` (0.3 rad/s) and at least `giro_minimo_rad` (0.3) of signed yaw
+  change over the run. After a turn the heading is in doubt. When the turn ends the node asks
+  AMCL for a no-motion update every 0.2 s tick, and trusts the heading again after
+  `actualizaciones_giro` (10) AMCL updates with scans taken after the turn (motion updates
+  count too), or after `max_correccion_s` (4 s) from the turn end or `max_duda_s` (15 s) in all.
   `/jar/localizacion_lista` (Bool, transient local): false until the start-up updates are done
-  and while in doubt. Mission (wait, start pose) and detection (skip frames) can use it.
+  (counted when AMCL publishes, not when requested) and while in doubt.
 - Tried first: "turning" = |wz| >= 0.05 and requests only with the robot fully still. On the
   bag small heading corrections while driving kept restarting the count and the bag's stops
   are ~3 scans: boxes > 0.25 m off at stops only 59 % -> 31 %, flag false 59 of 121 s.
+- Second version (first push of PR #34): any rotation since the last stop added up (`abs`),
+  and any sample with |wz| >= 0.3 restarted the count. Emiliano's review: wobble while driving
+  adds up to a "turn" (flag false 19-24 % of a straight drive), and wz dithering around 0.3
+  kept the flag false with no timeout. Replaced by the signed per-turn rule above, plus
+  `max_duda_s`.
+- Correction (2026-10-29): the first table here was read one row off. `eval_nodo.py` printed
+  the "when the flag turns true" line before its variant's line, not after. The old logic
+  really gave 4.8° / 5.6 % with 5 updates and 1.3° / 0 % with 10, so the default 5 was wrong.
+  The script now prints it after.
 - Checked on the week-10 bag (`eval_nodo.py`, the node's own class driving the replay, 10
-  seeds). "At the stop end" = the last still scan of each stop in the recorded motion (the bag
-  robot did not wait); "when the flag turns true" = what detection/mission would see if they
-  wait for the flag:
+  seeds, current logic). "At the stop end" = the last still scan of each stop in the recorded
+  motion (the bag robot did not wait); "when the flag turns true" = what detection/mission
+  would see if they wait for the flag:
 
 | Variant | Heading at stop end, median | Box > 0.25 m at stop end | Heading when flag turns true, median / p90 | Box > 0.25 m then | Flag false |
 | --- | --- | --- | --- | --- | --- |
-| off (today) | 10.9° | 59 % | - | - | 0 s |
-| 3 updates | 7.4° | 29 % | 4.8° / 7.8° | 5.6 % | 36 of 121 s |
-| **5 updates** | 6.6° | 27 % | **1.3° / 3.9°** | **0 %** | 45 s |
-| 10 updates | 6.9° | 21 % | 3.5° / 6.2° | 0.6 % | 67 s |
-| alpha1 0.5 + 5 updates | 5.3° | 2.9 % | 1.0° / 2.6° | 0 % | 45 s |
+| off | 10.9° | 59 % | - | - | 0 s |
+| 5 updates | 7.7° | 33 % | 5.4° / 8.5° | 11 % | 41 of 121 s |
+| **10 updates** | 6.8° | 22 % | **1.9° / 4.7°** | **0.8 %** | 59 s |
+| 15 updates | 6.7° | 21 % | 1.1° / 3.3° | 0 % | 70 s |
+| alpha1 0.5 + 10 updates | 5.1° | 2.4 % | 1.5° / 3.9° | 0 % | 59 s |
+| old logic, 10 updates | 6.9° | 21 % | 1.3° / 3.9° | 0 % | 67 s |
 
   The flag is false mostly while the robot turns and drives, not only at stops: the time
-  mission would wait is much less.
-- Checked in the simulator (branch at 4ff5abd, 600 s): laberinto_1 200, maze_1 500, maze_3 300
-  (same as before: laberinto_1's second box is found only on some return paths, maze_3 always
+  mission would wait is much less. The IMU heading (PR #44) removes most of the error without
+  waiting; with it `actualizaciones_giro` can go lower.
+- Checked in the simulator (branch at 4ff5abd, second version with 5 updates, 600 s):
+  laberinto_1 200, maze_1 500, maze_3 300 (same as before: laberinto_1's second box is found only on some return paths, maze_3 always
   300). Fixes 35 / 21 / 9, each 0.9 s on average (max 1.2 s), none timed out. "Localization
   ready" once at start-up. AMCL error unchanged (max 0.13 / 0.09 / 0.07 m). If mission waited
   at every fix the cost would be at most ~30 / 20 / 9 s.

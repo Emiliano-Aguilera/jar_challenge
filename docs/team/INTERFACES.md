@@ -49,16 +49,19 @@ the change process at the end.
 **`/jar/localizacion_lista`** (`std_msgs/Bool`, reliable + transient local, on
 change and once per second):
 
-- `false` until AMCL has settled at the start (no-motion updates done), and
-  after each turn of at least `giro_minimo_rad` (0.3 rad) until AMCL has used
-  `actualizaciones_giro` (5) scans taken after the turn. At most
-  `max_correccion_s` (3 s) after the turn ends.
+- `false` until AMCL has settled at the start (`actualizaciones_quieto`
+  no-motion updates done by AMCL, 10), and after each turn until AMCL has used
+  `actualizaciones_giro` (10) scans taken after the turn. A turn: |wz| at least
+  `girando_rads` (0.3 rad/s) and at least `giro_minimo_rad` (0.3 rad) of
+  rotation in one direction; corrections while driving do not count. At most
+  `max_correccion_s` (4 s) after the turn ends and `max_duda_s` (15 s) in all.
 - Why: on the real robot `/odom` counts turns ~25 % too much, so right after a
   turn the heading can be 10-20° off (a box seen 1.5 m away lands ~0.4 m off).
-  Week-10 bag replay: when the flag turns true again the heading error is ~1°.
+  Week-10 bag replay: when the flag turns true again the heading error is ~2°.
 - Mission: fix the start pose the first time it is `true`; after a trip, wait
   while it is `false` (with a max wait) before the next goal or a report.
-- Detection: skip frames taken while it is `false`.
+- Detection: skip frames taken while it is `false` (still under discussion
+  with perception).
 - `actualizaciones_giro: 0` turns the fix off (the flag then only covers the
   start). The simulator has no odometry error, but the fix also works there.
 
