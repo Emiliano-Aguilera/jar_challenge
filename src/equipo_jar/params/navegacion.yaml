@@ -3,6 +3,17 @@
 # El mapa llega solo del juez por /map. No hay map_server.
 # Los nombres de los parámetros de amcl son los de Nav2: no se pueden traducir.
 
+# Speed limits: set them only here. navegacion.launch.py copies them into MPPI (vx_max,
+# vy_max, vx_min, wz_max) and the velocity smoother (max/min_velocity). If the robot has
+# its own lower limit (factory), put that limit here: MPPI plans with these numbers, and
+# a robot slower than planned turns late and stops late. Hard limit of the X3: 1.0 m/s, 5 rad/s.
+limites:
+  ros__parameters:
+    lineal_max_ms: 0.5                # forward and sideways
+    reversa_max_ms: 0.35
+    giro_max_rads: 1.9
+    margen_giro_smoother: 1.05        # smoother turn limit = giro_max_rads x this
+
 amcl:
   ros__parameters:
     global_frame_id: map
@@ -143,10 +154,7 @@ controller_server:
       vx_std: 0.2
       vy_std: 0.2
       wz_std: 0.8                     # con 0.4 giraba a ~0.7 rad/s (180° en 4.5 s)
-      vx_max: 0.5
-      vx_min: -0.35
-      vy_max: 0.5
-      wz_max: 1.9
+      # vx_max, vx_min, vy_max, wz_max: from `limites` (top of this file)
       temperature: 0.3
       gamma: 0.015
       prune_distance: 1.7
@@ -321,8 +329,7 @@ velocity_smoother:
     smoothing_frequency: 20.0         # /cmd_vel a >= 10 Hz mientras se mueve
     scale_velocities: false
     feedback: OPEN_LOOP
-    max_velocity: [0.5, 0.5, 2.0]     # x, y, yaw. 3 números: el CI acepta hasta 3
-    min_velocity: [-0.5, -0.5, -2.0]
+    # max_velocity, min_velocity: from `limites` (top of this file)
     max_accel: [1.5, 1.5, 3.2]
     # Frenar rápido: al llegar, el controller manda cero y el smoother baja en rampa. Con -3.2
     # el giro final (~0.85 rad/s) tardaba 0.27 s en parar, y la misión manda /done 0.17-0.24 s
