@@ -60,9 +60,15 @@ class PoseInicial:
         self.campo = campo_distancias(celdas, ancho, alto, resolucion, self.tope)
 
     def distancia(self, x, y):
-        """Bilinear distance to the nearest wall at map points; outside the map = cap."""
-        u = (x - self.ox) / self.res - 0.5
-        v = (y - self.oy) / self.res - 0.5
+        """Bilinear distance to the nearest wall at map points; outside the map = cap.
+
+        Cell (i, j) is taken as centred at origin + (i, j) * resolution, as Nav2 Humble's
+        AMCL reads the map (not + 0.5 cell as in costmap_2d). Otherwise this match and AMCL
+        disagree by half a cell (2.5 cm in x and y) and the fine-tune fights AMCL. In the
+        simulator AMCL's reading is also the closer one to the world (~1.6 vs ~3.4 cm).
+        """
+        u = (x - self.ox) / self.res
+        v = (y - self.oy) / self.res
         i0 = np.floor(u).astype(np.int64)
         j0 = np.floor(v).astype(np.int64)
         fu, fv = u - i0, v - j0

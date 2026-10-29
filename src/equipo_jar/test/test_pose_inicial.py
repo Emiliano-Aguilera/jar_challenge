@@ -31,8 +31,9 @@ def scan(g, x, y, yaw, n=1080, caja=None):
     pasos = np.arange(5, 800) * 0.01
     px = lx + pasos[None, :] * np.cos(yaw + LASER[2] + a)[:, None]
     py = ly + pasos[None, :] * np.sin(yaw + LASER[2] + a)[:, None]
-    i = np.floor((px - ORIGEN[0]) / RES).astype(int)
-    j = np.floor((py - ORIGEN[1]) / RES).astype(int)
+    # Cell i is centred at ORIGEN + i * RES, as AMCL (and PoseInicial) read the map.
+    i = np.floor((px - ORIGEN[0]) / RES + 0.5).astype(int)
+    j = np.floor((py - ORIGEN[1]) / RES + 0.5).astype(int)
     ok = (i >= 0) & (j >= 0) & (i < g.shape[1]) & (j < g.shape[0])
     golpe = np.zeros_like(ok)
     golpe[ok] = g[j[ok], i[ok]] >= 65
@@ -69,7 +70,7 @@ def test_finds_a_robot_placed_off_the_guess():
     real = (0.18, -0.12, 0.35)
     res = b.buscar(scan(g, *real), 0.0, 0.0, 0.0)
     pos, rumbo = error(res, real)
-    assert pos < 0.03 and rumbo < math.radians(2)
+    assert pos < 0.015 and rumbo < math.radians(2)
     assert res[3] > 0.8 and res[4] < res[3]
 
 
@@ -77,14 +78,14 @@ def test_finds_any_heading():
     g, b = buscador()
     for real in [(0.1, 0.1, math.pi), (-0.2, 0.05, -2.0), (0.0, -0.2, 1.6)]:
         pos, rumbo = error(b.buscar(scan(g, *real), 0.0, 0.0, 0.0), real)
-        assert pos < 0.03 and rumbo < math.radians(2), real
+        assert pos < 0.015 and rumbo < math.radians(2), real
 
 
 def test_a_box_missing_from_the_map_does_not_fool_it():
     g, b = buscador()
     real = (0.1, -0.1, 0.2)
     pos, rumbo = error(b.buscar(scan(g, *real, caja=(0.6, -0.1, 0.125)), 0.0, 0.0, 0.0), real)
-    assert pos < 0.03 and rumbo < math.radians(2)
+    assert pos < 0.015 and rumbo < math.radians(2)
 
 
 def test_in_a_symmetric_spot_the_guessed_heading_wins():
