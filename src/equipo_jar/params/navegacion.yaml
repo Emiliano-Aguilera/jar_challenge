@@ -91,6 +91,28 @@ localizacion:
     desvio_xy_encontrada: 0.05        # spread sent to AMCL with the matched pose
     desvio_yaw_encontrada: 0.05
     espera_scan_s: 3.0                # no scan or LiDAR TF this long after /map: use the guess
+    # Watch AMCL while still (vigia.py): score the sweep at AMCL's pose, 0..1 (right: 0.8-0.9;
+    # real bag at the reference pose: median 0.71, 0.1 m off 0.33). Below vigia_puntaje_bajo,
+    # search nearby; move AMCL only to a pose seen vigia_confirmaciones times at the same spot.
+    vigia_periodo_s: 2.0
+    vigia_puntaje_bajo: 0.5
+    vigia_puntaje_bueno: 0.7          # the new pose must score at least this
+    vigia_mejora_minima: 0.2          # and this much more than AMCL's pose
+    vigia_distancia_minima_m: 0.10    # and be this far from it (or 0.1 rad)
+    vigia_coincidencia_m: 0.05
+    vigia_confirmaciones: 2
+    vigia_radio_m: 0.5
+    vigia_rango_yaw_rad: 0.35
+    # Fine-tune AMCL while still: if the score is fine, move AMCL to the best pose within
+    # afinar_radio_m when the fit is good and sharp (a plain corridor slides: no fix).
+    afinar_quieto: true
+    afinar_radio_m: 0.15
+    afinar_rango_yaw_rad: 0.1
+    afinar_puntaje_minimo: 0.75
+    afinar_nitidez_minima: 0.03       # score drop 5 cm / 2° away from the best pose
+    afinar_distancia_minima_m: 0.015  # move AMCL only if this far (or 0.015 rad)
+    desvio_xy_afinada: 0.02           # spread sent to AMCL with the fine-tuned pose
+    desvio_yaw_afinada: 0.02
     actualizaciones_quieto: 10        # 0 = none: ready as soon as AMCL takes the start pose
     # Heading fix after turns (real robot: /odom overcounts turns ~25 %). 0 = off.
     # Week-10 bag replay, heading when the flag turns true again: 10.9° without the fix,

@@ -20,7 +20,7 @@ Tres tareas:
    - AMCL lost (low score): moves AMCL to a clearly better nearby pose.
    - AMCL fine: fine-tunes it (`afinar_*`): a small search around AMCL's pose; if the fit
      is sharp and a few cm away, AMCL is moved there with a small spread. AMCL alone wanders
-     a few cm at the same spot (laberinto_1: start pose 0.06 m off, return 0.09 m); the
+     a few cm at the same spot (practice map: start pose 0.06 m off, return 0.09 m); the
      same match at the start and at the return gives the same pose, map errors included.
 
 4. Heading fix after turns (real robot: /odom overcounts turns ~25 %). After a turn the
