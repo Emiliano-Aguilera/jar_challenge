@@ -65,8 +65,21 @@ localizacion:
     x_inicial: 0.0
     y_inicial: 0.0
     yaw_inicial: 0.0
-    desvio_xy_inicial: 0.20
+    desvio_xy_inicial: 0.20           # spread sent with the guess (only if the LiDAR match fails)
     desvio_yaw_inicial: 0.30
+    # Start pose from one LiDAR sweep matched against /map, all headings (pose_inicial.py).
+    # Practice maps, robot up to 0.25 m off and any heading: ~1-2 cm, < 1.5°. false: the guess.
+    buscar_pose_inicial: true
+    radio_busqueda_m: 0.5             # positions searched around the guess
+    paso_busqueda_m: 0.05             # coarse grid, then two finer ones
+    paso_yaw_busqueda_rad: 0.035      # 2°
+    sigma_busqueda_m: 0.05            # a point this far from a wall scores ~0.6
+    rumbo_cercano_rad: 0.8            # a heading farther than this from yaw_inicial must
+    margen_otro_rumbo: 0.10           # score 10 % better to win (symmetric spots)
+    puntaje_minimo_busqueda: 0.5      # practice maps 0.8-0.9, real bag 0.88
+    desvio_xy_encontrada: 0.05        # spread sent to AMCL with the matched pose
+    desvio_yaw_encontrada: 0.05
+    espera_scan_s: 3.0                # no scan or LiDAR TF this long after /map: use the guess
     actualizaciones_quieto: 10        # 0 = none: ready as soon as AMCL takes the start pose
     # Heading fix after turns (real robot: /odom overcounts turns ~25 %). 0 = off.
     # Week-10 bag replay, heading when the flag turns true again: 10.9° without the fix,
