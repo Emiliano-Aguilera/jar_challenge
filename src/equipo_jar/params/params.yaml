@@ -77,9 +77,10 @@ deteccion:
     width_ratio_max: 1.8
     #PARAM: observations farther than this are dropped, m (> 0). Coverage looks from 2.0 m.
     max_range_m: 3.0
-    #PARAM: drop a LiDAR hit that lies on a wall of /map (true/false). Boxes are not drawn in
-    #       the practice maps; set false if the competition map draws them.
-    map_wall_check: true
+    #PARAM: drop a LiDAR hit that lies on a wall of /map (true/false). Off: the central beams
+    #       already reject a wall corner in front of a box, and on the real bag this check
+    #       dropped only correct views of boxes standing against walls.
+    map_wall_check: false
     #PARAM: how close to the map's wall distance counts as "on the wall", m (> AMCL error).
     map_wall_tolerance_m: 0.15
     #PARAM: a mapped obstacle smaller than this is a drawn box, not a wall, m (> box side).
