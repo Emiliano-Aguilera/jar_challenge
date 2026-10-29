@@ -674,3 +674,45 @@ Asked by mission (Bautista, 2026-10-27/28).
   0.17 still plans through it). Ground truth of 11 recent runs: the robot centre is closer than
   0.18 m to a wall or box 0-8 s per run, so the planner would start inside lethal cost and fail
   there. Not changed: the pause costs time, not points (all reports before 300 s).
+
+### Q: why does the start match sit ~3 cm from where AMCL settles? (half a cell)
+
+- Evidence (6 runs, 590c915-fce08da): the match minus the true start is about (+0.02, +0.03) m on
+  maze_1, laberinto_simple and maze_4, the same at yaw 0.5 and 1.5 (so a map offset, not a robot-frame
+  one). After the 10 settling updates AMCL had moved 2.4-3.0 cm away from the match in 4 runs, and the
+  start fine-tune pulled it back. maze_4 (placed at 0,0,0): match (0.017, 0.028), fine-tune to
+  (0.020, 0.022), and AMCL was back at (0.00, 0.00) when mission saved the start pose.
+- Cause: Nav2 Humble AMCL centres map cell i at origin + i * resolution (`convertMap` sets
+  origin + size/2 * scale, `MAP_GXWX` rounds). The match (like costmap_2d) used origin + (i + 0.5) *
+  resolution. So the two disagree by half a cell, (0.025, 0.025) m, and the fine-tune fought AMCL.
+- Which one fits the world: the match with AMCL's reading would be (-0.003, +0.005), (-0.003, +0.003),
+  (-0.008, +0.003), (+0.003, -0.031), (-0.031, +0.008) m off on maze_1, laberinto_simple, maze_4,
+  maze_2, maze_3 (mean ~1.6 cm); with the + 0.5 reading ~3.4 cm. On these practice maps AMCL's
+  reading fits the world better (maze_2 and maze_3 are ~3 cm off along one axis either way).
+- Change: the match reads cells as AMCL does. Offline benches are unaffected (scans and match used
+  the same reading); the unit tests now raycast with AMCL's reading and require < 1.5 cm (a half-cell
+  mismatch gives 3.5 cm). Side note: the costmaps keep the + 0.5 reading, so static walls are
+  2.5 cm off in +x/+y relative to AMCL; the LiDAR layer marks the real walls, and padding is 2 cm.
+
+## Final validation of navegacion/rosario (2026-10-29, 600 s, one map per request)
+
+AMCL error = `Begin navigating` poses vs the judge's trajectory (the first goal's "(0.00, 0.00)" line
+is skipped: bt_navigator logs it before its TF is ready). Return = judge's distance at `/done`.
+
+| Commit | Map | largada | Score | Done | Collisions | AMCL median / max | Return |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 32d67a8 | maze_1 | 0.2,0.15,0.5 | 500/500 | 190 s | 0 | 1.1 / 6.1 cm | 0.7 cm |
+| 32d67a8 | maze_4 | 0,0,0 | 500/500 | 156 s | 0 | 2.1 / 4.2 cm | 3.6 cm |
+| 32d67a8 | laberinto_simple | 0.1,0.1,1.5 | 500/500 | 52 s | 0 | 1.5 / 1.9 cm | 2.5 cm |
+| fce08da | maze_2 | 0.15,-0.1,3.0 | 600/600 | 159 s | 0 | 1.4 / 2.3 cm | 5.4 cm |
+| fce08da | maze_3 | 0.1,0.1,1.5 | 600/600 | 163 s | 0 | 2.9 / 5.8 cm | 8.4 cm |
+| 590c915 | maze_2 / maze_3 / maze_1 | as above | 600 / 600 / 500 | 112 / 174 / 197 s | 0 | 2.2-2.7 / 5-6 cm | 4.6-9.0 cm |
+| 590c915 | laberinto_1 | 0.2,0.15,0.5 | 200 (1 of 3 boxes found) | 365 s | 0 | 5.2 / 11.4 cm (map offset) | 10.2 cm |
+| b24caf2 | maze_4 / laberinto_simple | 0,0,0 / 0.2,0.15,0.5 | 500 / 500 | 139 / 52 s | 0 | 2.6-2.9 / 3.3-7.1 cm | 4.9 / 6.3 cm |
+
+- Start match with 32d67a8: 0.6-0.8 cm from the true start (was 3.3-3.9 cm with the + 0.5 reading).
+- Mission checks the return 0.5 s after arriving (`return_still_s`); the fine-tune lands 0.3-2.5 s
+  after the stop, so the check sees AMCL before it. Suggested to mission: `return_still_s: 2.0`.
+- maze_2 at yaw 3.0: the return got stuck ~30 s at (-0.8, 0.46) (5 "Failed to make progress", 1 spin);
+  mission's second try arrived at 4.4 cm. The fine-tune fired 5 times there for ~1° heading
+  differences (the robot creeps while MPPI tries): harmless, but `afinar_quieto: false` turns it off.
