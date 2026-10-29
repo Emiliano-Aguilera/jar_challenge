@@ -5,6 +5,85 @@ and `docs/team/INTERFACES.md`. Read `notes/marcorita/NOTES.md` for decisions.
 
 ## Local planner
 
+### Current task: execution audit and organizer tips (2026-10-28)
+
+Branch cobertura/auditoria-robusta started from development 93bdd59 and was
+fast-forwarded to b271132 (#31), then 90a4fca (#32), as Marco flagged merges. Marco requested
+local coverage improvements and supplied the organizer email. Read EXECUTION_AUDIT.md,
+ORGANIZER_TIPS.md and EXECUTION_RESULTS.md before continuing. Marco authorized
+publishing the small evaluator/auditor/tests/notes PR and merging after all checks
+pass with no pending issues on 2026-10-28. Heading experiment scripts/tests are
+excluded and remain local. No new manual server run is authorized; three earlier
+authorized runs were consumed.
+PR #16 remains separate and draft; this audit does not unblock its merge.
+
+New pure tools use the real mission selector and command-position substitution,
+optional fixed box zones, current start/settle waits, explicit failed/canceled
+records and clock/pose provenance. The normal budget report now adds the
+mission_execution command proxy; legacy fields remain for historical comparison.
+All visibility is geometric, not an image ack. No runtime algorithm/parameter,
+launch, message, navigation, perception or mission source change in this branch.
+
+All 18 regenerated plans exactly match the saved reference. The actual-command
+proxy reproduces 19/43/30 lost dense cells in the three difficult starts; 58
+commands are position-shifted across 18 cases. Tests/static/CLI checks pass;
+see EXECUTION_RESULTS.md for counts. Heading-only full-grid experiments preserve
+regions at clock cuts and sampled 5/10/15-degree yaw envelopes, but remain offline:
+the complete search is slow and the bounded 16-trial search gained nothing.
+Do not activate it or claim score/detection gains. The Workshop 10 bag was not
+replayed. Test on ROS domain 177, separate from a possible manual domain-77 run.
+
+PR #31 adds cancellation after max_recoveries=10, excluding the return trip;
+selector/goal-position APIs and the prediction parameters remain unchanged.
+Explicit record audit now retains optional recovery counts without calling
+missing data zero. Canceled/failed goals still get no view credit. Prior 18-case
+geometry results are from 93bdd59; the modeled successful-goal logic is unchanged.
+PR #32 adds return checks and up to three tries, without changing the view
+selector/command transform. Return tolerance remains 0.10 m; Bautista/Hans's
+tighter return-only checker is still pending. Do not repeat the stale message
+asking him to implement a return check; ORGANIZER_TIPS.md is updated.
+
+### Previous task: unblock mission's inspection tests (2026-10-27)
+
+Marco requested publishing/merging our rotated-map test fix to unblock PR #26,
+then explicitly preferred Bautista's final API without a compatibility layer.
+Branch cobertura/test-inspeccion-alcanzable is based on his pending branch
+mision/visitas-alcanzables (9b9fc1b); send its PR to that branch, not development.
+This keeps the test fix with the function signature change. Bautista remains
+responsible for merging his overall mission PR #26 into development.
+The test directly passes real rotated Grid/reachable cells; same assertions.
+See INSPECTION_ROTATED_TEST.md. No production or mission parameter edits.
+Publish and merge after green checks with no pending issues. Run local ROS
+tests on domain 177; Marco has a manual Gazebo/RViz session on domain 77.
+The shared helper is already merged in PR #23 (055a559). PR #16 stays separate.
+
+### Previous task: shared map reachability (2026-10-27)
+
+Branch cobertura/mapa-alcanzable from origin/development d7e8057. Marco asked
+to continue after Bautista's change. PR #20 is merged (f42cdd8), including the
+fifth first_pending argument [] in offline metrics, with four green checks.
+Fresh snapshot metrics/exploration checks passed 56 tests. PR #19 reduced
+mission start_wait_s from 8 to 4; PR #21 records team integration requests.
+
+Grid, Pose, planar_yaw, cancellation and reachable_cells now live in mapa.py;
+old coverage import paths remain aliases. Grid.from_occupancy_grid copies a
+validated map-frame message; reachable_from returns a frozen connected disk-safe
+component, with explicit radius and occupancy threshold. See MAP_REACHABILITY.md.
+Mission source/parameters are untouched. Bautista still needs to use the helper
+in viewpoint_for; do not claim runtime inspection is fixed by this branch.
+Focused geometry/planning: 88 passed. Full verifier: 137 outer tests passed,
+build/static/interface/map-wait checks green. All 18 plans/diagnostics/metrics
+and safe components exactly match development. Recorded pocket-map check
+keeps exterior 174/175-degree points and rejects disconnected 285 degrees;
+static diagnostic only, not a new run. See STATUS and ignored mapa-compartido/.
+Marco authorized publication of this verified helper on 2026-10-27, with the
+standing instruction to merge after all checks pass and no pending issues.
+No new manual server job is authorized. GitHub holds the publication status.
+
+The prior coverage checkout remains on cobertura/recorrido-laberinto (PR #16
+DRAFT), with its pending local notes preserved. Do not merge that PR simply
+because this helper passes. The old task descriptions below are historical.
+
 - Current task: `cobertura/calculo-eficiente`, from development `96134c0`
   (merged PR #14). Marco asked for measurable coverage improvements while
   waiting for Bautista. Work locally in coverage; do not edit mission/Nav2 or

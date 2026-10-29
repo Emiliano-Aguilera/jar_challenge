@@ -361,6 +361,46 @@ reached it. With 3 s the controller aborted more often, and the BT's spin/backup
 robot inside the narrow corridor until even planning failed. Reverted to bb0f061's 0.3 m / 5 s:
 the final config is bb0f061's (validated above).
 
+## Navigation: planner, global costmap and precise return (from 2026-10-28)
+
+Asked by mission (Bautista, 2026-10-27/28).
+
+### Q: why did maze_1's return lose ~16 s to the planner?
+
+- NavFn with `use_astar: true` sometimes fails to extract a path that exists ("Failed to
+  create plan from potential"). Decided: `use_astar: false` (Dijkstra, Nav2's default; a
+  6 x 6 m map plans fast either way).
+- Checked (maze_1, 600 s): "from potential" 8 and 4 with A* (d14d0a4, 6f8a7e3), 0 and 0 with
+  Dijkstra (f9977bb x2). Planner failures 22 / 18 -> 15 / 14. Score 500 in all; done at 233 /
+  219 s with A*, 213 / 250 s with Dijkstra (exploration order varies run to run).
+- laberinto_1 with Dijkstra: 200, 300, 300 (3 runs); with A* it also scored 200 once
+  (localizacion/correccion-giros, 2026-10-28). Not navigation: every run there ends exploring
+  with "no quedan puntos ni dudosas" and finds the second box (~(-2.08, 1.50)) only on the way
+  back, if the return path passes it. Coverage gap for cobertura / mission.
+
+### Q: can mission read Nav2's global costmap?
+
+- Yes, `/global_costmap/costmap` (reliable + transient local). But Nav2 sends the full grid
+  only once and then `costmap_updates` (recording: 1 vs 289 messages). Decided:
+  `always_send_full_costmap: true` (full grid at 1 Hz, ~14 KB). Grid values are Nav2's costs
+  scaled: 100 lethal, 99 inscribed, 1-98 inflation, -1 unknown (`costmap_2d_publisher.cpp`).
+
+### Q: how does the return get closer than 0.10 m?
+
+- Rule (organizers via mission): the 4 wheels inside a 0.25 m circle -> position error
+  < 0.10 m. Nav2 accepted 0.10 m for every goal.
+- Decided: a second goal checker `precise_goal_checker` (0.05 m, any heading; the wheels are
+  symmetric) chosen by `goal_checker_id` in `behavior_trees/vuelta_precisa.xml`; mission
+  sends that tree in the return goal's `behavior_tree`. 0.05 m, not 0.03: AMCL itself is
+  ~0.05 m off, so tighter does not get closer to the real start.
+- Trap: with two goal checkers, Humble's default tree fails (`FollowPath` has no
+  `goal_checker_id` -> "goal_checker name  ... does not exist", `controller_server.cpp`). So
+  `behavior_trees/navegar.xml` (Humble's tree + `goal_checker_id="general_goal_checker"`) is
+  now the default, set by `navegacion.launch.py`. Both XML are installed by `setup.py`.
+- Checked (temporary branch with the precise tree on every goal, 600 s): maze_1 500, done at
+  196 s, judge's distance to the start 0.038 m; maze_3 300, 0.055 m. No stalls, no checker
+  errors. With the normal tree the same maps end 0.054-0.084 m away.
+
 ## Localization: AMCL drifts after in-place turns (from 2026-10-27)
 
 ### Q: why did AMCL put the robot 0.54 m off, inside a wall? (Marco's report)

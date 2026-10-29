@@ -48,6 +48,7 @@ gh workflow run simular.yml -R Emiliano-Aguilera/jar_challenge \
 | `repeticiones` | `1` | Runs per map, 1–10 |
 | `duracion` | `120` | Seconds per run after the judge publishes `/map`, 10–600 |
 | `grabar` | `false` | `true`: record an MCAP per run for the viewer |
+| `largada` | `0,0,0` | Robot start `x,y,yaw` (m, m, rad), as if placed by hand. At most 0.25 m from the origin |
 
 - Each run (one map × one repetition) is one job. At most 12 runs per request and 2 of
   them at once. The server has 4 runners for runs, shared by everyone through GitHub's
@@ -58,6 +59,24 @@ gh workflow run simular.yml -R Emiliano-Aguilera/jar_challenge \
   want to see. Ask for more runs only to compare options or before a merge. Everyone
   shares the 4 runners.
 
+### Start offset (`largada`)
+
+In the competition the robot is placed by hand near the origin, with no exact pose and no
+known yaw. `largada` reproduces that: the simulator starts the robot at `x,y,yaw` in `map`,
+and your code is not told (as in the competition). Up to 3 decimals, e.g.
+`-f largada=0.15,-0.1,0.2` (the organizers' example). Use it to test localization:
+
+- **AMCL's error against the true pose**, mostly in the first seconds after `/map`. Use
+  `grabar=true` and compare `/amcl_pose` with `/ground_truth/odom` in the recording (its
+  `world` frame equals `map`), or look at it in the viewer (below).
+- **The return check.** If AMCL has not converged when `mision` saves the start pose, the
+  return check is fooled the same way. Compare `mision`'s `Regreso` line in `equipo.log` with
+  `distancia_a_largada_en_done` in `resultado.json` (the judge's real distance).
+- Starts worth trying: `0,0,0`, `0.15,-0.1,0.2`, and a sloppy one such as `0.2,0.15,0.5`.
+
+Scores are not affected: the judge measures from the true start. The summary's header shows
+the offset.
+
 ### Results
 
 Each run's job has a **summary** (the run's page on GitHub, scroll down), in Spanish:
@@ -65,14 +84,18 @@ Each run's job has a **summary** (the run's page on GitHub, scroll down), in Spa
 | Column | Meaning |
 | --- | --- |
 | Estado | `ok`; `fallo` (there is a result, but the run reported an error, e.g. violations or your launch died); `timeout`, `cancelada`, `sin_resultado` (no result) |
-| Puntaje | The practice score (`tools/puntaje.py`). Collisions are not counted (nobody calls `/juez/colision`) |
+| Puntaje | The practice score (`tools/puntaje.py`). It does not subtract collisions (nobody calls `/juez/colision`): see Choques |
+| Choques | Collisions with walls or boxes, e.g. `2 (1 pared, 1 caja)`. Counted in the simulator from the robot's true pose (gap ≤ 5 mm). The competition takes 50 points for each. A bounce can count as several. `-`: no count |
+| Casi | Close calls: within 3 cm of a wall or box without touching |
 | Fin | Why the run ended: `tiempo` (time up), `done`, `inmovil` (60 s still), `salida`, `vuelco` |
 | Violaciones | Protocol errors the judge saw: motion or reports before `/map`, wrong QoS, malformed reports |
 | RTF | Real-time factor: simulated time / real time. Under ~0.9 the PC is overloaded and results may differ |
 
 Below that, per victim: points, distance from the report to the box, and which report
-counted. Links: a plot (`gráfico`), the full summary (`resumen`), the run's files (logs:
-`equipo.log` is your launch's output) and, with `grabar=true`, the recording (`grabación`).
+counted. Links: a plot (`gráfico`), the full summary (`resumen`), each collision's time
+and place (`choques`; its times are simulated time, the judge's are real time), the run's
+files (logs: `equipo.log` is your launch's output) and, with `grabar=true`, the recording
+(`grabación`).
 
 **To watch a recording:** Actions tab → "simular" → your run → the job (one per map and
 repetition) → scroll to the summary → `grabación` (Tailscale on). It opens in the browser
@@ -170,6 +193,10 @@ odometry's origin, where the robot starts; it is exact at the start. So:
   simulator aligns the true pose with the **first** `map → odom` it sees, so an error in your
   first localization estimate stays in the true pose for the rest of the run
   (`pruebas.launch.py`'s fixed one is exact).
+- **Runs with `largada`:** the copy of `/map` is placed by the known offset, so it is still
+  exact at the start. The true pose stays aligned with the real start for the whole run, so
+  its gap to `base_footprint` is odometry drift only. Localization error is the gap between
+  `/map` (turn it on) and the copy.
 - **"Missing transform from frame `laser_link` to frame `odom`"** in the `/scan` settings:
   harmless if the lidar draws. The TF chain is there; Lichtblick keeps an error from the first
   moment (or a seek) before the transforms arrived.
@@ -191,7 +218,7 @@ gh run list -R Emiliano-Aguilera/jar_challenge --workflow simular.yml --user <yo
 gh run watch <run-id> -R Emiliano-Aguilera/jar_challenge --exit-status
 # 3. Read the results: score (total) and RTF of each run.
 gh run download <run-id> -R Emiliano-Aguilera/jar_challenge -D /tmp/sim-<run-id>
-jq '.corridas[] | {nombre, estado, total, rtf, termino_por, violaciones}' /tmp/sim-<run-id>/*/resumen.json
+jq '.corridas[] | {nombre, estado, total, choques, rtf, termino_por, violaciones}' /tmp/sim-<run-id>/*/resumen.json
 # (no jq? read /tmp/sim-<run-id>/*/resumen.md: same numbers, as tables)
 # Recording links (only with grabar=true; give them to your user, they need Tailscale):
 jq -r '.corridas[] | "\(.nombre) \(.enlaces.grabacion // "no recording")"' /tmp/sim-<run-id>/*/resumen.json
@@ -204,7 +231,8 @@ gh run cancel <run-id> -R Emiliano-Aguilera/jar_challenge
 - The run waits in the queue if the runners are busy; `gh run watch` keeps waiting.
 - One artifact per run, a folder `lote-<batch id>` (a date and commit, not the run id) with
   `resumen.json` and, per run, `corridas/<map>-r01/` (`resultado.json`, `grafico.png`).
-- `total` is the score, `rtf` the real-time factor, `estado` must be `ok`. `null` values
+- `total` is the score, `choques` the collisions (not subtracted from `total`; each costs 50
+  points in the competition), `rtf` the real-time factor, `estado` must be `ok`. `null` values
   mean the run gave no result: read the log. A score of 0 is normal for code that doesn't
   find and report victims yet (e.g. the template).
 - Limits: 12 runs per request, `duracion` 10–600, maps from the table above.

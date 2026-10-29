@@ -21,6 +21,7 @@ import yaml
 from equipo_jar.cobertura_plan import (
     Pose, Settings, TravelCosts, make_plan, observation_cells, reachable_cells)
 from evaluar_cobertura import camera_from_contract, read_grid
+from ejecucion_cobertura import predict_goals, prediction_trace
 from metricas_cobertura import (
     classify_outside, mask_for_cells, mission_indices, route_trace,
     summarize_trace, visibility_masks)
@@ -31,9 +32,14 @@ MAPS = ('laberinto_1', 'laberinto_simple', 'maze_1_6x5', 'maze_2_6x5',
 STARTS = (Pose(0.0, 0.0, 0.0), Pose(0.15, -0.1, 0.2), Pose(-0.1, 0.15, -0.2))
 LIMITS = (
     'Planar visibility prediction, not detector or navigation performance. '
-    'All mission goals are assumed successful; inspections and in-transit '
-    'observations are omitted. Startup assumes TF is immediately available '
-    'and planning overlaps the mission startup wait. Return cost starts at the '
+    'All predicted mission goals are assumed successful; inspections, candidate boxes, '
+    'cancellations and in-transit observations are omitted. The intended/mission '
+    'fields retain the historical planner dwell/identity-only proxy for comparison. '
+    'mission_execution uses the real command-position substitution and current settle_s; '
+    'it credits geometric visibility at arrival, not processed images. Startup assumes TF is immediately available '
+    'and planning overlaps the mission startup wait. The wall-CPU planning sample '
+    'is a hypothetical 1x startup delay, not measured simulated-clock or robot latency. '
+    'Return cost starts at the '
     'last completed view, not an interpolated position during a later trip. '
     'One runtime sample per case; diagnostic/oracle times are separate.')
 
@@ -79,8 +85,12 @@ def evaluate_case(grid, start, settings, camera, mission, budgets, diagnose):
     startup = max(mission['start_wait_s'], planning_seconds)
     intended_trace = route_trace(grid, start, plan.poses, masks, indices, costs, settings, startup)
     mission_trace = route_trace(grid, start, plan.poses, masks, selected, costs, settings, startup)
+    execution = predict_goals(grid, plan.poses, start, costs, settings, mission,
+                              planning_s=planning_seconds)
+    execution_trace = prediction_trace(grid, start, execution, cells, settings, camera, costs)
     intended_mask = union_masks(masks, indices)
     mission_mask = union_masks(masks, selected)
+    execution_mask = execution_trace.events[-1].mask if execution_trace.events else 0
     assert (intended_mask & target_masks['sampled_all']).bit_count() == plan.predicted_count
     assert abs(intended_trace.duration - startup - plan.metrics.duration) < 1e-6
     result = dict(
@@ -95,6 +105,10 @@ def evaluate_case(grid, start, settings, camera, mission, budgets, diagnose):
                     sampled_deferred=len(details.diagnostics.deferred)),
         intended=summarize_trace(intended_trace, budgets, target_masks, settings),
         mission=summarize_trace(mission_trace, budgets, target_masks, settings),
+        mission_execution=summarize_trace(execution_trace, budgets, target_masks, settings),
+        execution_shifted=list(execution.shifted),
+        execution_lost_dense=(intended_mask & ~execution_mask).bit_count(),
+        execution_added_dense=(execution_mask & ~intended_mask).bit_count(),
         mission_indices=selected, mission_skipped=skipped,
         mission_lost_dense=(intended_mask & ~mission_mask).bit_count(),
         mission_lost_sampled=(intended_mask & ~mission_mask & target_masks['sampled_all']).bit_count(),
@@ -136,7 +150,7 @@ def save_report(output, payload):
         writer = csv.DictWriter(stream, fieldnames=fields)
         writer.writeheader()
         for case in cases:
-            for route in ('intended', 'mission'):
+            for route in ('intended', 'mission', 'mission_execution'):
                 for snapshot in case[route]['budgets'].values():
                     for target_set, values in snapshot.items():
                         writer.writerow(dict(case=case['case'], route=route,
@@ -144,10 +158,10 @@ def save_report(output, payload):
     lines = ['# Coverage budget evaluation', '', LIMITS, '',
              'Percentages use every free grid-cell center (dense), not just target samples.',
              'The connected column excludes raw-map components disconnected from the start.', '',
-             '| Case | Mission/plan goals | Dense @300 | Connected @300 | Dense @480 | Lost final cells | Full route s |',
+             '| Case | Commanded/plan goals | Dense @300 | Connected @300 | Dense @480 | Lost final cells | Command-time proxy s |',
              '| --- | --- | --- | --- | --- | --- | --- |']
     for case in cases:
-        mission = case['mission']
+        mission = case['mission_execution']
         budgets = mission['budgets']
         early = budgets.get('300.0', {})
         late = budgets.get('480.0', {})
@@ -155,7 +169,7 @@ def save_report(output, payload):
         lines.append(
             f'| {case["case"]} | {mission["goals"]}/{case["intended"]["goals"]} | '
             f'{fraction(early, "dense_all")} | {fraction(early, "dense_raw_connected")} | '
-            f'{fraction(late, "dense_all")} | {case["mission_lost_dense"]} | '
+            f'{fraction(late, "dense_all")} | {case["execution_lost_dense"]} | '
             f'{mission["duration"]:.1f} |')
     lines.extend(['', '## Missing sampled targets: exhaustive witness search', '',
                   'The model uses eligible observation centers, the current camera/range and heading grid.',
@@ -204,6 +218,8 @@ def main():
                    limits=LIMITS, cases=[], hashes={})
     for path in (root / 'src/equipo_jar/equipo_jar/cobertura_plan.py',
                  root / 'src/equipo_jar/equipo_jar/exploracion.py', Path(__file__),
+                 root / 'src/equipo_jar/equipo_jar/mision.py',
+                 Path(__file__).with_name('ejecucion_cobertura.py'),
                  Path(__file__).with_name('metricas_cobertura.py')):
         payload['hashes'][str(path.relative_to(root))] = hashlib.sha256(path.read_bytes()).hexdigest()
     starts = STARTS if args.starts == 'all' else STARTS[:1]
@@ -221,8 +237,8 @@ def main():
             payload['cases'].append(row)
             save_report(args.output, payload)
             if row['status'] == 'accepted':
-                print(f'{label}: mission {row["mission"]["goals"]}/{row["intended"]["goals"]} goals, '
-                      f'lost dense cells {row["mission_lost_dense"]}; '
+                print(f'{label}: commanded proxy {row["mission_execution"]["goals"]}/{row["intended"]["goals"]} goals, '
+                      f'shifted {len(row["execution_shifted"])}, lost dense cells {row["execution_lost_dense"]}; '
                       f'outside {row.get("outside", {}).get("counts", "not diagnosed")}', flush=True)
             else:
                 print(f'{label}: {row["error"]}', flush=True)

@@ -2,7 +2,8 @@ import math
 from equipo_jar.mapa import is_free, line_is_clear
 from equipo_jar.confirmacion import near_any
 
-def viewpoint_for(grid, cx, cy, robot_x, robot_y, distance, clearance, n_angles, min_shift, box_margin):
+def viewpoint_for(grid, cx, cy, robot_x, robot_y, distance, clearance, n_angles, min_shift, box_margin,
+                cell_grid, reachable):
     best = None
     best_dist = None
     for k in range(n_angles):
@@ -16,6 +17,8 @@ def viewpoint_for(grid, cx, cy, robot_x, robot_y, distance, clearance, n_angles,
         if not is_free(grid, vx, vy, clearance):
             continue
         if not line_is_clear(grid, vx, vy, ex, ey):
+            continue
+        if cell_grid.cell(vx, vy) not in reachable:
             continue
         d = math.hypot(vx - robot_x, vy - robot_y)
         if d < min_shift:

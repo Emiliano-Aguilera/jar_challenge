@@ -6,7 +6,9 @@ Inputs (QoS per the rules, docs/QOS.md):
   /cam_1/color/image_raw      Image           best effort   (320x240 @ 30 Hz on the robot)
   /cam_1/color/camera_info    CameraInfo      best effort   (intrinsics K)
   /scan                       LaserScan       best effort   (1080 rays @ ~7 Hz, primary range)
-  /cam_1/depth/color/points   PointCloud2     best effort   (fallback range; unreliable on the robot)
+  /cam_1/depth/color/points   PointCloud2     best effort   (fallback range; unreliable on the robot;
+                                                            subscribed only if use_cloud_fallback
+                                                            or cloud_check, both off by default)
   /tf, /tf_static             camera, LiDAR and base frames; map -> odom from localization
 
 Output (team-internal, docs/team/INTERFACES.md lets the perception owners define it):
@@ -21,13 +23,19 @@ Per synchronized (image, scan) pair:
   2. camera rays through the blob's left/right edges -> LiDAR frame,
      at the scan time, through `odom` (robot motion between the two
      timestamps is compensated)                                     tf2 lookup_transform_full
-  3. LiDAR points inside that wedge, nearest cluster = box face     vision.points_in_wedge, nearest_cluster
-     (if none: depth cloud median, if a fresh cloud exists)         vision.robust_3d_point
-  4. face -> robot frame -> half a side back = center               vision.center_from_face
-  5. center -> `map` at the scan time, publish with sigma(distance) vision.observation_sigma
+  3. the LiDAR beams in the central part of that span, grouped by
+     range; the largest group is the box face                       vision.central_cluster
+     (if none and use_cloud_fallback: depth cloud median, if a
+     fresh cloud exists)                                            vision.robust_3d_point
+  4. checks: not too far, blob width matches the range, area
+     matches the range, the hit is not on a wall of /map            vision.width_is_consistent,
+                                                                    area_is_consistent, map_range_along
+  5. face -> robot frame -> half a side back = center               vision.center_from_face
+  6. center -> `map` at the scan time, publish with sigma(distance) vision.observation_sigma
 """
 import numpy as np
 from geometry_msgs.msg import PointStamped, PoseWithCovarianceStamped
+from nav_msgs.msg import OccupancyGrid
 from numpy.lib import recfunctions as rfn
 from rclpy.duration import Duration
 from rclpy.node import Node
@@ -41,7 +49,7 @@ import tf2_geometry_msgs  # noqa: F401  (registers PointStamped transforms in tf
 import tf2_ros
 
 from equipo_jar import vision
-from equipo_jar.comun import correr, parametros_en_vivo
+from equipo_jar.comun import QOS_MAPA, correr, parametros_en_vivo
 
 # Live-tunable parameters (section `deteccion` of params.yaml). Read them from self.p at use
 # time, never cache them: a change made during a run applies to the next frame.
@@ -59,12 +67,23 @@ PARAM_DEFAULTS = {
     # Geometry
     'box_side_m': 0.25,                  # sim box 0.25 x 0.25 x 0.30; real one TO BE CONFIRMED
     'max_area_factor': 3.0,              # 0 disables the area-vs-distance check
-    # LiDAR (primary range)
-    'wedge_margin_rad': 0.03,
+    # LiDAR (primary range): see vision.central_cluster
+    'central_fraction': 0.6,
     'lidar_cluster_depth_m': 0.30,
     'lidar_min_points': 3,
+    'min_cluster_coverage': 0.6,
+    # Consistency checks against false positives (see vision.width_is_consistent,
+    # vision.map_range_along). A false report costs a box (-100) and the fast bonus (-200).
+    'width_ratio_min': 0.45,
+    'width_ratio_max': 1.8,
+    'max_range_m': 3.0,                  # observations farther than this are dropped
+    'map_wall_check': True,              # drop a hit that lies on a mapped wall
+    'map_wall_tolerance_m': 0.15,        # how close to the map's wall counts as "on the wall"
+    'map_box_extent_m': 0.40,            # a mapped obstacle this small is a drawn box, not a wall
+    'cloud_check': False,                # drop a LiDAR range the depth cloud contradicts (see params.yaml)
+    'cloud_lidar_max_gap_m': 0.5,        # |cloud distance - LiDAR distance| above this = contradiction
     # Cloud (fallback range)
-    'use_cloud_fallback': True,
+    'use_cloud_fallback': False,         # with cloud_check, decides the subscription; read at startup only
     'cloud_max_age_s': 0.5,
     'erosion_px': 2,
     'z_min_m': 0.6,
@@ -88,8 +107,13 @@ class Detection(Node):
         self.p = parametros_en_vivo(self, PARAM_DEFAULTS)
 
         self.K = None                       # 3x3 intrinsics from camera_info
-        self.last_cloud = None              # latest PointCloud2 (fallback range)
+        self.last_cloud = None              # latest PointCloud2 (fallback range and cross-check)
+        self._cloud_cache = None            # (stamp key, (points (H,W,3), frame)) of the last converted cloud
         self.t_last_proc = None
+        self.map = None                     # (grid (h, w) int16, resolution, origin_x, origin_y)
+        self.rejections = {}                # reason -> count, logged every 10 s
+        self.t_last_summary = None
+        self.n_published = 0
 
         #PARAM: cache_time = 10 s of TF history. Support: > the latency between capture and
         #       processing (tenths of a second). Plenty.
@@ -109,8 +133,15 @@ class Detection(Node):
         self.sync.registerCallback(self.on_pair)
         self.create_subscription(
             CameraInfo, '/cam_1/color/camera_info', self.on_camera_info, qos_profile_sensor_data)
-        self.create_subscription(
-            PointCloud2, '/cam_1/depth/color/points', self.on_cloud, qos_profile_sensor_data)
+        # The cloud only if something reads it: a subscription that exists pulls every cloud
+        # over the robot's Wi-Fi (~500 KB at 7-10 Hz), used or not. Image + cloud fill the
+        # competition router (physical_rosmaster raphael_router_wifi_2026-10-16.md), and §7.1
+        # warns about keeping it on all run.
+        if self.p['use_cloud_fallback'] or self.p['cloud_check']:
+            self.create_subscription(
+                PointCloud2, '/cam_1/depth/color/points', self.on_cloud, qos_profile_sensor_data)
+        # The judge's map, for the wall check (transient local: arrives even if published earlier).
+        self.create_subscription(OccupancyGrid, '/map', self.on_map, QOS_MAPA)
 
         # Observations are a stream, not a state: default reliable QoS, no transient local.
         self.pub_obs = self.create_publisher(PoseWithCovarianceStamped, '/jar/observaciones', 10)
@@ -128,6 +159,52 @@ class Detection(Node):
 
     def on_cloud(self, msg):
         self.last_cloud = msg
+
+    def on_map(self, msg):
+        """OccupancyGrid -> (grid, resolution, origin). Row = y, column = x (row-major)."""
+        grid = np.array(msg.data, dtype=np.int16).reshape(msg.info.height, msg.info.width)
+        self.map = (grid, msg.info.resolution, msg.info.origin.position.x, msg.info.origin.position.y)
+        self.get_logger().info(f'Map received: {msg.info.width}x{msg.info.height}')
+
+    def _reject(self, reason):
+        """Count a rejected blob by reason; the summary goes to the log every 10 s."""
+        self.rejections[reason] = self.rejections.get(reason, 0) + 1
+
+    def _log_summary(self, t):
+        if self.t_last_summary is None:
+            self.t_last_summary = t
+            return
+        if t - self.t_last_summary >= 10.0:
+            parts = ' '.join(f'{k}={v}' for k, v in sorted(self.rejections.items()))
+            self.get_logger().info(f'last 10 s: published {self.n_published}; rejected {parts or "none"}')
+            self.rejections = {}
+            self.n_published = 0
+            self.t_last_summary = t
+
+    def _hits_mapped_wall(self, lidar_origin_map, face_map):
+        """True if the LiDAR hit lies on a wall of the map (so it is not a box).
+
+        Marches the map from the LiDAR origin towards the hit. If the first occupied cell is
+        within `map_wall_tolerance_m` of the hit distance, the LiDAR saw a mapped obstacle.
+        A small mapped obstacle (extent <= map_box_extent_m) could be a box the competition map
+        draws, so it is not treated as a wall. Without a map the check passes.
+        """
+        if self.map is None:
+            return False
+        grid, res, ox, oy = self.map
+        d = np.asarray(face_map[:2]) - np.asarray(lidar_origin_map[:2])
+        dist = float(np.linalg.norm(d))
+        if dist < 1e-6:
+            return False
+        tol = float(self.p['map_wall_tolerance_m'])
+        d_map = vision.map_range_along(grid, res, ox, oy, lidar_origin_map[:2], d, dist + tol)
+        if d_map is None or d_map > dist + tol:
+            return False                   # the map is free up to the hit: an unmapped object
+        if d_map < dist - tol:
+            return False                   # the map has a wall BEFORE the hit: the pose is off; do not judge
+        hit = (lidar_origin_map[0] + d[0] / dist * d_map, lidar_origin_map[1] + d[1] / dist * d_map)
+        extent = vision.mapped_obstacle_extent(grid, res, ox, oy, hit, 0.30)
+        return extent > float(self.p['map_box_extent_m'])
 
     def _vision_params(self):
         """Rebuild the VisionParams dataclass from the live dict (cheap; once per frame)."""
@@ -200,6 +277,10 @@ class Detection(Node):
             np.asarray(scan_msg.ranges), scan_msg.angle_min, scan_msg.angle_increment,
             scan_msg.range_min, scan_msg.range_max)
 
+        self._log_summary(t)
+        side = float(self.p['box_side_m'])
+        lidar_origin_map = None            # computed once per frame, only if the wall check runs
+
         for blob in blobs:
             x, y, w, h = blob.bbox
             v_mid = y + h / 2.0
@@ -207,16 +288,15 @@ class Detection(Node):
             d_left = self._apply(tr_cam_to_lidar, vision.pixel_ray(self.K, x, v_mid)) - cam_origin_l
             d_right = self._apply(tr_cam_to_lidar, vision.pixel_ray(self.K, x + w, v_mid)) - cam_origin_l
 
-            # --- primary: LiDAR points inside the wedge ---
+            # --- primary: the LiDAR beams in the central part of the blob ---
             face_robot = None
             source = 'lidar'
-            in_wedge = vision.points_in_wedge(
-                scan_pts, cam_origin_l[:2], d_left[:2], d_right[:2], float(self.p['wedge_margin_rad']))
-            cluster = vision.nearest_cluster(
-                scan_pts[in_wedge], cam_origin_l[:2],
-                float(self.p['lidar_cluster_depth_m']), int(self.p['lidar_min_points']))
+            cluster = vision.central_cluster(
+                scan_pts, cam_origin_l[:2], d_left[:2], d_right[:2],
+                float(self.p['central_fraction']), float(self.p['lidar_cluster_depth_m']),
+                int(self.p['lidar_min_points']), float(self.p['min_cluster_coverage']))
             if cluster is not None:
-                face_xy, _ = cluster
+                face_xy, _, _ = cluster
                 face_lidar = np.array([face_xy[0], face_xy[1], 0.0])
                 face_robot = self._transform(face_lidar, lidar_frame, robot_frame, scan_stamp)
 
@@ -225,25 +305,70 @@ class Detection(Node):
                 face_robot = self._face_from_cloud(blob, bgr.shape, vp, cam_frame, robot_frame, scan_stamp)
                 source = 'cloud'
             if face_robot is None:
+                self._reject('no_range')
                 continue
 
+            # --- consistency checks: each one alone would have caught the 2026-10-25 false reports
             distance = float(np.linalg.norm(face_robot[:2]))
+            if distance > float(self.p['max_range_m']):
+                self._reject('too_far')
+                continue
+            # A blob cut by the image border is narrower than the box for a reason that has
+            # nothing to do with the scene (a box passing by at 0.7 m fills the edge of the
+            # frame), so the size checks do not apply to it. Its range still comes from the
+            # central beams, and the other checks still run.
+            at_border = x <= 0 or x + w >= bgr.shape[1]
+            if not at_border and not vision.width_is_consistent(
+                    w, self.K[0, 0], distance, side,
+                    float(self.p['width_ratio_min']), float(self.p['width_ratio_max'])):
+                self._reject('width')
+                self.get_logger().debug(f'dropped: width {w} px inconsistent at {distance:.2f} m')
+                continue
             factor = float(self.p['max_area_factor'])
-            if factor > 0 and not vision.area_is_consistent(
-                    blob.area, distance, self.K[0, 0], self.K[1, 1],
-                    float(self.p['box_side_m']), factor):
+            if not at_border and factor > 0 and not vision.area_is_consistent(
+                    blob.area, distance, self.K[0, 0], self.K[1, 1], side, factor):
+                self._reject('area')
                 self.get_logger().debug(f'dropped: area {blob.area:.0f} px inconsistent at {distance:.2f} m')
                 continue
+            # Depth cloud as a second opinion on the LiDAR range (Emiliano-Aguilera, 2026-10-27):
+            # on the recorded false reports the cloud inside the red blob was 1-2 m farther
+            # than the LiDAR (it saw the real box, the LiDAR saw the wall end), while on real
+            # boxes both agree within a few cm. No cloud, or too few valid points, never rejects:
+            # the real sensor has gaps of up to a second and ~38 % valid pixels.
+            # Skipped when the LiDAR range is below the cloud's own minimum range: there the
+            # cloud can only show something farther, which is not a contradiction.
+            if source == 'lidar' and self.p['cloud_check'] and distance >= vp.z_min_m:
+                face_cloud = self._face_from_cloud(blob, bgr.shape, vp, cam_frame, robot_frame, scan_stamp)
+                if face_cloud is not None:
+                    d_cloud = float(np.linalg.norm(face_cloud[:2]))
+                    if abs(d_cloud - distance) > float(self.p['cloud_lidar_max_gap_m']):
+                        self._reject('cloud_disagrees')
+                        self.get_logger().debug(
+                            f'dropped: LiDAR {distance:.2f} m vs cloud {d_cloud:.2f} m')
+                        continue
+            face_map = self._transform(face_robot, robot_frame, 'map', scan_stamp)
+            if face_map is None:
+                self._reject('no_tf_map')
+                continue
+            if self.p['map_wall_check']:
+                if lidar_origin_map is None:
+                    lidar_origin_map = self._transform(np.zeros(3), lidar_frame, 'map', scan_stamp)
+                if lidar_origin_map is not None and self._hits_mapped_wall(lidar_origin_map, face_map):
+                    self._reject('mapped_wall')
+                    self.get_logger().debug(f'dropped: hit on a mapped wall at {distance:.2f} m')
+                    continue
 
             # Face -> center (half a side back), then to map at the scan time.
-            center_robot = vision.center_from_face(face_robot, float(self.p['box_side_m']))
+            center_robot = vision.center_from_face(face_robot, side)
             center_map = self._transform(center_robot, robot_frame, 'map', scan_stamp)
             if center_map is None:
+                self._reject('no_tf_map')
                 continue
 
             sigma = vision.observation_sigma(
                 distance, float(self.p['obs_sigma_base_m']), float(self.p['obs_sigma_per_m']))
             self._publish_observation(center_map, sigma, scan_msg.header.stamp)
+            self.n_published += 1
             self.get_logger().debug(
                 f'obs ({source}): ({center_map[0]:.2f}, {center_map[1]:.2f}) d={distance:.2f} sigma={sigma:.3f}')
 
@@ -255,7 +380,11 @@ class Detection(Node):
         cloud_stamp = Time.from_msg(cloud.header.stamp)
         if abs((cloud_stamp - stamp).nanoseconds) * 1e-9 > float(self.p['cloud_max_age_s']):
             return None
-        result = self._cloud_as_image(cloud, shape, cam_frame, cloud_stamp)
+        # One conversion per cloud message, shared by every blob of the frame.
+        key = (cloud.header.stamp.sec, cloud.header.stamp.nanosec)
+        if self._cloud_cache is None or self._cloud_cache[0] != key:
+            self._cloud_cache = (key, self._cloud_as_image(cloud, shape, cam_frame, cloud_stamp))
+        result = self._cloud_cache[1]
         if result is None:
             return None
         points, points_frame = result

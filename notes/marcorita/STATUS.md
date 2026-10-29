@@ -1,5 +1,71 @@
 # Coverage work status
 
+## Current task: execution audit (2026-10-28)
+
+- Branch cobertura/auditoria-robusta, started at 93bdd59, now updated to b271132
+  after mission #31 (10-recovery cancellation, except return). Mission #25,
+  #26, #28 and collision counter #29 are merged, with four green checks each.
+- Implemented pure command prediction, fixed-zone scenarios, explicit result
+  record audit and sampled-error visibility. Budget JSON/CSV now include a
+  current command proxy; the human report uses it, retaining old proxy fields.
+- Re-evaluated all 18 cases with dense geometry: all saved plans match exactly;
+  three difficult starts lose 19/43/30 cells after command substitution; the
+  other 15 have no final geometric loss. These are cells, not missed boxes.
+- Added heading-only experiments with set-based early-clock guards, real
+  selector equivalence and error samples at 5/10/15 degrees. Complete search
+  improves three tested cases but is too costly to activate; the bounded
+  16-trial version gained nothing and was rejected as a runtime improvement.
+- Marco authorized publishing only the small evaluator/auditor/tests/notes PR
+  on 2026-10-28, then merging after all checks pass with no pending issues.
+  Heading experiment scripts/tests remain local and are excluded. No production
+  algorithm/shared parameter change or new manual simulation is part of it.
+  See EXECUTION_AUDIT.md, EXECUTION_RESULTS.md and ORGANIZER_TIPS.md.
+- #31 does not alter selection/command geometry or the modeled waits. Actual
+  audit records retain recovery counts when provided; missing counts stay unknown.
+- Updated again to 90a4fca (#32, return checks/retries). View selection/geometry
+  stays unchanged; return-only navigation precision is still coordinated by
+  Bautista/Hans. Organizer handoff drafts are updated to acknowledge this work.
+
+## Previous task: rotated inspection regression (2026-10-27)
+
+- Branch cobertura/test-inspeccion-alcanzable, based on mission branch 9b9fc1b.
+- Mission PR #26 changes viewpoint_for to require cell_grid and reachable.
+  The rotated-map regression directly uses the new API, as Marco requested.
+  Same assertions, real rotated Grid/reachable cells, no production changes.
+- Marco explicitly requested publication and merge to unblock Bautista.
+  Send our PR to mision/visitas-alcanzables so his #26 picks up the test fix.
+  Bautista remains responsible for merging his overall PR into development.
+- Direct final-API fix: all 147 package tests passed, including nested map and
+  coverage suites, on ROS domain 177. No new manual simulation or parameter edit.
+- PR #23 is already merged (055a559); PR #16 remains a separate draft.
+
+## Previous task: shared reachability (2026-10-27)
+
+- Branch `cobertura/mapa-alcanzable`, based on development `d7e8057` (PRs
+  #19-21 merged). The first_pending compatibility fix is already merged in #20.
+- Reused the clean map checkout. The PR #16 checkout and its uncommitted notes
+  remain untouched; PR #16 remains a separate draft with behaviour pending.
+- Shared the existing conservative Grid/Pose/connectivity code through mapa.py,
+  with backward-compatible coverage imports and a ROS-free OccupancyGrid adapter.
+  New `reachable_from` filters a radius-safe connected component; no snapping
+  of an unsafe robot start, no diagonal corner cuts, unknown cells blocked.
+- Focused geometry/planning: 88 tests passed. Full verifier passes, including
+  137 outer tests, build/static checks and map-wait/interface audit (zero issues).
+- Differential check against development d7e8057: all 18 generated plans
+  match exactly, including diagnostics and metrics; all 18 safe components
+  also match. Recorded pocket map: exterior ring points at 174/175 degrees
+  remain connected; the interior point at 285 degrees is rejected. This is
+  static geometry with rounded log inputs, not a new inspection run.
+  Evidence: ignored `build/verificacion/cobertura/mapa-compartido/`.
+- API, integration steps and model limits: `MAP_REACHABILITY.md`.
+  Mission still needs to adopt the helper. Nonempty candidate-box exclusion
+  zones and actual observation execution remain separate validation work.
+- Marco authorized commit/push/PR on 2026-10-27; merge only after all checks pass
+  and no pending issues, as previously requested. No new manual server run.
+  GitHub holds the publication status. Previous milestones below are historical.
+
+## Previous milestone: calculation efficiency
+
 Updated: 2026-10-26. Branch: `cobertura/calculo-eficiente`.
 Base: development `96134c0` (merged PR #14).
 

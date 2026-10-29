@@ -8,6 +8,9 @@ navegación. No publica /cmd_vel: eso es solo de navegación.
 Esqueleto: espera el mapa y no hace nada más. Hasta recibir /map no se puede
 mover el robot ni reportar (§5).
 """
+import os
+from ament_index_python.packages import get_package_share_directory
+
 from geometry_msgs.msg import PointStamped
 from nav2_msgs.action import NavigateToPose
 from nav_msgs.msg import OccupancyGrid, Path
@@ -20,8 +23,9 @@ from equipo_jar.comun import QOS_ESTADO, QOS_MAPA, correr, parametros_en_vivo
 from equipo_jar.reportes import armar_reporte
 from equipo_jar_msgs.msg import Candidatas
 from equipo_jar.confirmacion import select_to_report
-from equipo_jar.exploracion import yaw_from_quaternion, first_pending, angle_difference, goal_position, box_zones
+from equipo_jar.exploracion import yaw_from_quaternion, first_pending, angle_difference, goal_position, box_zones, near_box, return_verdict, goal_blocked
 from equipo_jar.inspeccion import pick_doubtful, viewpoint_for
+from equipo_jar.mapa import Grid
 
 from tf2_ros import Buffer, TransformListener, TransformException
 from rclpy.time import Time
@@ -49,11 +53,18 @@ class Mision(Node):
                                             'stuck_distance_m': 0.05, 'stuck_angle_rad': 0.2, 'stop_wait_s': 1.0,
                                             'done_limit_s': 590.0, 'turn_in_place_m': 0.20, 
                                             'visit_max_attempts': 3, 'box_min_observations': 2,
-                                            'box_clearance_m': 0.42, 'box_clearance_sigmas': 1.0})  # parámetros ajustables
+                                            'box_clearance_m': 0.42, 'box_clearance_sigmas': 1.0,    
+                                            'visit_transit_radius_m': 0.15, 'visit_free_threshold': 25,
+                                            'settle_s': 0.0, 'max_recoveries': 10, 'return_tolerance_m': 0.05,
+                                            'return_max_tries': 3, 'return_still_s': 0.5, 'return_still_m': 0.01,
+                                            'costmap_blocked_value': 99})  # parámetros ajustables
 
         self.mapa = None
+        self.grid = None
         self.plan = None
         self.candidatas = None
+
+        self.costmap = None
 
         self.t0 = None
         self.create_timer(0.1, self.step)
@@ -72,9 +83,16 @@ class Mision(Node):
 
         self.visited = []
         self.current_point = None
+        self.settle_until = None
         self.current_goal = None
+        self.current_in_place = False
 
         self.return_sent = False
+        self.return_tree = os.path.join(get_package_share_directory('equipo_jar'),
+                                'behavior_trees', 'vuelta_precisa.xml')
+        self.return_tries = 0
+        self.check_since = None
+        self.check_pose = None
         self.canceling = False
 
         self.idle_since = None
@@ -91,6 +109,8 @@ class Mision(Node):
 
         self.last_skipped = None
 
+        self.recoveries = 0
+
         self.create_subscription(OccupancyGrid, '/map', self.al_recibir_mapa, QOS_MAPA)
         self.create_subscription(Path, '/jar/plan_cobertura', self.al_recibir_plan, QOS_ESTADO)
         self.create_subscription(
@@ -100,6 +120,7 @@ class Mision(Node):
         self.pub_done = self.create_publisher(Empty, '/done', 10)
         self.get_logger().info(
             f'Hay que encontrar {self.cantidad_victimas} víctimas. Esperando el mapa en /map...')
+        self.create_subscription(OccupancyGrid, '/global_costmap/costmap', self.on_costmap, QOS_MAPA)
 
     def al_recibir_mapa(self, mapa):
         if self.mapa is None:
@@ -108,6 +129,14 @@ class Mision(Node):
                 f'resolución {mapa.info.resolution:.3f} m')
             self.t0 = self.get_clock().now()
         self.mapa = mapa
+        try:
+            self.grid = Grid.from_occupancy_grid(mapa)
+        except ValueError as e:
+            self.grid = None
+            self.get_logger().error(f'No pude armar la grilla del mapa: {e}. Sin inspecciones.')
+
+    def on_costmap(self, msg):
+        self.costmap = msg
 
     def seconds_since_t0(self):
         if self.t0 is None:
@@ -152,14 +181,16 @@ class Mision(Node):
             i = len(self.reported_points)
             self.get_logger().info(f'Reporte {i}. id={c.id} x={c.centro.x :.2f} y={c.centro.y:.2f}')
 
-    def go_to(self, pose):
+    def go_to(self, pose, tree=''):
         if not self.navegacion.server_is_ready():
             self.get_logger().warn('!!! El servidor de navegacion no esta listo !!!', throttle_duration_sec=5.0)
             return False
         goal = NavigateToPose.Goal()
         goal.pose = pose
+        goal.behavior_tree = tree
         self.nav_state = "sending"
-        future = self.navegacion.send_goal_async(goal)
+        self.recoveries = 0
+        future = self.navegacion.send_goal_async(goal, feedback_callback=self.on_feedback)
         future.add_done_callback(self.on_goal_response)
         now = self.seconds_since_t0()
         self.goal_start_time = now
@@ -198,10 +229,46 @@ class Mision(Node):
             reason = 'viaje demasiado largo'
         elif now - self.last_motion_time > self.p['stuck_time_s']:
             reason = 'robot quieto'
+        elif self.state != 'returning' and self.recoveries >= self.p['max_recoveries']:
+            reason = f'Nav2 lleva {self.recoveries} recuperaciones'
         if reason is not None:
             self.current_goal.cancel_goal_async()
             self.stuck_canceling = True
             self.get_logger().warning(f'Cancelo el viaje: {reason}')
+
+    def check_goal_near_box(self):
+        if self.state != 'exploring':
+            return
+        elif self.nav_state != 'moving':
+            return
+        elif self.current_point is None:
+            return
+        elif self.stuck_canceling:
+            return
+        x = self.current_point.pose.position.x
+        y = self.current_point.pose.position.y
+        if near_box(x, y, self.current_box_zones()):
+            self.current_goal.cancel_goal_async()
+            self.get_logger().info(f'Cancelo el viaje: el punto del plan ({x:.2f},{y:.2f}) '
+                                    f'quedó cerca de una caja')
+            self.current_point = None
+
+    def check_goal_blocked(self):
+        if self.state != 'exploring':
+            return
+        elif self.nav_state != 'moving':
+            return
+        elif self.current_point is None or self.current_in_place:
+            return
+        elif self.stuck_canceling:
+            return
+        x = self.current_point.pose.position.x
+        y = self.current_point.pose.position.y
+        if goal_blocked(self.costmap, x, y, self.p['costmap_blocked_value']):
+            self.current_goal.cancel_goal_async()
+            self.get_logger().info(f'Cancelo el viaje: el punto del plan ({x:.2f},{y:.2f}) '
+                                f'quedó ocupado en el costmap')
+            self.current_point = None
 
     def handle_on_goal_response(self, future):
         goal_handle = future.result()
@@ -227,10 +294,10 @@ class Mision(Node):
         status = future.result().status
         if status == GoalStatus.STATUS_SUCCEEDED:
             self.nav_state = 'arrived'
-            self.get_logger().info('Status succeded')
+            self.get_logger().info(f'Status succeded (recuperaciones: {self.recoveries})')
         else:
             self.nav_state = 'failed'
-            self.get_logger().info('Status failed')
+            self.get_logger().info(f'Status failed (recuperaciones: {self.recoveries})')
 
     def on_goal_result(self, future):
         try:
@@ -238,6 +305,18 @@ class Mision(Node):
         except Exception:
             self.nav_state = 'failed'
             self.get_logger().error(f'Error en on_goal_result:\n{traceback.format_exc()}', throttle_duration_sec=5.0)
+
+    def handle_on_feedback(self, msg):
+        if self.nav_state != 'moving':
+            return
+        self.recoveries = msg.feedback.number_of_recoveries
+
+    def on_feedback(self, msg):
+        try:
+            self.handle_on_feedback(msg)
+        except Exception:
+            self.get_logger().error(f'Error en on_feedback:\n{traceback.format_exc()}',
+                                    throttle_duration_sec=5.0)
 
     def change_state(self, new_state):
         self.get_logger().info(f'Estado: <{self.state}> -> <{new_state}>')
@@ -272,6 +351,8 @@ class Mision(Node):
         if self.seconds_since_t0() < self.p['start_wait_s']:
             return
         self.check_stuck()
+        self.check_goal_near_box()
+        self.check_goal_blocked()
         if self.state == 'exploring':
             reason = self.reason_to_return()
             if reason is not None:
@@ -281,6 +362,8 @@ class Mision(Node):
                 self.explore()
         if self.state == 'returning':
             self.return_to_start()
+        if self.state == 'checking':
+            self.check_return()
 
     def step(self):
         try:
@@ -305,6 +388,9 @@ class Mision(Node):
                 self.visited.append((x, y, yaw))
             self.current_point = None
             self.nav_state = 'idle'
+            self.settle_until = self.seconds_since_t0() + self.p['settle_s']
+        if self.settle_until is not None and self.seconds_since_t0() < self.settle_until: 
+            return
         if self.inspect_doubtful():
             return
         if self.plan is None:
@@ -328,10 +414,15 @@ class Mision(Node):
         q = point.pose.orientation
         yaw = yaw_from_quaternion(q)
         x, y, in_place = goal_position(plan_x, plan_y, self.current_pose(), self.p['turn_in_place_m'])
+        if not in_place and goal_blocked(self.costmap, x, y, self.p['costmap_blocked_value']):
+            self.visited.append((plan_x, plan_y, yaw))
+            self.get_logger().info(f'Salteo el punto del plan ({plan_x:.2f},{plan_y:.2f}): ocupado en el costmap')
+            return
         goal = self.make_pose(x, y, yaw)
         sent = self.go_to(goal)
         if sent:
             self.current_point = point
+            self.current_in_place = in_place
             if in_place:
                 self.get_logger().info(f'Giro en el lugar: yaw={yaw:.2f} desde ({x:.2f},{y:.2f}), '
                                         f'punto del plan ({plan_x:.2f},{plan_y:.2f})')
@@ -392,14 +483,47 @@ class Mision(Node):
                 return
             else:
                 x, y, yaw = self.start_pose
-                sent = self.go_to(self.make_pose(x, y, yaw))
+                sent = self.go_to(self.make_pose(x, y, yaw), self.return_tree)
                 if sent:
                     self.return_sent = True
+                    self.return_tries += 1
                     return
         if self.return_sent and (self.nav_state == 'arrived' or self.nav_state == 'failed'):
             self.get_logger().info(f'Vuelta terminada: {self.nav_state}')
-            self.change_state('stopping')
+            self.check_since = None
+            self.change_state('checking')
             return
+
+    def check_return(self):
+        now = self.seconds_since_t0()
+        odom = self.odom_pose()
+        if odom is None:
+            return
+        if (self.check_since is None or 
+            math.hypot(odom[0] - self.check_pose[0], odom[1] - self.check_pose[1]) > self.p['return_still_m']):
+            self.check_since = now
+            self.check_pose = odom
+            return
+        if now - self.check_since < self.p['return_still_s']:
+            return
+        pose = self.current_pose()
+        if pose is None:
+            return
+        x, y, _ = pose
+        x0, y0, _ = self.start_pose
+        error = math.hypot(x - x0, y - y0)
+        self.get_logger().info(f'Regreso {self.return_tries}: a {error:.3f} m de la largada')
+        verdict = return_verdict(error, self.return_tries, self.p['return_tolerance_m'],
+                                self.p['return_max_tries'])
+        if verdict == 'ok':
+            self.change_state('stopping')
+        elif verdict == 'retry':
+            self.get_logger().info('Lejos de la largada: vuelvo a intentar')
+            self.return_sent = False
+            self.change_state('returning')
+        else:
+            self.get_logger().warning('Termino lejos de la largada')
+            self.change_state('stopping')
 
     def next_doubtful(self):
         if self.candidatas is None:
@@ -416,9 +540,21 @@ class Mision(Node):
         if c is None:
             return False
         x_robot, y_robot, _ = self.current_pose()
+        if self.grid is None:
+            return False
+        try:
+            reachable = self.grid.reachable_from(x_robot, y_robot, self.p['visit_transit_radius_m'],
+                                                self.p['visit_free_threshold'])
+        except ValueError as e:
+            self.get_logger().info(f'No calculo zona alcanzable: {e}. Inspecciono más tarde',
+                                    throttle_duration_sec=5.0)
+            return False
         view = viewpoint_for(self.mapa, c.centro.x, c.centro.y, x_robot, y_robot, self.p['visit_distance_m'], 
                             self.p['visit_clearance_m'], self.p['visit_angles'], self.p['visit_min_shift_m'],
-                            self.p['visit_box_margin_m'])
+                            self.p['visit_box_margin_m'], self.grid, reachable)
+        if view is not None and goal_blocked(self.costmap, view[0], view[1], self.p['costmap_blocked_value']):
+            self.get_logger().info(f'El lugar para mirar la candidata id={c.id} está ocupado en el costmap')
+            view = None
         if view is None:
             _, attempts = self.failed_inspections.get(c.id, (0, 0))
             self.failed_inspections[c.id] = (c.observaciones, attempts + 1)

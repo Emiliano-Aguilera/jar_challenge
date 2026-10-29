@@ -13,7 +13,7 @@ is in the rules (§7.1), in [`docs/QOS.md`](../QOS.md) and in the root
 | Localization | Mission, Detection | Pose trusted (start-up done, no turn waiting for a fix) | `/jar/localizacion_lista` | `std_msgs/Bool` |
 | Coverage | Mission | Pending viewpoints, in order | `/jar/plan_cobertura` | `nav_msgs/Path` |
 | Mission | Navigation | Go to a pose | `navigate_to_pose` | `nav2_msgs/action/NavigateToPose` |
-| Detection | Fusion | What it sees, frame by frame | defined by the perception owners | — |
+| Detection | Fusion | Each box seen, frame by frame | `/jar/observaciones` | `geometry_msgs/PoseWithCovarianceStamped` |
 | Fusion | Mission | Victim candidates | `/jar/candidatas` | `equipo_jar_msgs/Candidatas` (ours) |
 | Mission | Judge | Reports and end | `/victimas`, `/done` | official |
 | Navigation | Robot | Velocity | `/cmd_vel` | official |
@@ -92,6 +92,15 @@ orientation. Mission can cancel it.
 100 = lethal (obstacle), 99 = inscribed (the robot's center there would touch
 it), 1-98 = inflation only, 0 = free, -1 = unknown. Use it to skip goals that
 fall on an obstacle missing from `/map` (value >= 99).
+
+## Detection → Fusion
+
+**`/jar/observaciones`** (`geometry_msgs/PoseWithCovarianceStamped`, frame `map`):
+one message per box seen in one camera frame. Position: the estimated box center.
+`covariance[0]` and `covariance[7]`: the variance (sigma², m²) of this single
+observation. `header.stamp`: the time of the LiDAR scan it came from; fusion
+uses it to look up where the robot was. Details: the top comment of
+`deteccion.py`.
 
 ## Fusion → Mission
 
