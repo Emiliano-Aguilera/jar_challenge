@@ -55,7 +55,15 @@ localizacion:
     yaw_inicial: 0.0
     desvio_xy_inicial: 0.20
     desvio_yaw_inicial: 0.30
-    actualizaciones_quieto: 10
+    actualizaciones_quieto: 10        # 0 = none: ready as soon as AMCL takes the start pose
+    # Heading fix after turns (real robot: /odom overcounts turns ~25 %). 0 = off.
+    # Week-10 bag replay, heading when the flag turns true again: 10.9° without the fix,
+    # 5.4° with 5 updates, 1.9° with 10 (notes/hans-die/NOTES.md).
+    actualizaciones_giro: 10
+    giro_minimo_rad: 0.3              # signed rotation of one turn that needs a fix
+    girando_rads: 0.3                 # above this the robot is turning, not just correcting
+    max_correccion_s: 4.0             # stop waiting this long after the turn ends
+    max_duda_s: 15.0                  # stop waiting this long after the doubt starts
     plazo_arranque_s: 5.0             # s sin respuesta de un nodo de Nav2 antes de volver a preguntar
 
 # ---------------------------------------------------------------------------
