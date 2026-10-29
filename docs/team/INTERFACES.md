@@ -62,8 +62,10 @@ change and once per second):
 - Why: on the real robot `/odom` counts turns ~25 % too much, so right after a
   turn the heading can be 10-20° off (a box seen 1.5 m away lands ~0.4 m off).
   Week-10 bag replay: when the flag turns true again the heading error is ~2°.
-- Mission: fix the start pose the first time it is `true`; after a trip, wait
-  while it is `false` (with a max wait) before the next goal or a report.
+- Mission: starts exploring and fixes the start pose the first time it is
+  `true` (max wait `localization_wait_max_s`, 10 s). It does not wait after each
+  trip: with the IMU heading (#44) the fix after turns adds little (bag: 1.8° ->
+  1.3°) and waiting would cost up to 21-34 s per run.
 - Detection: skip frames taken while it is `false` (still under discussion
   with perception).
 - `actualizaciones_giro: 0` turns the fix off (the flag then only covers the

@@ -85,8 +85,17 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
   `localizacion` node settles it in about 5 s).
 - Decided: until the first goal the robot has not moved, so the latest pose is the
   best estimate of the start. Mission updates `start_pose` on every tick and freezes
-  it when it sends the first goal (`go_to`). No goal goes out during the first
-  `start_wait_s` (4 s) after /map, so AMCL can settle; reports are not delayed.
+  it when it sends the first goal (`go_to`). Reports are not delayed.
+- First version: no goal during the first `start_wait_s` (4 s) after /map. That was
+  measured in the simulator; the real robot can take longer or shorter.
+- Decided (2026-10-29): mission starts on the first `true` of
+  `/jar/localizacion_lista` (hans-die, #34: false until AMCL has done its start-up
+  no-motion updates). `start_ready` (`exploracion.py`); `on_localization_ready` keeps
+  only the first `true` (later `false` after turns is ignored). Max wait
+  `localization_wait_max_s` (10 s) in case the flag never comes: the robot stands
+  still until then and 60 s still ends the run. Starting at the max wait logs a
+  warning once. `start_wait_s` was removed (marcorita's `pruebas/evaluar_presupuesto.py`
+  read it).
 - Measured (laberinto_1, 5 runs on 2026-10-26, after /map): AMCL settled at
   2.1-2.2 s, Nav2 active at 2.7-3.2 s, coverage plan at 4.7-5.3 s. With 8 s the
   first goal went out at 8.2 s, ~3 s after everything was ready. With 4 s it went
@@ -376,6 +385,10 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
 - Checked (Docker, `nav_falso.py`, 3 s trips, `settle_s` 2.0, 2026-10-27):
   2.17 s between the end of trip A and the start of trip B (0.15 s without the
   wait). The trip back started 0.19 s after the last trip, as designed.
+- Update (2026-10-29): AMCL now takes the heading from the IMU (hans-die, #44). On the
+  bag the heading at stops went 10.9° -> 1.8°, and localization's fix after turns
+  (#34) only adds 1.8° -> 1.3°. Mission does not wait for `/jar/localizacion_lista`
+  after trips (it would cost up to 21-34 s per run in the sim); `settle_s` stays 0.
 
 ## How does mission check the return?
 
@@ -447,27 +460,14 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
 Done (mission): cancel exploration trips at `max_recoveries` Nav2 recoveries (see
 "What if navigation gets stuck?"); precise return (see "How does mission check the
 return?"); goals on unmapped obstacles (see "How does mission skip goals on obstacles
-that are not in `/map`?").
+that are not in `/map`?"); start on localization's flag (see "Where is the start
+pose?").
 
 Pending, in this order:
-1. Wait for localization (hans-die, PR #34). On hold (2026-10-29): localization may fix
-   the odometry before AMCL instead (`localizacion/rumbo-imu`, or a x0.79 scale).
-   Localization publishes
-   `/jar/localizacion_lista` (`std_msgs/Bool`, reliable + transient local): false until
-   AMCL settles at the start, and after each big turn until the heading is fixed
-   (~0.9 s, max 3 s). Why: on the real robot `/odom` overcounts turns ~25 %, so after a
-   turn the heading is 10-20° off; `settle_s` alone does not fix it. Mission: fix the
-   start pose on the first `true` (today it is fixed with the first goal, after
-   `start_wait_s`, 4 s); after each trip, wait while it is `false`, with its own max
-   wait (~2 s), instead of `settle_s` (then 0). Sim cost if mission waited at every fix:
-   <= ~30 s (laberinto_1), ~20 s (maze_1), ~9 s (maze_3). Real-robot bag: heading ~1°
-   off when it turns `true` (11° before). If perception drops frames while it is
-   `false`, mission's wait must be merged first, or the robot leaves each viewpoint
-   before a valid frame.
-2. Long trips back: NavFn caps paths at ~2x the map's longest side (~12 m on maze_1), so
+1. Long trips back: NavFn caps paths at ~2x the map's longest side (~12 m on maze_1), so
    the trip back can fail from far away. Mission fallback: go back through visited
    points. (The A* failures to extract existing paths were fixed in #33: Dijkstra.)
-3. Tests: shifted and turned starts, unmapped obstacles, Nav2 failures (retries, return).
+2. Tests: shifted and turned starts, unmapped obstacles, Nav2 failures (retries, return).
 
 For other modules:
 - Perception: the point cloud subscription is always created (`deteccion.py`;

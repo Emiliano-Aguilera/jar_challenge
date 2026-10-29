@@ -16,14 +16,14 @@ from nav2_msgs.action import NavigateToPose
 from nav_msgs.msg import OccupancyGrid, Path
 from rclpy.action import ActionClient
 from rclpy.node import Node
-from std_msgs.msg import Empty
+from std_msgs.msg import Empty, Bool
 from geometry_msgs.msg import PoseStamped
 
 from equipo_jar.comun import QOS_ESTADO, QOS_MAPA, correr, parametros_en_vivo
 from equipo_jar.reportes import armar_reporte
 from equipo_jar_msgs.msg import Candidatas
 from equipo_jar.confirmacion import select_to_report
-from equipo_jar.exploracion import yaw_from_quaternion, first_pending, angle_difference, goal_position, box_zones, near_box, return_verdict, goal_blocked
+from equipo_jar.exploracion import yaw_from_quaternion, first_pending, angle_difference, goal_position, box_zones, near_box, return_verdict, goal_blocked, start_ready
 from equipo_jar.inspeccion import pick_doubtful, viewpoint_for
 from equipo_jar.mapa import Grid
 
@@ -49,7 +49,7 @@ class Mision(Node):
                                             'visit_min_observations': 2, 'visit_distance_m': 0.8, 
                                             'visit_clearance_m': 0.25, 'visit_angles': 12, 
                                             'visit_min_shift_m': 0.4, 'visit_box_margin_m': 0.25, 
-                                            'start_wait_s': 4.0, 'goal_timeout_s': 90.0, 'stuck_time_s': 20.0,
+                                            'localization_wait_max_s': 10.0, 'goal_timeout_s': 90.0, 'stuck_time_s': 20.0,
                                             'stuck_distance_m': 0.05, 'stuck_angle_rad': 0.2, 'stop_wait_s': 1.0,
                                             'done_limit_s': 590.0, 'turn_in_place_m': 0.20, 
                                             'visit_max_attempts': 3, 'box_min_observations': 2,
@@ -98,6 +98,8 @@ class Mision(Node):
         self.idle_since = None
 
         self.start_locked = False
+        self.localization_ready = False
+        self.start_timeout_logged = False
 
         self.goal_start_time = None
         self.last_motion_pose = None
@@ -121,6 +123,7 @@ class Mision(Node):
         self.get_logger().info(
             f'Hay que encontrar {self.cantidad_victimas} víctimas. Esperando el mapa en /map...')
         self.create_subscription(OccupancyGrid, '/global_costmap/costmap', self.on_costmap, QOS_MAPA)
+        self.create_subscription(Bool, '/jar/localizacion_lista', self.on_localization_ready, QOS_ESTADO)
 
     def al_recibir_mapa(self, mapa):
         if self.mapa is None:
@@ -137,6 +140,10 @@ class Mision(Node):
 
     def on_costmap(self, msg):
         self.costmap = msg
+
+    def on_localization_ready(self, msg):
+        if msg.data:
+            self.localization_ready = True
 
     def seconds_since_t0(self):
         if self.t0 is None:
@@ -348,8 +355,11 @@ class Mision(Node):
             self.change_state('stopping')
             return
         self.check_reports(self.p['min_observations'], self.p['max_deviation_m'])
-        if self.seconds_since_t0() < self.p['start_wait_s']:
+        if not start_ready(self.localization_ready, self.seconds_since_t0(), self.p['localization_wait_max_s']):
             return
+        if not self.localization_ready and not self.start_timeout_logged:
+            self.get_logger().warning('Localización no avisó que está lista: arranco igual')
+            self.start_timeout_logged = True
         self.check_stuck()
         self.check_goal_near_box()
         self.check_goal_blocked()
