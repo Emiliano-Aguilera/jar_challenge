@@ -538,5 +538,10 @@ Asked by mission (Bautista, 2026-10-27/28).
   300). Fixes 35 / 21 / 9, each 0.9 s on average (max 1.2 s), none timed out. "Localization
   ready" once at start-up. AMCL error unchanged (max 0.13 / 0.09 / 0.07 m). If mission waited
   at every fix the cost would be at most ~30 / 20 / 9 s.
+- Checked in the simulator again (3830adf, current logic, 10 updates, development with #37/#43,
+  600 s): laberinto_1 300, maze_1 500, maze_3 600, all with `/done` and the return bonus.
+  Fixes 28 / 14 / 17, 1.2 / 1.5 / 1.7 s on average (max 2.1 s). Timeouts 9 / 2 / 1, all from
+  `max_duda_s` while driving with many turns in a row, none from `max_correccion_s`. AMCL
+  error max 0.13 / 0.06 / 0.10 m. If mission waited at every fix: at most ~34 / 21 / 29 s.
 - Pending: mission waits on the flag (Bautista), detection skips frames (Santos). Then set
   `settle_s` 0. alpha1 for the real robot with the new bags.
