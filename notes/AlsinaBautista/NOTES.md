@@ -96,6 +96,12 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
   still until then and 60 s still ends the run. Starting at the max wait logs a
   warning once. `start_wait_s` was removed (marcorita's `pruebas/evaluar_presupuesto.py`
   read it).
+- Checked (2026-10-29, maze_1 and maze_3, 300 s, batch 20261029-192059-2c554b7): the flag
+  turned `true` 2.3-2.4 s after /map; the first goal went out at 3.2-3.6 s, when the
+  coverage plan and Nav2's `bt_navigator` were also ready (before: 4 s fixed). No max-wait
+  warning. 500 and 600, 0 collisions, judge's distance to the start 0.031 / 0.051 m. Done
+  at 194 / 170 s (182 / 153 s on the previous branch): exploration varies run to run;
+  maze_1's trip to (0.03,-2.82) took 41 s with 8 Nav2 recoveries (37 s with 7 before).
 - Measured (laberinto_1, 5 runs on 2026-10-26, after /map): AMCL settled at
   2.1-2.2 s, Nav2 active at 2.7-3.2 s, coverage plan at 4.7-5.3 s. With 8 s the
   first goal went out at 8.2 s, ~3 s after everything was ready. With 4 s it went
