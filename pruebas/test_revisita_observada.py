@@ -7,7 +7,7 @@ from threading import Event
 import pytest
 
 from equipo_jar.mapa import Grid, Pose
-from equipo_jar.cobertura_revisita import ObservedView, revisit_views, safe_observer
+from equipo_jar.cobertura_revisita import ObservedView, RevisitHint, revisit_views, safe_observer
 
 
 def call(grid, robot, views, **overrides):
@@ -28,7 +28,7 @@ def test_recent_measured_view_preserves_observed_yaw_even_if_centre_ray_is_occlu
     grid = Grid(40, 30, 0.1, values)
     view = example()
     assert not grid.visible((view.pose.x, view.pose.y), (view.target_x, view.target_y), 25)
-    assert call(grid, Pose(1.55, 1.35, 0.0), (view,)) == (view,)
+    assert call(grid, Pose(1.55, 1.35, 0.0), (view,)) == (RevisitHint(view.pose, view),)
 
 
 @pytest.mark.parametrize('change', [dict(stamp_s=4.9), dict(stamp_s=10.1),
@@ -67,13 +67,13 @@ def test_old_40cm_shift_can_reject_a_valid_short_revisit_without_lowering_cleara
     grid = Grid(40, 30, 0.1, [0] * 1200)
     view, robot = example(), Pose(1.55, 1.35, 0)
     assert call(grid, robot, (view,), min_shift_m=0.4) == ()
-    assert call(grid, robot, (view,), min_shift_m=0.05) == (view,)
+    assert call(grid, robot, (view,), min_shift_m=0.05) == (RevisitHint(view.pose, view),)
 
 
 def test_duplicate_evidence_does_not_make_duplicate_goals():
     grid = Grid(40, 30, 0.1, [0] * 1200)
     view = example()
-    assert call(grid, Pose(1.55, 1.35, 0), (view, view)) == (view,)
+    assert call(grid, Pose(1.55, 1.35, 0), (view, view)) == (RevisitHint(view.pose, view),)
 
 
 def test_duplicate_pose_keeps_the_better_measurement_regardless_of_input_order():
@@ -81,7 +81,48 @@ def test_duplicate_pose_keeps_the_better_measurement_regardless_of_input_order()
     best = example()
     weak = replace(best, sigma_m=0.15)
     robot = Pose(1.55, 1.35, 0)
-    assert call(grid, robot, (weak, best)) == call(grid, robot, (best, weak)) == (best,)
+    assert call(grid, robot, (weak, best)) == call(grid, robot, (best, weak)) == (RevisitHint(best.pose, best),)
+
+
+def test_unsafe_measurement_can_offer_a_nearby_safe_goal_without_reducing_clearance():
+    values = [0] * (80 * 60)
+    for j in range(60):
+        values[j * 80 + 40] = 100
+    grid = Grid(80, 60, 0.05, values)
+    view = replace(example(), pose=Pose(1.755, 1.525, -0.2))
+    robot = Pose(1.55, 1.35, 0)
+    assert not safe_observer(grid, view.pose, 0.25, 25)
+    assert call(grid, robot, (view,)) == ()
+    hints = call(grid, robot, (view,), max_adjustment_m=0.05)
+    assert hints
+    assert all(h.evidence == view and 0 < h.adjustment_m <= 0.05 for h in hints)
+    assert all(h.pose.yaw == view.pose.yaw and safe_observer(grid, h.pose, 0.25, 25) for h in hints)
+    assert not call(grid, robot, (view,), max_adjustment_m=0.01)
+
+
+def test_adjustment_never_escapes_the_robots_connected_component():
+    values = [0] * (20 * 20)
+    for j in range(20):
+        values[j * 20 + 10] = 100
+    grid = Grid(20, 20, 0.05, values)
+    view = replace(example(), pose=Pose(0.56, 0.5, 0))
+    assert call(grid, Pose(0.4, 0.5, 0), (view,), transit_radius=0.0,
+                view_clearance=0.0, max_adjustment_m=0.05) == ()
+
+
+def test_adjustment_budget_cannot_turn_into_a_large_search():
+    values = [0] * 1200
+    for j in range(30):
+        values[j * 40 + 20] = 100
+    grid = Grid(40, 30, 0.1, values)
+    view = replace(example(), pose=Pose(1.9, 1.55, -0.2))
+    assert not call(grid, Pose(1.55, 1.35, 0), (view,), max_adjustment_m=1.0)
+
+
+def test_finer_map_retains_exact_safe_views_with_the_default_adjustment_budget():
+    grid = Grid(160, 120, 0.025, [0] * 19200)
+    view = example()
+    assert call(grid, Pose(1.55, 1.35, 0), (view,), max_adjustment_m=0.05) == (RevisitHint(view.pose, view),)
 
 
 @pytest.mark.parametrize('origin_yaw', [0.0, 0.37, -math.pi / 2])

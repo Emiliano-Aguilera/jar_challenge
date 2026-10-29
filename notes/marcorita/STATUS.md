@@ -11,12 +11,22 @@
   uses it only after normal inspection fails and waits briefly after arrival;
   failed navigation/time alone do not mark inspection. Existing report/fusion
   thresholds remain unchanged. See BLIND_SPOTS.md and REVISIT_INTEGRATION.md.
-- 33 focused tests and the full verifier (170 package tests, build/interfaces/
-  map wait) pass. The actual recorded-input mission replay sends a fallback
-  and refuses confirmation when no new observations arrive.
+- Initial validation: 33 focused tests and full verifier (170 package tests,
+  build/interfaces/map wait). The actual recorded-input mission replay sends
+  a fallback and refuses confirmation when no new observations arrive.
 - Marco authorized commit/push/draft PR and one 600 s recorded laberinto_1
-  run. Run/result pending; keep draft if behavior problems remain. PR #16
-  stays separate. No other new server run is authorized.
+  run. It is consumed: 40778333572 on ecdfb2f scored 300 with no collisions,
+  close calls or violations, but the fallback never activated. Recorded TF
+  was ready; both measured poses failed the 0.25 m observation clearance.
+- Follow-up permits a safe goal within a small adjustment budget and one map
+  cell, preserving measured yaw. Replay of that run finds a 0.02738 m correction
+  with unchanged clearance; mocked arrival without new observations still
+  grants no inspection. This adjusted goal is not server-tested.
+- Final follow-up validation: 38 focused tests and the complete verifier
+  pass (171 package tests, build/static/params/interfaces/map wait).
+- PR #36 remains draft. Marco explicitly reserved review/merge for Bautista:
+  DO NOT MERGE even after green CI. PR #16 stays separate. No other new server
+  run is authorized. See REVISIT_INTEGRATION.md for validation and limits.
 
 ## Current task: execution audit (2026-10-28)
 

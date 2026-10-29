@@ -58,7 +58,8 @@ class Mision(Node):
                                             'return_still_s': 0.5, 'return_still_m': 0.01,
                                             'revisit_enabled': True, 'revisit_max_age_s': 10.0,
                                             'revisit_min_shift_m': 0.05, 'revisit_wait_s': 2.0,
-                                            'revisit_max_records': 128})  # parámetros ajustables
+                                            'revisit_max_records': 128,
+                                            'revisit_adjustment_m': 0.05})  # parámetros ajustables
 
         self.mapa = None
         self.grid = None
@@ -600,7 +601,8 @@ class Mision(Node):
                     map_revision=self.observation_map_revision, max_age_s=self.p['revisit_max_age_s'],
                     association_m=self.p['min_report_distance_m'], min_shift_m=self.p['revisit_min_shift_m'],
                     transit_radius=self.p['visit_transit_radius_m'],
-                    view_clearance=self.p['visit_clearance_m'], threshold=self.p['visit_free_threshold'])
+                    view_clearance=self.p['visit_clearance_m'], threshold=self.p['visit_free_threshold'],
+                    max_adjustment_m=self.p['revisit_adjustment_m'])
                 if hints:
                     recorded = hints[0]
                     view = (recorded.pose.x, recorded.pose.y, recorded.pose.yaw)
@@ -622,6 +624,8 @@ class Mision(Node):
                     self.revisit_pending = dict(id=c.id, x=c.centro.x, y=c.centro.y,
                                                 before=c.observaciones, wait_s=wait_s, arrived=False,
                                                 map_revision=self.observation_map_revision)
+                    self.get_logger().info(
+                        f'Observed-view fallback id={c.id}; goal adjustment {recorded.adjustment_m:.3f} m')
                 self.get_logger().info(f'Voy a mirar la candidata id={c.id} desde ({x:.2f},{y:.2f})')
                 self.idle_since = None
                 return True

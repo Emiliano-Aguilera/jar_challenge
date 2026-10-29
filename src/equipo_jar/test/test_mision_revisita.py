@@ -34,6 +34,7 @@ def mission(monkeypatch):
                   visit_min_shift_m=0.4, visit_box_margin_m=0.25, visit_max_attempts=3,
                   revisit_enabled=True, revisit_max_age_s=10.0, revisit_min_shift_m=0.05,
                   revisit_wait_s=2.0, revisit_max_records=128,
+                  revisit_adjustment_m=0.05,
                   min_report_distance_m=0.4, min_observations=5, settle_s=0.0,
                   return_time_s=480.0)
     node.clock_s = 10.0
@@ -96,6 +97,20 @@ def test_disabled_or_invalid_fallback_cannot_send_a_goal(monkeypatch, parameter,
     node.p[parameter] = value
     assert not node.inspect_doubtful()
     assert node.sent == []
+    assert node.inspected_points == []
+
+
+def test_fallback_can_move_an_unsafe_measurement_to_a_nearby_safe_goal(monkeypatch):
+    node = mission(monkeypatch)
+    values = [0] * (80 * 60)
+    for j in range(60):
+        values[j * 80 + 40] = 100
+    node.grid = Grid(80, 60, 0.05, values)
+    node.observed_views = [ObservedView(Pose(1.755, 1.525, -0.2), 2.5, 1.5, 9.0, 0.07, 3)]
+    assert node.inspect_doubtful()
+    x, y, yaw = node.sent[0]
+    assert x < 1.755 and abs(x - 1.755) <= 0.05
+    assert y == pytest.approx(1.525) and yaw == -0.2
     assert node.inspected_points == []
 
 

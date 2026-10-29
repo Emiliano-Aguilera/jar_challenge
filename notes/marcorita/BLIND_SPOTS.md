@@ -48,3 +48,15 @@ The resulting fallback is integrated in mission with Marco's permission;
 navigation, fusion, perception, launch and shared YAML remain unchanged.
 See REVISIT_INTEGRATION.md for exact behavior and passing checks. Evidence
 stays in build/verificacion/cobertura/puntos-ciegos/.
+
+## New run and follow-up correction
+
+Recorded run 40778333572 on ecdfb2f finished with 300 points, no collisions,
+close calls or protocol violations, but never activated the fallback. TF at
+the observation stamps was available; both measured observer positions failed
+the existing 0.25 m continuous-position clearance. The follow-up allows a
+nearby safe cell centre, capped to 0.05 m by default and at most one map cell.
+Recorded-input replay finds a 0.02738 m correction with the same yaw and
+clearance. It does not establish camera visibility at that adjusted goal or
+a score improvement. PR #36 remains draft for Bautista; no further server run
+is authorized and Marco explicitly prohibited our merging this mission PR.

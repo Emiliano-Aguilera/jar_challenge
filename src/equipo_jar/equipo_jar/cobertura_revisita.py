@@ -31,6 +31,17 @@ class ObservedView:
             raise ValueError('map revision must be a nonnegative integer')
 
 
+@dataclass(frozen=True)
+class RevisitHint:
+    """A goal near measured evidence; adjustment is not measured visibility."""
+    pose: Pose
+    evidence: ObservedView
+
+    @property
+    def adjustment_m(self):
+        return math.hypot(self.pose.x - self.evidence.pose.x, self.pose.y - self.evidence.pose.y)
+
+
 def safe_observer(grid, pose, radius, threshold):
     """Disk against full occupied squares at the actual continuous XY.
 
@@ -64,7 +75,7 @@ def safe_observer(grid, pose, radius, threshold):
 
 def revisit_views(grid, robot, target_x, target_y, observations, *, now_s,
                   map_revision, max_age_s, association_m, min_shift_m,
-                  transit_radius, view_clearance, threshold, cancel=None):
+                  transit_radius, view_clearance, threshold, max_adjustment_m=0.0, cancel=None):
     """Rank recent measured views that remain safe and connected.
 
     All stamps/now must use one ROS clock. The caller must obtain observer TF
@@ -73,16 +84,19 @@ def revisit_views(grid, robot, target_x, target_y, observations, *, now_s,
     It must not mark a box inspected, grant coverage or publish a report.
     """
     values = (target_x, target_y, now_s, max_age_s, association_m, min_shift_m,
-              transit_radius, view_clearance)
+              transit_radius, view_clearance, max_adjustment_m)
     if not all(math.isfinite(v) for v in values):
         raise ValueError('revisit arguments must be finite')
     if (now_s < 0 or max_age_s <= 0 or association_m <= 0
-            or min(min_shift_m, transit_radius, view_clearance) < 0):
+            or min(min_shift_m, transit_radius, view_clearance, max_adjustment_m) < 0):
         raise ValueError('invalid revisit limits')
     if type(map_revision) is not int or map_revision < 0:
         raise ValueError('invalid current map revision')
     if not isinstance(grid, Grid) or not isinstance(robot, Pose):
         raise ValueError('a map Grid and robot Pose are required')
+    # A finer map must not disable exact measured views with the default budget.
+    # Keep any correction within both the configured limit and one map cell.
+    adjustment_limit = min(max_adjustment_m, grid.resolution)
     check_cancelled(cancel)
     reachable = grid.reachable_from(robot.x, robot.y, transit_radius, threshold, cancel)
     clearance = max(transit_radius, view_clearance)
@@ -96,16 +110,32 @@ def revisit_views(grid, robot, target_x, target_y, observations, *, now_s,
             continue
         if math.hypot(view.target_x - target_x, view.target_y - target_y) > association_m:
             continue
-        if math.hypot(view.pose.x - robot.x, view.pose.y - robot.y) < min_shift_m:
+        cell = grid.cell(view.pose.x, view.pose.y)
+        if cell not in reachable:
             continue
-        if grid.cell(view.pose.x, view.pose.y) not in reachable:
-            continue
-        if not safe_observer(grid, view.pose, clearance, threshold):
-            continue
-        result.append(view)
-    # Prefer the sensor's lower uncertainty, then recent evidence and shorter
-    # displacement. Sigma does not include a navigation-success guarantee.
-    ranked = sorted(result, key=lambda v: (v.sigma_m, now_s - v.stamp_s,
+        goals = []
+        if safe_observer(grid, view.pose, clearance, threshold):
+            goals.append(view.pose)
+        elif adjustment_limit > 0:
+            span = math.ceil(adjustment_limit / grid.resolution) + 1
+            ci, cj = cell
+            for j in range(max(0, cj - span), min(grid.height, cj + span + 1)):
+                check_cancelled(cancel)
+                for i in range(max(0, ci - span), min(grid.width, ci + span + 1)):
+                    if (i, j) not in reachable:
+                        continue
+                    pose = Pose(*grid.center((i, j)), view.pose.yaw)
+                    if math.hypot(pose.x - view.pose.x, pose.y - view.pose.y) > adjustment_limit:
+                        continue
+                    if safe_observer(grid, pose, clearance, threshold):
+                        goals.append(pose)
+        for pose in goals:
+            if math.hypot(pose.x - robot.x, pose.y - robot.y) >= min_shift_m:
+                result.append(RevisitHint(pose, view))
+    # Prefer the smallest correction, then sensor uncertainty and recency.
+    # Neither the evidence nor the corrected goal guarantees a future image.
+    ranked = sorted(result, key=lambda v: (v.adjustment_m, v.evidence.sigma_m,
+                                           now_s - v.evidence.stamp_s,
                                            math.hypot(v.pose.x - robot.x, v.pose.y - robot.y)))
     unique = {}
     for view in ranked:
