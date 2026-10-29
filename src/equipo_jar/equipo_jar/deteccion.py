@@ -6,7 +6,9 @@ Inputs (QoS per the rules, docs/QOS.md):
   /cam_1/color/image_raw      Image           best effort   (320x240 @ 30 Hz on the robot)
   /cam_1/color/camera_info    CameraInfo      best effort   (intrinsics K)
   /scan                       LaserScan       best effort   (1080 rays @ ~7 Hz, primary range)
-  /cam_1/depth/color/points   PointCloud2     best effort   (fallback range; unreliable on the robot)
+  /cam_1/depth/color/points   PointCloud2     best effort   (fallback range; unreliable on the robot;
+                                                            subscribed only if use_cloud_fallback
+                                                            or cloud_check, both off by default)
   /tf, /tf_static             camera, LiDAR and base frames; map -> odom from localization
 
 Output (team-internal, docs/team/INTERFACES.md lets the perception owners define it):
@@ -23,7 +25,8 @@ Per synchronized (image, scan) pair:
      timestamps is compensated)                                     tf2 lookup_transform_full
   3. the LiDAR beams in the central part of that span, grouped by
      range; the largest group is the box face                       vision.central_cluster
-     (if none: depth cloud median, if a fresh cloud exists)         vision.robust_3d_point
+     (if none and use_cloud_fallback: depth cloud median, if a
+     fresh cloud exists)                                            vision.robust_3d_point
   4. checks: not too far, blob width matches the range, area
      matches the range, the hit is not on a wall of /map            vision.width_is_consistent,
                                                                     area_is_consistent, map_range_along
@@ -80,7 +83,7 @@ PARAM_DEFAULTS = {
     'cloud_check': False,                # drop a LiDAR range the depth cloud contradicts (see params.yaml)
     'cloud_lidar_max_gap_m': 0.5,        # |cloud distance - LiDAR distance| above this = contradiction
     # Cloud (fallback range)
-    'use_cloud_fallback': True,
+    'use_cloud_fallback': False,         # with cloud_check, decides the subscription; read at startup only
     'cloud_max_age_s': 0.5,
     'erosion_px': 2,
     'z_min_m': 0.6,
@@ -130,8 +133,13 @@ class Detection(Node):
         self.sync.registerCallback(self.on_pair)
         self.create_subscription(
             CameraInfo, '/cam_1/color/camera_info', self.on_camera_info, qos_profile_sensor_data)
-        self.create_subscription(
-            PointCloud2, '/cam_1/depth/color/points', self.on_cloud, qos_profile_sensor_data)
+        # The cloud only if something reads it: a subscription that exists pulls every cloud
+        # over the robot's Wi-Fi (~500 KB at 7-10 Hz), used or not. Image + cloud fill the
+        # competition router (physical_rosmaster raphael_router_wifi_2026-10-16.md), and §7.1
+        # warns about keeping it on all run.
+        if self.p['use_cloud_fallback'] or self.p['cloud_check']:
+            self.create_subscription(
+                PointCloud2, '/cam_1/depth/color/points', self.on_cloud, qos_profile_sensor_data)
         # The judge's map, for the wall check (transient local: arrives even if published earlier).
         self.create_subscription(OccupancyGrid, '/map', self.on_map, QOS_MAPA)
 
