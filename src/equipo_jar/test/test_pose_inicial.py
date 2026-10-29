@@ -110,3 +110,20 @@ def test_scan_points_skip_bad_rays_and_use_the_laser_pose():
     assert pts.shape == (2, 2)
     assert np.allclose(pts[0], [0.1 - 1.0, 0.0], atol=1e-9)        # ray 0 points backwards
     assert np.allclose(pts[1], [0.1 - 2.0, 0.0], atol=1e-9)        # ray 4: 2 pi, backwards again
+
+
+def test_sharpness_is_high_in_a_corner_and_low_in_a_plain_corridor():
+    g, b = buscador()
+    real = (0.18, -0.12, 0.35)
+    assert b.nitidez(scan(g, *real), *real) > 0.1
+    # Corridor 0.8 m wide along x, closed far away: sliding along x barely changes the fit.
+    c = np.zeros((20, 400), dtype=np.int8)
+    c[2, :] = c[18, :] = 100
+    pasillo = PoseInicial(c.ravel(), 400, 20, RES, -10.0, -0.5, P)
+    global ORIGEN
+    viejo, ORIGEN = ORIGEN, (-10.0, -0.5)
+    try:
+        puntos = scan(c, 0.0, 0.0, 0.0)
+    finally:
+        ORIGEN = viejo
+    assert pasillo.nitidez(puntos, 0.0, 0.0, 0.0) < 0.03

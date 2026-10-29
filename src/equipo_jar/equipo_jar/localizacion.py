@@ -15,9 +15,13 @@ Tres tareas:
    a small spread; if the match fails it sends the guess with a wide spread. Then it asks
    AMCL for a few no-motion updates so the filter settles before the robot moves.
 
-3. Watch (vigia.py): while the robot is still, every `vigia_periodo_s` it scores the last
-   sweep at AMCL's pose against /map, logs the score, and moves AMCL to a clearly better
-   nearby pose if AMCL is lost.
+3. Watch (vigia.py): while the robot is still (once soon after it stops, then every
+   `vigia_periodo_s`) it scores the last sweep at AMCL's pose against /map and logs it.
+   - AMCL lost (low score): moves AMCL to a clearly better nearby pose.
+   - AMCL fine: fine-tunes it (`afinar_*`): a small search around AMCL's pose; if the fit
+     is sharp and a few cm away, AMCL is moved there with a small spread. AMCL alone wanders
+     a few cm at the same spot (laberinto_1: start pose 0.06 m off, return 0.09 m); the
+     same match at the start and at the return gives the same pose, map errors included.
 
 4. Heading fix after turns (real robot: /odom overcounts turns ~25 %). After a turn the
    heading is in doubt until AMCL has used a few scans taken after the turn; once the turn
@@ -147,6 +151,15 @@ class Localizacion(Node):
             'vigia_confirmaciones': 2,
             'vigia_radio_m': 0.5,
             'vigia_rango_yaw_rad': 0.35,
+            # Fine-tune AMCL while still (vigia.py). false: only the lost check.
+            'afinar_quieto': True,
+            'afinar_radio_m': 0.15,
+            'afinar_rango_yaw_rad': 0.1,
+            'afinar_puntaje_minimo': 0.75,  # the fit must be at least this good
+            'afinar_nitidez_minima': 0.03,  # and drop this much 5 cm / 2° away (no sliding)
+            'afinar_distancia_minima_m': 0.015,  # move AMCL only if this far (or 0.015 rad)
+            'desvio_xy_afinada': 0.02,      # spread sent to AMCL with a fine-tuned pose
+            'desvio_yaw_afinada': 0.02,
             'actualizaciones_quieto': 10,  # actualizaciones de AMCL sin movimiento al inicio (0 = ninguna)
             # Heading fix after turns (correccion_giro.py). 0 = off: the flag covers start-up only.
             'actualizaciones_giro': 10,    # AMCL updates after the turn before trusting it again
@@ -177,6 +190,10 @@ class Localizacion(Node):
         self.vigia_puntajes = []
         self.vigia_ultimo_log = None
         self.pedidos_vigia = 0
+        self.esperando_afinado = False   # AMCL got a fine-tuned pose and has not published yet
+        self.revisado_quieto = None      # quieto_desde of the last check (one soon after stopping)
+        self.afinados = 0
+        self.t_afinado = 0.0
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
         self.create_subscription(LaserScan, '/scan', self.al_recibir_scan, qos_profile_sensor_data)
@@ -281,7 +298,10 @@ class Localizacion(Node):
             self.faltan -= 1
             if self.faltan == 0:
                 self.terminar_arranque('AMCL acomodado')
+                # Fine-tune once before the flag turns true: mission saves this start pose.
+                self.vigilar(forzar=True)
         elif self.faltan < 0:
+            self.esperando_afinado = False
             self.correccion.con_actualizacion_amcl(segundos(msg.header.stamp))
 
     def al_recibir_odom(self, msg):
@@ -300,7 +320,10 @@ class Localizacion(Node):
         self.correccion.con_odom(segundos(msg.header.stamp), yaw, msg.twist.twist.angular.z)
 
     def publicar_lista(self):
-        lista = self.mapa_recibido and self.faltan < 0 and not self.correccion.en_duda
+        if self.esperando_afinado and time.monotonic() - self.t_afinado > 2.0:
+            self.esperando_afinado = False      # AMCL did not publish: do not hold the flag
+        lista = (self.mapa_recibido and self.faltan < 0 and not self.correccion.en_duda
+                 and not self.esperando_afinado)
         c = self.correccion
         if c.correcciones > self.correcciones_logueadas:
             self.correcciones_logueadas = c.correcciones
@@ -326,8 +349,9 @@ class Localizacion(Node):
                 self.sin_movimiento.call_async(Empty.Request())
                 self.pedidos_vigia = max(0, self.pedidos_vigia - 1)
             periodo = self.p['vigia_periodo_s']
-            if self.usar_amcl and periodo > 0 and time.monotonic() - self.t_vigia >= periodo:
-                self.t_vigia = time.monotonic()
+            if self.usar_amcl and periodo > 0 and (
+                    time.monotonic() - self.t_vigia >= periodo
+                    or self.revisado_quieto != self.quieto_desde):
                 self.vigilar()
             return
         if not self.mapa_recibido:
@@ -350,13 +374,15 @@ class Localizacion(Node):
                     f'AMCL hizo solo {self.p["actualizaciones_quieto"] - self.faltan} de '
                     f'{self.p["actualizaciones_quieto"]} actualizaciones al inicio; sigo igual')
 
-    def vigilar(self):
-        """Score the last still sweep at AMCL's pose; move AMCL if it is clearly lost."""
+    def vigilar(self, forzar=False):
+        """Score the last still sweep at AMCL's pose; fix AMCL if lost, fine-tune it if not."""
         scan = self.ultimo_scan
         if (scan is None or self.quieto_desde is None
-                or segundos(scan.header.stamp) < self.quieto_desde + 0.3
+                or (not forzar and segundos(scan.header.stamp) < self.quieto_desde + 0.3)
                 or not self.preparar_buscador()):
             return
+        self.t_vigia = time.monotonic()
+        self.revisado_quieto = self.quieto_desde
         try:
             tf = self.tf_buffer.lookup_transform('map', 'base_footprint', Time())
         except TransformException:
@@ -381,6 +407,8 @@ class Localizacion(Node):
             self.vigia_puntajes, self.vigia_ultimo_log = [], ahora
         if not self.vigia.hace_falta_buscar(puntaje):
             self.vigia.descartar()
+            if self.p['afinar_quieto']:
+                self.afinar(puntos, pose)
             return
         x, y, yaw, mejor, _ = b.buscar(puntos, *pose, radio_m=self.p['vigia_radio_m'],
                                        rango_yaw_rad=self.p['vigia_rango_yaw_rad'])
@@ -396,6 +424,29 @@ class Localizacion(Node):
                                 self.p['desvio_xy_encontrada'], self.p['desvio_yaw_encontrada'])
             self.enviar_pose_inicial()
             self.pedidos_vigia = 5
+
+    def afinar(self, puntos, pose):
+        """Move AMCL to the sharp best fit within afinar_radio_m, if it is a few cm away."""
+        p, b = self.p, self.buscador
+        x, y, yaw, puntaje, _ = b.buscar(puntos, *pose, radio_m=p['afinar_radio_m'],
+                                         rango_yaw_rad=p['afinar_rango_yaw_rad'])
+        if puntaje < p['afinar_puntaje_minimo']:
+            return
+        if b.nitidez(puntos, x, y, yaw) < p['afinar_nitidez_minima']:
+            return
+        d = math.hypot(x - pose[0], y - pose[1])
+        dyaw = abs(math.atan2(math.sin(yaw - pose[2]), math.cos(yaw - pose[2])))
+        if d < p['afinar_distancia_minima_m'] and dyaw < p['afinar_distancia_minima_m']:
+            return
+        self.afinados += 1
+        self.get_logger().info(
+            f'Fine-tune AMCL while still: {d * 100:.1f} cm, {math.degrees(dyaw):.1f}° to '
+            f'({x:.3f}, {y:.3f}, {yaw:.3f}), score {puntaje:.2f} (fine-tunes {self.afinados})')
+        self.pose_inicio = (float(x), float(y), float(yaw),
+                            p['desvio_xy_afinada'], p['desvio_yaw_afinada'])
+        self.enviar_pose_inicial()
+        self.esperando_afinado = True
+        self.t_afinado = time.monotonic()
 
     def terminar_arranque(self, motivo):
         self.get_logger().info(motivo)

@@ -131,6 +131,19 @@ class PoseInicial:
         en_guess = self.puntajes(puntos, np.array([x0]), np.array([y0]), np.array([yaw0]))[0]
         return mejor[0], mejor[1], _envolver(mejor[2]), mejor[3], en_guess
 
+    def nitidez(self, puntos, x, y, yaw, paso_m=0.05, paso_yaw_rad=0.035):
+        """Smallest score drop when the pose moves paso_m along x or y, or turns paso_yaw_rad.
+
+        Near 0: the fit slides (e.g. a corridor with no wall across it in view), so the
+        pose along that direction is not known from this sweep.
+        """
+        d, a = paso_m, paso_yaw_rad
+        xs = np.array([x, x + d, x - d, x, x, x, x])
+        ys = np.array([y, y, y, y + d, y - d, y, y])
+        ts = np.array([yaw, yaw, yaw, yaw, yaw, yaw + a, yaw - a])
+        s = self.puntajes(np.asarray(puntos, dtype=float), xs, ys, ts)
+        return float(s[0] - s[1:].max())
+
     def _refinar(self, puntos, x, y, yaw):
         """Two finer grids around (x, y, yaw); returns (x, y, yaw, score)."""
         paso, paso_yaw = self.p['paso_m'], self.p['paso_yaw_rad']
