@@ -716,3 +716,22 @@ is skipped: bt_navigator logs it before its TF is ready). Return = judge's dista
 - maze_2 at yaw 3.0: the return got stuck ~30 s at (-0.8, 0.46) (5 "Failed to make progress", 1 spin);
   mission's second try arrived at 4.4 cm. The fine-tune fired 5 times there for ~1° heading
   differences (the robot creeps while MPPI tries): harmless, but `afinar_quieto: false` turns it off.
+
+### Q: does the watch work with the real robot's lower scores? (week-10 bag replay)
+
+- Replay (scratchpad `inicio/bag_vigia2.py`): the 125 still scans of the bag, AMCL taken as the
+  reference pose (moved half a cell to AMCL's map reading) plus an offset in a random direction and
+  1° of heading noise; the node's Vigia and fine-tune logic on each scan.
+- Before: when AMCL is 6-9 cm off, the real score drops below 0.5, the watch searches, finds no pose
+  >= 0.10 m away, and nothing is fixed (fine-tune ran only when the score was fine).
+
+| AMCL off | False moves | Fine-tunes before | Fine-tunes now | Closer / farther (now) |
+| --- | --- | --- | --- | --- |
+| 0 cm | 0 | 38 (heading only, all better) | 38 | - |
+| 3 cm | 0 | 58 | 92 | 92 / 0 |
+| 6 cm | 0 | 27 | 89 | 89 / 0 |
+| 9 cm | 0 | 1 | 88 | 88 / 0 |
+
+- Change: if the watch does not move AMCL, the fine-tune runs anyway (it has its own checks:
+  fit >= 0.75 and sharp). The "Localization check" warning is logged only when the watch has a
+  candidate, not for every low score (on the real robot that would be ~1 in 3 stops).
