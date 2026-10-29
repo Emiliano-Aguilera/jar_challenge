@@ -413,6 +413,9 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
   tolerance, so the error is mostly that tolerance, not localization. maze_3's 0.082 m
   leaves 1.8 cm under the 4-wheel rule (0.10 m): that is why the precise tree was
   needed. Scores 500 and 600, done at 204 s and 159 s, no collisions or close calls.
+- Checked with the precise tree (2026-10-29, runs of `mision/objetivos-ocupados`, 300 s):
+  both returns passed on the first try; mission measured 0.034 m (maze_1) and 0.045 m
+  (maze_3); +100 in both.
 
 ## How does mission skip goals on obstacles that are not in `/map`?
 
@@ -432,6 +435,12 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
   skips it. Not for turns in place, inspection trips or the trip back.
 - Limit: `viewpoint_for` returns its first valid view from `/map`; if that one is
   blocked, mission does not try the next one.
+- Checked (2026-10-29, 300 s, 1 run per map): maze_1 500 of 500, done at 182 s (before:
+  196-250 s); the trip to (4.08,0.78) was cancelled 1 s after it started and the point
+  skipped. maze_3 600 of 600, done at 153 s, 3 of 3 reports (before: always 300); the
+  trip to (-0.30,-3.15) was cancelled with the robot already within 0.20 m, so it
+  turned in place there and saw the third box. One run per map: part of the maze_3
+  gain may be run-to-run variation.
 
 ## Next (2026-10-28)
 
