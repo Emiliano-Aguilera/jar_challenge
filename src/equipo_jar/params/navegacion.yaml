@@ -6,7 +6,9 @@
 amcl:
   ros__parameters:
     global_frame_id: map
-    odom_frame_id: odom
+    # Wheels' steps turned with the IMU heading (odometria_imu): the real /odom counts turns
+    # ~25 % too much. Tree: map -> odom_fused -> odom -> base_footprint.
+    odom_frame_id: odom_fused
     base_frame_id: base_footprint
     scan_topic: /scan                 # amcl se suscribe con SensorDataQoS (best effort)
     map_topic: /map                   # reliable + transient local, como el juez
@@ -47,6 +49,16 @@ amcl:
     # El nodo localizacion manda la pose de inicio con margen de error después de /map.
     # set_initial_pose solo usaría covarianza cero.
     set_initial_pose: false
+
+odometria_imu:
+  ros__parameters:
+    frame_fusionado: odom_fused       # = amcl odom_frame_id
+    fuente_rumbo: giroscopo           # giroscopo, orientacion, or ruedas (off: odom_fused = odom)
+    signo_giroscopo: 0                # 0: learned from the wheels (the real gyro is inverted)
+    imu_vieja_s: 0.5                  # s without IMU before a step uses the wheels' heading
+    signo_wz_minimo_rads: 0.2         # the sign is learned only while the wheels turn this fast
+    signo_giro_minimo_rad: 0.5        # wheel rotation needed to decide the sign
+    signo_correlacion_minima: 0.7     # |correlation| gyro vs wheels needed (bag: 0.95)
 
 localizacion:
   ros__parameters:
