@@ -14,7 +14,7 @@ from nav_msgs.msg import OccupancyGrid, Path
 from rclpy.action import ActionClient
 from rclpy.node import Node
 from std_msgs.msg import Empty
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
 
 from equipo_jar.comun import QOS_ESTADO, QOS_MAPA, correr, parametros_en_vivo
 from equipo_jar.reportes import armar_reporte
@@ -22,7 +22,8 @@ from equipo_jar_msgs.msg import Candidatas
 from equipo_jar.confirmacion import select_to_report
 from equipo_jar.exploracion import yaw_from_quaternion, first_pending, angle_difference, goal_position, box_zones, near_box, return_verdict
 from equipo_jar.inspeccion import pick_doubtful, viewpoint_for
-from equipo_jar.mapa import Grid
+from equipo_jar.mapa import Grid, Pose
+from equipo_jar.cobertura_revisita import ObservedView, revisit_views
 
 from tf2_ros import Buffer, TransformListener, TransformException
 from rclpy.time import Time
@@ -54,12 +55,19 @@ class Mision(Node):
                                             'visit_transit_radius_m': 0.15, 'visit_free_threshold': 25,
                                             'settle_s': 0.0, 'max_recoveries': 10, 'return_tolerance_m': 0.10,
                                             'return_yaw_tolerance_rad': 0.25, 'return_max_tries': 3,
-                                            'return_still_s': 0.5, 'return_still_m': 0.01})  # parámetros ajustables
+                                            'return_still_s': 0.5, 'return_still_m': 0.01,
+                                            'revisit_enabled': True, 'revisit_max_age_s': 10.0,
+                                            'revisit_min_shift_m': 0.05, 'revisit_wait_s': 2.0,
+                                            'revisit_max_records': 128,
+                                            'revisit_adjustment_m': 0.05})  # parámetros ajustables
 
         self.mapa = None
         self.grid = None
         self.plan = None
         self.candidatas = None
+        self.observed_views = []
+        self.observation_map_revision = 0
+        self.revisit_pending = None
 
         self.t0 = None
         self.create_timer(0.1, self.step)
@@ -107,6 +115,8 @@ class Mision(Node):
         self.create_subscription(Path, '/jar/plan_cobertura', self.al_recibir_plan, QOS_ESTADO)
         self.create_subscription(
             Candidatas, '/jar/candidatas', self.al_recibir_candidatas, QOS_ESTADO)
+        self.create_subscription(
+            PoseWithCovarianceStamped, '/jar/observaciones', self.al_recibir_observacion, 10)
         self.navegacion = ActionClient(self, NavigateToPose, 'navigate_to_pose')
         self.pub_victimas = self.create_publisher(PointStamped, '/victimas', 10)
         self.pub_done = self.create_publisher(Empty, '/done', 10)
@@ -121,10 +131,47 @@ class Mision(Node):
             self.t0 = self.get_clock().now()
         self.mapa = mapa
         try:
-            self.grid = Grid.from_occupancy_grid(mapa)
+            grid = Grid.from_occupancy_grid(mapa)
+            key = lambda g: (g.width, g.height, g.resolution, g.origin, g.data)
+            if self.grid is None or key(grid) != key(self.grid):
+                self.observation_map_revision += 1
+                self.observed_views.clear()
+            self.grid = grid
         except ValueError as e:
             self.grid = None
+            self.observation_map_revision += 1
+            self.observed_views.clear()
             self.get_logger().error(f'No pude armar la grilla del mapa: {e}. Sin inspecciones.')
+
+    def al_recibir_observacion(self, msg):
+        if self.grid is None or not self.p['revisit_enabled'] or msg.header.frame_id != 'map':
+            return
+        limit = self.p['revisit_max_records']
+        if type(limit) is not int or limit < 1:
+            return
+        try:
+            stamp = Time.from_msg(msg.header.stamp)
+            if stamp.nanoseconds <= 0:
+                return  # Time(0) means latest in TF, not the observation pose.
+            tr = self.tf_buffer.lookup_transform('map', 'base_footprint', stamp)
+            point = tr.transform.translation
+            q = tr.transform.rotation
+            components = (q.x, q.y, q.z, q.w)
+            if (not all(math.isfinite(v) for v in components)
+                    or abs(sum(v * v for v in components) - 1.0) > 1e-3):
+                return
+            pose = Pose(point.x, point.y, yaw_from_quaternion(q))
+            target = msg.pose.pose.position
+            diagonal = (msg.pose.covariance[0], msg.pose.covariance[7])
+            if not all(math.isfinite(v) and v > 0 for v in diagonal):
+                return
+            sigma = math.sqrt(max(diagonal))
+            view = ObservedView(pose, target.x, target.y, stamp.nanoseconds / 1e9,
+                                sigma, self.observation_map_revision)
+        except (TransformException, ValueError, TypeError):
+            return
+        self.observed_views.append(view)
+        del self.observed_views[:-limit]
 
     def seconds_since_t0(self):
         if self.t0 is None:
@@ -350,6 +397,7 @@ class Mision(Node):
         if self.nav_state == 'sending' or self.nav_state == 'moving':
             return
         if self.nav_state == 'arrived' or self.nav_state == 'failed':
+            arrived = self.nav_state == 'arrived'
             if self.current_point is not None:
                 x = self.current_point.pose.position.x
                 y = self.current_point.pose.position.y
@@ -357,9 +405,30 @@ class Mision(Node):
                 self.visited.append((x, y, yaw))
             self.current_point = None
             self.nav_state = 'idle'
-            self.settle_until = self.seconds_since_t0() + self.p['settle_s']
+            delay = self.p['settle_s']
+            if self.revisit_pending is not None:
+                if arrived:
+                    delay = max(delay, self.revisit_pending['wait_s'])
+                    self.revisit_pending['arrived'] = True
+                    self.revisit_pending['arrived_at'] = self.seconds_since_t0()
+                else:
+                    self.finish_revisit(False)
+            self.settle_until = self.seconds_since_t0() + delay
+        if self.revisit_pending is not None and self.revisit_pending.get('arrived_at') is not None:
+            since = self.revisit_pending['arrived_at']
+            wait_s = self.p['revisit_wait_s']
+            valid_wait = math.isfinite(wait_s) and 0 <= wait_s <= 5.0
+            same_map = self.revisit_pending['map_revision'] == self.observation_map_revision
+            if valid_wait and same_map and self.p['revisit_enabled']:
+                self.settle_until = since + max(self.p['settle_s'], wait_s)
+            else:
+                self.finish_revisit(False)
+                self.settle_until = since + self.p['settle_s']
         if self.settle_until is not None and self.seconds_since_t0() < self.settle_until: 
             return
+        self.settle_until = None
+        if self.revisit_pending is not None:
+            self.finish_revisit(True)
         if self.inspect_doubtful():
             return
         if self.plan is None:
@@ -415,7 +484,8 @@ class Mision(Node):
             return 'todas reportadas'
         elif self.seconds_since_t0() >= self.p['return_time_s']:
             return 'se termina el tiempo'
-        elif (self.plan is not None and self.nav_state != 'sending' and self.nav_state != 'moving' 
+        elif (self.plan is not None and self.revisit_pending is None
+                and self.nav_state != 'sending' and self.nav_state != 'moving'
                 and first_pending(self.plan.poses, self.visited, self.p['same_point_distance_m'], 
                 self.p['same_point_angle_rad'], self.current_box_zones()) is None and self.next_doubtful() is None):
             return 'no quedan puntos ni dudosas'
@@ -518,6 +588,26 @@ class Mision(Node):
         view = viewpoint_for(self.mapa, c.centro.x, c.centro.y, x_robot, y_robot, self.p['visit_distance_m'], 
                             self.p['visit_clearance_m'], self.p['visit_angles'], self.p['visit_min_shift_m'],
                             self.p['visit_box_margin_m'], self.grid, reachable)
+        recorded = None
+        wait_s = self.p['revisit_wait_s']
+        if view is None and self.p['revisit_enabled']:
+            try:
+                if not math.isfinite(wait_s) or not 0 <= wait_s <= 5.0:
+                    raise ValueError('revisit_wait_s must be between 0 and 5 seconds')
+                current = self.current_pose()
+                hints = revisit_views(
+                    self.grid, Pose(*current), c.centro.x, c.centro.y, self.observed_views,
+                    now_s=self.get_clock().now().nanoseconds / 1e9,
+                    map_revision=self.observation_map_revision, max_age_s=self.p['revisit_max_age_s'],
+                    association_m=self.p['min_report_distance_m'], min_shift_m=self.p['revisit_min_shift_m'],
+                    transit_radius=self.p['visit_transit_radius_m'],
+                    view_clearance=self.p['visit_clearance_m'], threshold=self.p['visit_free_threshold'],
+                    max_adjustment_m=self.p['revisit_adjustment_m'])
+                if hints:
+                    recorded = hints[0]
+                    view = (recorded.pose.x, recorded.pose.y, recorded.pose.yaw)
+            except (ValueError, TypeError) as e:
+                self.get_logger().warning(f'Observed-view fallback unavailable: {e}', throttle_duration_sec=5.0)
         if view is None:
             _, attempts = self.failed_inspections.get(c.id, (0, 0))
             self.failed_inspections[c.id] = (c.observaciones, attempts + 1)
@@ -528,11 +618,44 @@ class Mision(Node):
         else:
             x, y, yaw = view
             if self.go_to(self.make_pose(x, y, yaw)):
-                self.inspected_points.append((c.centro.x, c.centro.y))
+                if recorded is None:
+                    self.inspected_points.append((c.centro.x, c.centro.y))
+                else:
+                    self.revisit_pending = dict(id=c.id, x=c.centro.x, y=c.centro.y,
+                                                before=c.observaciones, wait_s=wait_s, arrived=False,
+                                                map_revision=self.observation_map_revision)
+                    self.get_logger().info(
+                        f'Observed-view fallback id={c.id}; goal adjustment {recorded.adjustment_m:.3f} m')
                 self.get_logger().info(f'Voy a mirar la candidata id={c.id} desde ({x:.2f},{y:.2f})')
                 self.idle_since = None
                 return True
         return False
+
+    def finish_revisit(self, succeeded):
+        pending = self.revisit_pending
+        if pending is None:
+            return
+        self.revisit_pending = None
+        candidates = [] if self.candidatas is None else self.candidatas
+        nearby = [c for c in candidates
+                  if math.hypot(c.centro.x - pending['x'], c.centro.y - pending['y'])
+                  < self.p['min_report_distance_m']]
+        current = next((c for c in nearby if c.id == pending['id']), None)
+        if current is None and nearby:
+            current = min(nearby, key=lambda c: math.hypot(c.centro.x - pending['x'],
+                                                         c.centro.y - pending['y']))
+        count = current.observaciones if current is not None else pending['before']
+        confirmed = (succeeded and pending['arrived']
+                     and pending['map_revision'] == self.observation_map_revision
+                     and count > pending['before'] and count >= self.p['min_observations'])
+        if confirmed:
+            self.inspected_points.append((current.centro.x, current.centro.y))
+            self.get_logger().info(f'Observed-view revisit received new observations: {count}')
+        else:
+            identity = current.id if current is not None else pending['id']
+            _, attempts = self.failed_inspections.get(identity, (0, 0))
+            self.failed_inspections[identity] = (count, attempts + 1)
+            self.get_logger().info('Observed-view revisit did not confirm new observations')
 
     def wait_for_stop(self):
         now = self.seconds_since_t0()
