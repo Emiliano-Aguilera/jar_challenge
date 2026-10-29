@@ -445,7 +445,9 @@ class Localizacion(Node):
         self.pose_inicio = (float(x), float(y), float(yaw),
                             p['desvio_xy_afinada'], p['desvio_yaw_afinada'])
         self.enviar_pose_inicial()
-        self.esperando_afinado = True
+        # Only the start-up fine-tune holds the flag (mission saves the start pose when it
+        # first turns true). Later ones are a few cm: no reason to stop anyone.
+        self.esperando_afinado = not self.lista_una_vez
         self.t_afinado = time.monotonic()
 
     def terminar_arranque(self, motivo):
