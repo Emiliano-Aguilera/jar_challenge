@@ -40,3 +40,33 @@ Workshop 10, step 3, describes the same correction.
   go back down.
 - Not covered: `controller_server` still reads `/odom` speeds about 27 % high
   (`odom_topic: /odom`). Probably minor, but worth a look.
+
+### For navegacion (hans-die): two recovery speeds too low for the real robot
+
+**Problem.** The organizers' floor tests (`physical_rosmaster` validation reports, battery at
+~10.3–11.2 V): from rest, the real robot needs about 0.15 m/s forward and about 0.5 rad/s
+turning to move. 0.12 m/s barely moved it; 0.12 and 0.30 rad/s didn't move it at all. The sim
+has no such limit.
+
+1. **BackUp:** `backup_speed="0.05"` in `behavior_trees/navegar.xml` and `vuelta_precisa.xml`.
+   - At that speed the real robot won't move, so it never covers the 0.30 m and waits until
+     the timeout.
+   - In a sim run of `development` 93bdd59 (2026-10-27) it ran 5+ s twice.
+   - **Fix:** `backup_speed="0.15"` (0.20 for margin). These files aren't in `params/`, so the
+     change has to be merged before the cutoff. If 0.05 was chosen to back away gently near
+     walls, tell us.
+2. **Spin:** `behavior_server.min_rotational_vel: 0.4`.
+   - A spin is commanded below 0.5 rad/s for its last 2.2°, and at 0.4 for the last 1.4°
+     (`nav2_behaviors/plugins/spin.cpp`, Humble, with our `rotational_acc_lim: 3.2`).
+   - 0.4 was never tested on the floor. If the robot stalls there, the spin fails after its
+     10 s time allowance (Nav2's default; our `<Spin>` doesn't set one).
+   - **Fix:** 0.5. It's a param.
+
+**Evidence the rest is fine.** `/cmd_vel` from a sim run of `development` 95a6adf on maze_1_6x5
+([run](https://github.com/Emiliano-Aguilera/jar_challenge/actions/runs/40951055920)). Apart from
+these two, the commands below these thresholds were all short (under 0.5 s, 4 % of command
+time). No general fix is needed.
+
+**Also seen, not a speed problem.** In that run Nav2 stalled for 21.9 s at (−0.66, −2.06),
+about 0.5 m from victim 1: "Failed to make progress" 4 times, then a spin got it out. The sim
+robot stalled too, and the 93bdd59 run was also slow there. Not diagnosed.
