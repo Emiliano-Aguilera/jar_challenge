@@ -381,57 +381,93 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
 
 - Problem: when the trip back ended (arrived or failed), mission sent `/done` at once.
   A failed return ended the run far from the start, and the final error was not logged.
+- Rule (organizers, 2026-10-28): a tape mark where the robot starts, radius 0.25 m;
+  the bonus counts if the 4 wheels are inside the circle at `/done`. Wheels (simulator
+  URDF, `mecanum_wheel.urdf.xacro`): centres at x +-0.080 m, y +-0.0845 m from
+  `base_footprint`, radius 0.0325 m, width 0.0304 m. Farthest wheel point 0.150 m, so
+  the position error (localization + arrival) must stay under 0.10 m (contact points
+  only, 0.116 m, would leave 0.134 m).
 - Decided: after the trip back, state `checking`. Mission waits until the robot is
   still (moved < `return_still_m`, 0.01 m, in `odom` for `return_still_s`, 0.5 s), then
-  compares its pose in `map` with the start pose. `return_verdict` (`exploracion.py`)
-  decides: within `return_tolerance_m` (0.10) and `return_yaw_tolerance_rad` (0.25) ->
-  `stopping`; otherwise, while fewer than `return_max_tries` (3) trips back were sent,
-  it sends the start pose again; else it stops anyway. `finish_time_s` still ends it.
-- Why 0.10 and 0.25: Nav2's goal checker accepts that much. A smaller value would
-  retry trips Nav2 already calls reached, without moving the robot
-  (`test_return_tolerance_is_not_tighter_than_nav2`).
-- Log: "Regreso N: a X m y Y rad de la largada". Compare with the judge's
+  compares its position in `map` with the start pose. `return_verdict` (`exploracion.py`)
+  decides: within `return_tolerance_m` (0.05) -> `stopping`; otherwise, while fewer than
+  `return_max_tries` (3) trips back were sent, it sends the start pose again; else it
+  stops anyway. `finish_time_s` still ends it.
+- The trip back uses navigation's precise tree (2026-10-28, #33): `go_to` sends
+  `behavior_trees/vuelta_precisa.xml` in the goal's `behavior_tree`
+  (`precise_goal_checker`: 0.05 m, any heading). Other goals send an empty string and
+  use the default tree (0.10 m, 0.25 rad).
+- Why only the position: the wheels are symmetric around `base_footprint`, so the
+  heading does not change the bonus, and the precise checker never turns the robot to
+  fix it: a heading check would spend the retries for nothing.
+  `return_yaw_tolerance_rad` was removed.
+- Why 0.05: the precise checker accepts that much. Smaller would retry trips Nav2
+  already calls reached, without moving the robot; 0.10 or more leaves no room for the
+  localization error (`test_return_tolerance_fits_the_precise_goal_checker_and_the_rule`).
+- Log: "Regreso N: a X m de la largada". Compare with the judge's
   `distancia_a_largada` (true pose, simulator) to see the localization error.
-- Checked (300 s, batches 20261028-104330-02aff82 and -2, RTF 0.96-0.97): both
-  returns passed on the first try, the check took 0.5-0.7 s. maze_1: mission measured
-  0.081 m, the judge (true pose) 0.045 m; maze_3: 0.083 m and 0.082 m. Nav2 stops as
-  soon as it is inside its 0.10 m tolerance, so the error is mostly that tolerance, not
-  localization. maze_3's 0.082 m leaves 1.8 cm under the 4-wheel rule (0.10 m): the
-  tighter return tolerance in navigation is needed. Scores 500 and 600, done at 204 s
-  and 159 s, no collisions or close calls.
+- Checked with the first version (0.10 m and 0.25 rad, default tree; 300 s, batches
+  20261028-104330-02aff82 and -2, RTF 0.96-0.97): both returns passed on the first try,
+  the check took 0.5-0.7 s. maze_1: mission measured 0.081 m, the judge (true pose)
+  0.045 m; maze_3: 0.083 m and 0.082 m. Nav2 stops as soon as it is inside its 0.10 m
+  tolerance, so the error is mostly that tolerance, not localization. maze_3's 0.082 m
+  leaves 1.8 cm under the 4-wheel rule (0.10 m): that is why the precise tree was
+  needed. Scores 500 and 600, done at 204 s and 159 s, no collisions or close calls.
+- Checked with the precise tree (2026-10-29, runs of `mision/objetivos-ocupados`, 300 s):
+  both returns passed on the first try; mission measured 0.034 m (maze_1) and 0.045 m
+  (maze_3); +100 in both.
+
+## How does mission skip goals on obstacles that are not in `/map`?
+
+- Problem: blue boxes and decoys are not drawn in `/map`. A plan point on top of one was
+  sent anyway and Nav2 spent time until it failed: maze_1 (4.08,0.78) failed in 3 of 3
+  runs, 27-44 s each.
+- Decided (2026-10-29): mission reads Nav2's global costmap, `/global_costmap/costmap`
+  (`OccupancyGrid`, reliable + transient local, full grid at 1 Hz since #33; values 0-100:
+  100 obstacle, 99 the robot's center there would touch, 1-98 margin only, 0 free, -1
+  unknown). `goal_blocked` (`exploracion.py`): a point is blocked if its cell is >=
+  `costmap_blocked_value` (99). Unknown or outside the grid is not blocked: Nav2 decides.
+- Before sending: a blocked plan point is marked visited and skipped; a blocked inspection
+  view counts as a failed attempt (same as "no place to look"). Turns in place are not
+  checked: the robot stays where it is.
+- While moving (`check_goal_blocked`, like `check_goal_near_box`): if the plan point
+  becomes blocked, mission cancels the trip; the next `explore()` sees it blocked and
+  skips it. Not for turns in place, inspection trips or the trip back.
+- Limit: `viewpoint_for` returns its first valid view from `/map`; if that one is
+  blocked, mission does not try the next one.
+- Checked (2026-10-29, 300 s, 1 run per map): maze_1 500 of 500, done at 182 s (before:
+  196-250 s); the trip to (4.08,0.78) was cancelled 1 s after it started and the point
+  skipped. maze_3 600 of 600, done at 153 s, 3 of 3 reports (before: always 300); the
+  trip to (-0.30,-3.15) was cancelled with the robot already within 0.20 m, so it
+  turned in place there and saw the third box. One run per map: part of the maze_3
+  gain may be run-to-run variation.
 
 ## Next (2026-10-28)
 
 Done (mission): cancel exploration trips at `max_recoveries` Nav2 recoveries (see
-"What if navigation gets stuck?").
+"What if navigation gets stuck?"); precise return (see "How does mission check the
+return?"); goals on unmapped obstacles (see "How does mission skip goals on obstacles
+that are not in `/map`?").
 
 Pending, in this order:
-1. Precise return. Rule (organizers, 2026-10-28): a tape mark where the robot starts,
-   radius 0.25 m; the bonus counts if the 4 wheels are inside the circle at `/done`.
-   Wheels (simulator URDF, `mecanum_wheel.urdf.xacro`): centres at x +-0.080 m,
-   y +-0.0845 m from `base_footprint`, radius 0.0325 m, width 0.0304 m. Symmetric around
-   `base_footprint`, so the heading does not matter. Farthest wheel point 0.150 m:
-   position error (localization + arrival) must stay under 0.10 m; contact points only
-   (0.116 m) would leave 0.134 m. Nav2 accepts 0.10 m today: no room for localization
-   error. Done: the return check (see "How does mission check the return?"). Pending:
-   with hans-die, a tighter tolerance only for the return (Humble: a second goal checker
-   picked by `goal_checker_id` in a return BT, sent in the goal's `behavior_tree`), then
-   lower `return_tolerance_m` to ~0.05.
-2. Start pose after a stable localization. Today `start_pose` is fixed with the first
-   goal, after `start_wait_s` (4 s). Agree with hans-die on a "ready" signal (e.g. after
-   AMCL's no-motion updates), with a max wait, and fix the start pose then.
-3. Turn error on the real robot. Localization asks AMCL for no-motion updates only at
-   the start (`actualizaciones_quieto`), so `settle_s` alone does not fix the heading
-   after a turn. Needs: updates after each turn and stop (localization), mission holds
-   reports meanwhile, perception/fusion drop observations taken in that window.
-4. Goals on obstacles that are not in `/map` (blue boxes, decoys): check the goal against
-   Nav2's global costmap before sending and while moving (interface change with
-   hans-die). maze_1 (4.08,0.78) failed in 3 of 3 runs, 27-44 s each.
-5. Planner (hans-die): NavFn with `use_astar: true` fails to extract paths that exist
-   (offline, Nav2's NavFn on the practice maps: 6-13% of start positions; 0% with
-   Dijkstra). NavFn also caps paths at ~2x the map's longest side (~12 m on maze_1), so
-   the trip back can fail from far away. Mission fallback: go back through visited points.
-6. Tests: shifted and turned starts, unmapped obstacles, Nav2 failures (retries, return).
+1. Wait for localization (hans-die, PR #34). On hold (2026-10-29): localization may fix
+   the odometry before AMCL instead (`localizacion/rumbo-imu`, or a x0.79 scale).
+   Localization publishes
+   `/jar/localizacion_lista` (`std_msgs/Bool`, reliable + transient local): false until
+   AMCL settles at the start, and after each big turn until the heading is fixed
+   (~0.9 s, max 3 s). Why: on the real robot `/odom` overcounts turns ~25 %, so after a
+   turn the heading is 10-20° off; `settle_s` alone does not fix it. Mission: fix the
+   start pose on the first `true` (today it is fixed with the first goal, after
+   `start_wait_s`, 4 s); after each trip, wait while it is `false`, with its own max
+   wait (~2 s), instead of `settle_s` (then 0). Sim cost if mission waited at every fix:
+   <= ~30 s (laberinto_1), ~20 s (maze_1), ~9 s (maze_3). Real-robot bag: heading ~1°
+   off when it turns `true` (11° before). If perception drops frames while it is
+   `false`, mission's wait must be merged first, or the robot leaves each viewpoint
+   before a valid frame.
+2. Long trips back: NavFn caps paths at ~2x the map's longest side (~12 m on maze_1), so
+   the trip back can fail from far away. Mission fallback: go back through visited
+   points. (The A* failures to extract existing paths were fixed in #33: Dijkstra.)
+3. Tests: shifted and turned starts, unmapped obstacles, Nav2 failures (retries, return).
 
 For other modules:
 - Perception: the point cloud subscription is always created (`deteccion.py`;

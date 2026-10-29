@@ -7,7 +7,7 @@ import pytest
 
 from equipo_jar.exploracion import (
     angle_difference, first_pending, already_visited, yaw_from_quaternion, goal_position,
-    box_zones, near_box, return_verdict)
+    box_zones, near_box, return_verdict, goal_blocked)
 
 DIST = 0.30
 ANG = 0.5
@@ -291,46 +291,48 @@ def test_box_clearance_covers_the_turning_robot_and_the_box():
 # --- Regreso a la largada ---
 # Al terminar la vuelta, misión mide cuánto quedó de la pose de largada y decide:
 # 'ok' (termina), 'retry' (vuelve a mandar la largada) o 'give_up' (termina igual).
-# Argumentos: error (m), error de orientación (rad), vueltas ya mandadas, tolerancia (m),
-# tolerancia de orientación (rad), máximo de vueltas.
+# Solo mira la posición: el bonus pide las 4 ruedas dentro del círculo de 0.25 m, y las
+# ruedas son simétricas alrededor del centro, así que la orientación no cambia nada.
+# Argumentos: error (m), vueltas ya mandadas, tolerancia (m), máximo de vueltas.
 
 def test_return_close_enough_is_ok():
-    assert return_verdict(0.05, 0.10, 1, 0.10, 0.25, 3) == 'ok'
+    assert return_verdict(0.03, 1, 0.05, 3) == 'ok'
 
 
 def test_return_exactly_at_the_tolerance_is_ok():
-    assert return_verdict(0.10, 0.25, 1, 0.10, 0.25, 3) == 'ok'
+    assert return_verdict(0.05, 1, 0.05, 3) == 'ok'
 
 
 def test_return_far_with_tries_left_retries():
-    assert return_verdict(0.15, 0.10, 1, 0.10, 0.25, 3) == 'retry'
-
-
-def test_return_with_wrong_heading_retries():
-    assert return_verdict(0.05, 0.40, 2, 0.10, 0.25, 3) == 'retry'
+    assert return_verdict(0.08, 1, 0.05, 3) == 'retry'
 
 
 def test_return_far_on_the_last_try_gives_up():
-    assert return_verdict(0.15, 0.10, 3, 0.10, 0.25, 3) == 'give_up'
+    assert return_verdict(0.08, 3, 0.05, 3) == 'give_up'
 
 
 def test_return_close_enough_on_the_last_try_is_ok():
-    assert return_verdict(0.05, 0.10, 3, 0.10, 0.25, 3) == 'ok'
+    assert return_verdict(0.03, 3, 0.05, 3) == 'ok'
 
 
-def test_return_tolerance_is_not_tighter_than_nav2():
-    # Hoy la vuelta usa el mismo goal checker que la exploración. Si misión pidiera menos
-    # error que Nav2, reintentaría una vuelta que Nav2 ya da por cumplida sin mover el
-    # robot: gastaría los intentos sin acercarse. Cuando navegación agregue un goal checker
-    # fino para la vuelta, este test tiene que compararse contra ese.
+def test_return_tree_uses_the_precise_goal_checker():
+    # Misión manda behavior_trees/vuelta_precisa.xml en el goal de la vuelta (go_to). Si
+    # alguien renombra el archivo o el checker, la vuelta pierde la precisión sin avisar.
+    tree = Path(__file__).resolve().parents[1] / 'behavior_trees' / 'vuelta_precisa.xml'
+    assert 'goal_checker_id="precise_goal_checker"' in tree.read_text()
+
+
+def test_return_tolerance_fits_the_precise_goal_checker_and_the_rule():
+    # Más chica que la del checker: misión reintentaría vueltas que Nav2 ya da por cumplidas,
+    # sin mover el robot. 0.10 m o más: con el error de AMCL encima, alguna rueda puede quedar
+    # fuera del círculo (la punta de rueda más lejana está a 0.150 m del centro).
     yaml = pytest.importorskip('yaml')
     params_dir = Path(__file__).resolve().parents[1] / 'params'
     params = yaml.safe_load((params_dir / 'params.yaml').read_text())
     mision = params['mision']['ros__parameters']
     nav = yaml.safe_load((params_dir / 'navegacion.yaml').read_text())
-    checker = nav['controller_server']['ros__parameters']['general_goal_checker']
-    assert mision['return_tolerance_m'] >= checker['xy_goal_tolerance']
-    assert mision['return_yaw_tolerance_rad'] >= checker['yaw_goal_tolerance']
+    checker = nav['controller_server']['ros__parameters']['precise_goal_checker']
+    assert checker['xy_goal_tolerance'] <= mision['return_tolerance_m'] < 0.10
 
 
 def test_return_params_have_the_types_mision_declares():
@@ -339,8 +341,84 @@ def test_return_params_have_the_types_mision_declares():
     yaml = pytest.importorskip('yaml')
     params_dir = Path(__file__).resolve().parents[1] / 'params'
     mision = yaml.safe_load((params_dir / 'params.yaml').read_text())['mision']['ros__parameters']
-    for name in ('return_tolerance_m', 'return_yaw_tolerance_rad', 'return_still_s',
-                 'return_still_m'):
+    for name in ('return_tolerance_m', 'return_still_s', 'return_still_m'):
         assert isinstance(mision[name], float), name
     assert isinstance(mision['return_max_tries'], int)
     assert mision['return_max_tries'] >= 1
+
+
+def test_mision_params_in_yaml_match_the_ones_declared_in_code():
+    # Un parámetro del YAML que mision.py no declara se ignora sin avisar (un nombre mal
+    # escrito, o uno que ya no existe). Compara las claves de params.yaml con el dict que
+    # mision.py le pasa a parametros_en_vivo.
+    yaml = pytest.importorskip('yaml')
+    package = Path(__file__).resolve().parents[1]
+    mision = yaml.safe_load((package / 'params' / 'params.yaml').read_text())['mision']['ros__parameters']
+    declared = None
+    for node in ast.walk(ast.parse((package / 'equipo_jar' / 'mision.py').read_text())):
+        if isinstance(node, ast.Call) and getattr(node.func, 'id', None) == 'parametros_en_vivo':
+            declared = {key.value for key in node.args[1].keys}
+    assert declared is not None, 'parametros_en_vivo call not found in mision.py'
+    assert set(mision) == declared
+
+
+# --- Objetivos sobre obstáculos que no están en /map ---
+# goal_blocked lee el costmap global de Nav2 (/global_costmap/costmap) en el punto del
+# objetivo. Valores: 100 obstáculo, 99 el centro del robot ahí tocaría algo, 1-98 solo
+# margen, 0 libre, -1 desconocido. Desconocido o fuera de la grilla: no bloquea (decide Nav2).
+# Grilla de prueba: 3 x 2 celdas de 0.5 m, origen en (-1.0, 0.0).
+
+def costmap(values):
+    return SimpleNamespace(
+        info=SimpleNamespace(width=3, height=2, resolution=0.5,
+                             origin=SimpleNamespace(position=SimpleNamespace(x=-1.0, y=0.0))),
+        data=values)
+
+
+def test_goal_on_an_obstacle_is_blocked():
+    grid = costmap([0, 100, 0,
+                    0, 0, 0])
+    assert goal_blocked(grid, -0.25, 0.25, 99)
+
+
+def test_goal_where_the_robot_would_touch_is_blocked():
+    grid = costmap([0, 99, 0,
+                    0, 0, 0])
+    assert goal_blocked(grid, -0.25, 0.25, 99)
+
+
+def test_goal_in_the_safety_margin_is_not_blocked():
+    grid = costmap([0, 98, 0,
+                    0, 0, 0])
+    assert not goal_blocked(grid, -0.25, 0.25, 99)
+
+
+def test_free_goal_is_not_blocked():
+    grid = costmap([100, 0, 100,
+                    100, 100, 100])
+    assert not goal_blocked(grid, -0.25, 0.25, 99)
+
+
+def test_unknown_goal_is_not_blocked():
+    grid = costmap([0, -1, 0,
+                    0, 0, 0])
+    assert not goal_blocked(grid, -0.25, 0.25, 99)
+
+
+def test_goal_outside_the_costmap_is_not_blocked():
+    grid = costmap([100] * 6)
+    assert not goal_blocked(grid, 5.0, 5.0, 99)
+
+
+def test_no_costmap_yet_is_not_blocked():
+    assert not goal_blocked(None, 0.0, 0.0, 99)
+
+
+def test_costmap_blocked_value_is_an_int_cost():
+    # parametros_en_vivo declara el tipo con el valor por defecto (int): 99.0 en el YAML
+    # haría fallar el nodo al arrancar. Fuera de 1-100 nunca bloquearía o bloquearía todo.
+    yaml = pytest.importorskip('yaml')
+    params_dir = Path(__file__).resolve().parents[1] / 'params'
+    mision = yaml.safe_load((params_dir / 'params.yaml').read_text())['mision']['ros__parameters']
+    value = mision['costmap_blocked_value']
+    assert isinstance(value, int) and 1 <= value <= 100

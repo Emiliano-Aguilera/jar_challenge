@@ -1,5 +1,6 @@
 import math
 from equipo_jar.confirmacion import worst_deviation
+from equipo_jar.mapa import cell_value
 
 def yaw_from_quaternion(q):
     yaw = math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z))
@@ -7,13 +8,6 @@ def yaw_from_quaternion(q):
 
 def angle_difference(a, b):
     return abs(math.atan2(math.sin(a - b), math.cos(a - b)))
-
-def return_verdict(error, error_yaw, tries, tolerance, yaw_tolerance, max_tries):
-    if error <= tolerance and error_yaw <= yaw_tolerance:
-        return 'ok'
-    if tries < max_tries:
-        return 'retry'
-    return 'give_up'
 
 def already_visited(x, y, yaw, visited, dist_min, ang_min):
     for tup in visited:
@@ -68,3 +62,15 @@ def near_box(x, y, zones):
             return True
     return False
 
+def return_verdict(error, tries, tolerance, max_tries):
+    if error <= tolerance:
+        return 'ok'
+    if tries < max_tries:
+        return 'retry'
+    return 'give_up'
+
+def goal_blocked(costmap, x, y, blocked_value):
+    if costmap is None:
+        return False
+    value = cell_value(costmap, x, y)
+    return value is not None and value >= blocked_value
