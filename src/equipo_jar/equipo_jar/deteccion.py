@@ -118,7 +118,9 @@ class Detection(Node):
         #PARAM: cache_time = 10 s of TF history. Support: > the latency between capture and
         #       processing (tenths of a second). Plenty.
         self.tf_buffer = tf2_ros.Buffer(cache_time=Duration(seconds=10.0))
-        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
+        # The listener gets its own node and thread. On the node's thread, /tf is not received
+        # while a lookup waits, so the 0.1 s lookup timeout could never get a late transform.
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, None, spin_thread=True)
 
         # Image and scan are processed in pairs with close timestamps. The LiDAR runs at
         # ~7 Hz with ~136 ms latency, so the tolerance is wider than for a 30 Hz camera.
