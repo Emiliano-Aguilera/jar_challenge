@@ -341,10 +341,20 @@ def test_return_params_have_the_types_mision_declares():
     yaml = pytest.importorskip('yaml')
     params_dir = Path(__file__).resolve().parents[1] / 'params'
     mision = yaml.safe_load((params_dir / 'params.yaml').read_text())['mision']['ros__parameters']
-    for name in ('return_tolerance_m', 'return_still_s', 'return_still_m'):
+    for name in ('return_tolerance_m', 'return_still_s', 'return_still_m', 'return_check_max_s'):
         assert isinstance(mision[name], float), name
     assert isinstance(mision['return_max_tries'], int)
     assert mision['return_max_tries'] >= 1
+
+
+def test_return_check_has_time_to_see_the_robot_still():
+    # El chequeo espera return_still_s quieto (el ajuste fino de AMCL llega 0.3-2.5 s después
+    # de frenar). Si el tope fuera menor, terminaría siempre por el tope, sin medir.
+    # Y el tope tiene que quedar lejos de los 60 s quieto que cortan la corrida.
+    yaml = pytest.importorskip('yaml')
+    params_dir = Path(__file__).resolve().parents[1] / 'params'
+    mision = yaml.safe_load((params_dir / 'params.yaml').read_text())['mision']['ros__parameters']
+    assert mision['return_still_s'] + 2.0 <= mision['return_check_max_s'] <= 30.0
 
 
 def test_mision_params_in_yaml_match_the_ones_declared_in_code():

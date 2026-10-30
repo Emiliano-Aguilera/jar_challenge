@@ -3,7 +3,8 @@ from equipo_jar.mapa import is_free, line_is_clear
 from equipo_jar.confirmacion import near_any
 
 def viewpoint_for(grid, cx, cy, robot_x, robot_y, distance, clearance, n_angles, min_shift, box_margin,
-                cell_grid, reachable):
+                cell_grid, reachable, blocked=None):
+    # blocked(x, y): optional; True skips that spot (mission: occupied in Nav2's costmap).
     best = None
     best_dist = None
     for k in range(n_angles):
@@ -19,6 +20,8 @@ def viewpoint_for(grid, cx, cy, robot_x, robot_y, distance, clearance, n_angles,
         if not line_is_clear(grid, vx, vy, ex, ey):
             continue
         if cell_grid.cell(vx, vy) not in reachable:
+            continue
+        if blocked is not None and blocked(vx, vy):
             continue
         d = math.hypot(vx - robot_x, vy - robot_y)
         if d < min_shift:
@@ -53,3 +56,17 @@ def pick_doubtful(cands, reported_ids, reported_points, inspected_points, min_ob
             best = c
             best_dist = dist
     return best
+
+def forget_failed_inspection(inspected_points, failed, cand_id, x, y, observations):
+    """Nav2 did not reach the view: the candidate is not inspected, and the attempt counts.
+
+    Mission marks a candidate inspected when it sends the trip (no loops while it is
+    on its way). If the trip fails, this takes it back out of `inspected_points` and
+    adds a failed attempt with its observations at the time: `pick_doubtful` tries it
+    again only with new observations and attempts left. Returns the attempt count.
+    """
+    if (x, y) in inspected_points:
+        inspected_points.remove((x, y))
+    _, attempts = failed.get(cand_id, (0, 0))
+    failed[cand_id] = (observations, attempts + 1)
+    return attempts + 1
