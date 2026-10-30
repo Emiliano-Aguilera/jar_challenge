@@ -1,5 +1,6 @@
 import math
 from equipo_jar.confirmacion import worst_deviation
+from equipo_jar.mapa import cell_value
 
 def yaw_from_quaternion(q):
     yaw = math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z))
@@ -67,3 +68,12 @@ def return_verdict(error, tries, tolerance, max_tries):
     if tries < max_tries:
         return 'retry'
     return 'give_up'
+
+def goal_blocked(costmap, x, y, blocked_value):
+    if costmap is None:
+        return False
+    value = cell_value(costmap, x, y)
+    return value is not None and value >= blocked_value
+
+def start_ready(localization_ready, elapsed_s, max_wait_s):
+    return localization_ready or elapsed_s >= max_wait_s

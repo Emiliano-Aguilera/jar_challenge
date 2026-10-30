@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from equipo_jar.inspeccion import pick_doubtful, viewpoint_for
+from equipo_jar.inspeccion import forget_failed_inspection, pick_doubtful, viewpoint_for
 from equipo_jar.mapa import Grid
 
 RES = 0.05
@@ -134,6 +134,32 @@ def test_returns_none_when_no_spot_can_be_reached():
     assert viewpoint_for(grid, 2.6, 2.0, 0.5, 2.0, **VIEW, **reach(grid, 0.5, 2.0)) is None
 
 
+# `blocked`: misión le pasa el costmap de Nav2 (obstáculos que no están en /map). Un lugar
+# ocupado se saltea mientras elige, así puede ganar otro libre.
+
+def test_blocked_spot_is_skipped_for_another_free_one():
+    grid = make_grid()
+    nearest = viewpoint_for(grid, 2.0, 2.0, 0.5, 2.0, **VIEW, **reach(grid, 0.5, 2.0))
+    def blocked(x, y):
+        return math.hypot(x - nearest[0], y - nearest[1]) < 0.01
+    view = viewpoint_for(grid, 2.0, 2.0, 0.5, 2.0, **VIEW, **reach(grid, 0.5, 2.0), blocked=blocked)
+    assert view is not None
+    assert math.hypot(view[0] - nearest[0], view[1] - nearest[1]) > 0.1
+    assert faces(view, 2.0, 2.0)
+
+
+def test_every_spot_blocked_returns_none():
+    grid = make_grid()
+    assert viewpoint_for(grid, 2.0, 2.0, 0.5, 2.0, **VIEW, **reach(grid, 0.5, 2.0),
+                         blocked=lambda x, y: True) is None
+
+
+def test_no_blocked_function_keeps_the_old_choice():
+    grid = make_grid()
+    assert (viewpoint_for(grid, 2.0, 2.0, 0.5, 2.0, **VIEW, **reach(grid, 0.5, 2.0), blocked=None)
+            == viewpoint_for(grid, 2.0, 2.0, 0.5, 2.0, **VIEW, **reach(grid, 0.5, 2.0)))
+
+
 def test_robot_inside_a_wall_raises():
     # Misión atrapa este error y deja la inspección para más tarde, sin contarla como intento.
     grid = make_grid(WALL)
@@ -234,3 +260,48 @@ def test_does_not_modify_failed():
     failed = {1: (3, 1)}
     pick(TWO, failed=failed)
     assert failed == {1: (3, 1)}
+
+
+
+# --- Inspección que Nav2 no alcanzó ---
+# Misión marca la candidata como inspeccionada al mandar el viaje. Si el viaje falla,
+# forget_failed_inspection la saca de inspected_points y suma un intento fallido con sus
+# observaciones de ese momento: pick_doubtful la vuelve a elegir solo con observaciones
+# nuevas y si le quedan intentos.
+
+def test_failed_trip_is_no_longer_inspected():
+    inspected, failed = [(1.0, 0.0), (5.0, 5.0)], {}
+    forget_failed_inspection(inspected, failed, 1, 1.0, 0.0, 3)
+    assert inspected == [(5.0, 5.0)]
+
+
+def test_failed_trip_counts_an_attempt():
+    failed = {1: (2, 1)}
+    attempts = forget_failed_inspection([(1.0, 0.0)], failed, 1, 1.0, 0.0, 3)
+    assert attempts == 2
+    assert failed == {1: (3, 2)}
+
+
+def test_failed_trip_is_retried_only_with_new_observations():
+    inspected, failed = [(1.0, 0.0)], {}
+    forget_failed_inspection(inspected, failed, 1, 1.0, 0.0, 3)
+    # Mismas 3 observaciones: no la vuelve a elegir (el viaje daría lo mismo).
+    assert pick(TWO, inspected_points=inspected, failed=failed).id == 2
+    # Con una observación más, sí.
+    cands = [cand(1, 1.0, 0.0, observaciones=4), cand(2, 3.0, 0.0)]
+    assert pick(cands, inspected_points=inspected, failed=failed).id == 1
+
+
+def test_failed_trips_stop_at_max_attempts():
+    inspected, failed = [], {}
+    for _ in range(MAX_ATTEMPTS):
+        inspected.append((1.0, 0.0))
+        forget_failed_inspection(inspected, failed, 1, 1.0, 0.0, 3)
+    cands = [cand(1, 1.0, 0.0, observaciones=10), cand(2, 3.0, 0.0)]
+    assert pick(cands, inspected_points=inspected, failed=failed).id == 2
+
+
+def test_failed_trip_not_in_the_list_still_counts():
+    failed = {}
+    assert forget_failed_inspection([], failed, 7, 1.0, 0.0, 2) == 1
+    assert failed == {7: (2, 1)}

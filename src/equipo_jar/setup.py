@@ -29,6 +29,7 @@ setup(
             'fusion = equipo_jar.fusion:main',
             'mision = equipo_jar.mision:main',
             'localizacion = equipo_jar.localizacion:main',
+            'odometria_imu = equipo_jar.odometria_imu:main',
         ],
     },
 )

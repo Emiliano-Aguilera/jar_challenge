@@ -7,7 +7,7 @@ import pytest
 
 from equipo_jar.exploracion import (
     angle_difference, first_pending, already_visited, yaw_from_quaternion, goal_position,
-    box_zones, near_box, return_verdict)
+    box_zones, near_box, return_verdict, goal_blocked, start_ready)
 
 DIST = 0.30
 ANG = 0.5
@@ -341,10 +341,20 @@ def test_return_params_have_the_types_mision_declares():
     yaml = pytest.importorskip('yaml')
     params_dir = Path(__file__).resolve().parents[1] / 'params'
     mision = yaml.safe_load((params_dir / 'params.yaml').read_text())['mision']['ros__parameters']
-    for name in ('return_tolerance_m', 'return_still_s', 'return_still_m'):
+    for name in ('return_tolerance_m', 'return_still_s', 'return_still_m', 'return_check_max_s'):
         assert isinstance(mision[name], float), name
     assert isinstance(mision['return_max_tries'], int)
     assert mision['return_max_tries'] >= 1
+
+
+def test_return_check_has_time_to_see_the_robot_still():
+    # El chequeo espera return_still_s quieto (el ajuste fino de AMCL llega 0.3-2.5 s después
+    # de frenar). Si el tope fuera menor, terminaría siempre por el tope, sin medir.
+    # Y el tope tiene que quedar lejos de los 60 s quieto que cortan la corrida.
+    yaml = pytest.importorskip('yaml')
+    params_dir = Path(__file__).resolve().parents[1] / 'params'
+    mision = yaml.safe_load((params_dir / 'params.yaml').read_text())['mision']['ros__parameters']
+    assert mision['return_still_s'] + 2.0 <= mision['return_check_max_s'] <= 30.0
 
 
 def test_mision_params_in_yaml_match_the_ones_declared_in_code():
@@ -360,3 +370,94 @@ def test_mision_params_in_yaml_match_the_ones_declared_in_code():
             declared = {key.value for key in node.args[1].keys}
     assert declared is not None, 'parametros_en_vivo call not found in mision.py'
     assert set(mision) == declared
+
+
+# --- Objetivos sobre obstáculos que no están en /map ---
+# goal_blocked lee el costmap global de Nav2 (/global_costmap/costmap) en el punto del
+# objetivo. Valores: 100 obstáculo, 99 el centro del robot ahí tocaría algo, 1-98 solo
+# margen, 0 libre, -1 desconocido. Desconocido o fuera de la grilla: no bloquea (decide Nav2).
+# Grilla de prueba: 3 x 2 celdas de 0.5 m, origen en (-1.0, 0.0).
+
+def costmap(values):
+    return SimpleNamespace(
+        info=SimpleNamespace(width=3, height=2, resolution=0.5,
+                             origin=SimpleNamespace(position=SimpleNamespace(x=-1.0, y=0.0))),
+        data=values)
+
+
+def test_goal_on_an_obstacle_is_blocked():
+    grid = costmap([0, 100, 0,
+                    0, 0, 0])
+    assert goal_blocked(grid, -0.25, 0.25, 99)
+
+
+def test_goal_where_the_robot_would_touch_is_blocked():
+    grid = costmap([0, 99, 0,
+                    0, 0, 0])
+    assert goal_blocked(grid, -0.25, 0.25, 99)
+
+
+def test_goal_in_the_safety_margin_is_not_blocked():
+    grid = costmap([0, 98, 0,
+                    0, 0, 0])
+    assert not goal_blocked(grid, -0.25, 0.25, 99)
+
+
+def test_free_goal_is_not_blocked():
+    grid = costmap([100, 0, 100,
+                    100, 100, 100])
+    assert not goal_blocked(grid, -0.25, 0.25, 99)
+
+
+def test_unknown_goal_is_not_blocked():
+    grid = costmap([0, -1, 0,
+                    0, 0, 0])
+    assert not goal_blocked(grid, -0.25, 0.25, 99)
+
+
+def test_goal_outside_the_costmap_is_not_blocked():
+    grid = costmap([100] * 6)
+    assert not goal_blocked(grid, 5.0, 5.0, 99)
+
+
+def test_no_costmap_yet_is_not_blocked():
+    assert not goal_blocked(None, 0.0, 0.0, 99)
+
+
+def test_costmap_blocked_value_is_an_int_cost():
+    # parametros_en_vivo declara el tipo con el valor por defecto (int): 99.0 en el YAML
+    # haría fallar el nodo al arrancar. Fuera de 1-100 nunca bloquearía o bloquearía todo.
+    yaml = pytest.importorskip('yaml')
+    params_dir = Path(__file__).resolve().parents[1] / 'params'
+    mision = yaml.safe_load((params_dir / 'params.yaml').read_text())['mision']['ros__parameters']
+    value = mision['costmap_blocked_value']
+    assert isinstance(value, int) and 1 <= value <= 100
+
+
+# --- Arranque ---
+# Misión arranca cuando localización publica true en /jar/localizacion_lista (AMCL ya se
+# acomodó), o al llegar al tope si el flag nunca llega. Argumentos: si llegó el true,
+# segundos desde /map, tope (s).
+
+def test_start_waits_for_localization():
+    assert not start_ready(False, 2.0, 10.0)
+
+
+def test_start_as_soon_as_localization_is_ready():
+    assert start_ready(True, 0.5, 10.0)
+
+
+def test_start_anyway_at_the_max_wait():
+    assert start_ready(False, 10.0, 10.0)
+    assert start_ready(False, 12.0, 10.0)
+
+
+def test_localization_wait_max_is_a_float_well_under_the_still_limit():
+    # parametros_en_vivo declara el tipo con el valor por defecto (float). El robot no se
+    # mueve hasta el arranque, y 60 s quieto termina la corrida (§5): el tope debe quedar
+    # muy por debajo, y por encima de lo que tarda AMCL en acomodarse (~2-3 s en el sim).
+    yaml = pytest.importorskip('yaml')
+    params_dir = Path(__file__).resolve().parents[1] / 'params'
+    mision = yaml.safe_load((params_dir / 'params.yaml').read_text())['mision']['ros__parameters']
+    value = mision['localization_wait_max_s']
+    assert isinstance(value, float) and 3.0 <= value <= 30.0

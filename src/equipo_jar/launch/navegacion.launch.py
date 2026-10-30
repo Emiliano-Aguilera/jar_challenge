@@ -15,8 +15,13 @@ así que el círculo que lo cubre (0.21 m) cierra huecos de 0.5 m entre cajas y
 paredes, y uno más chico deja afuera las esquinas de atrás. Con el rectángulo el
 planner ve el medio ancho real (0.10 m) y MPPI y los behaviors chequean la forma
 real cerca de los obstáculos.
+
+Speed limits: only `limites` in navegacion.yaml. This file copies them into MPPI and the
+velocity smoother, so a lower limit on the robot (factory) is set in one place.
 """
 import os
+
+import yaml
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
@@ -41,9 +46,24 @@ def footprint():
     return str([list(e) for e in esquinas])
 
 
+def limites_de_velocidad(params):
+    """MPPI and smoother params from the `limites` block of navegacion.yaml."""
+    with open(params) as f:
+        lim = yaml.safe_load(f)['limites']['ros__parameters']
+    # float(): Nav2 rejects an int where it declared a double (e.g. `lineal_max_ms: 1`).
+    v, atras, w = (float(lim[n]) for n in ('lineal_max_ms', 'reversa_max_ms', 'giro_max_rads'))
+    # The smoother allows a bit more turn rate than MPPI plans with, as before (1.9 / 2.0).
+    w_smoother = w * float(lim['margen_giro_smoother'])
+    controller = {'FollowPath.vx_max': v, 'FollowPath.vy_max': v, 'FollowPath.vx_min': -atras,
+                  'FollowPath.wz_max': w}
+    smoother = {'max_velocity': [v, v, w_smoother], 'min_velocity': [-v, -v, -w_smoother]}
+    return controller, smoother
+
+
 def generate_launch_description():
     compartido = get_package_share_directory('equipo_jar')
     params = os.path.join(compartido, 'params', 'navegacion.yaml')
+    limites_controller, limites_smoother = limites_de_velocidad(params)
     use_sim_time = LaunchConfiguration('use_sim_time')
     # Un dict de parámetros le llega a todos los nodos del proceso (launch_ros lo
     # escribe para /**), también a los costmaps que corren dentro del controller y
@@ -59,12 +79,13 @@ def generate_launch_description():
 
     # Siempre arrancan: en pruebas.launch.py usan la TF fija en vez de AMCL.
     navegacion = [
-        nodo('nav2_controller', 'controller_server', 'controller_server', al_smoother),
+        nodo('nav2_controller', 'controller_server', 'controller_server', al_smoother,
+             extra=limites_controller),
         nodo('nav2_planner', 'planner_server', 'planner_server'),
         nodo('nav2_behaviors', 'behavior_server', 'behavior_server', al_smoother),
         nodo('nav2_velocity_smoother', 'velocity_smoother', 'velocity_smoother', [
             ('cmd_vel', 'cmd_vel_nav'),
-            ('cmd_vel_smoothed', '/cmd_vel')]),
+            ('cmd_vel_smoothed', '/cmd_vel')], extra=limites_smoother),
         # navegar.xml: Humble's default tree, with the goal checker named (there are two).
         nodo('nav2_bt_navigator', 'bt_navigator', 'bt_navigator', extra={
             'default_nav_to_pose_bt_xml': os.path.join(
@@ -76,7 +97,10 @@ def generate_launch_description():
         DeclareLaunchArgument('use_sim_time', default_value='false'),
         DeclareLaunchArgument('localizacion', default_value='true',
                               description='false: sin AMCL (otro publica map -> odom)'),
-        GroupAction(condition=IfCondition(con_amcl), actions=[nodo('nav2_amcl', 'amcl', 'amcl')]),
+        # AMCL's odom frame is odom_fused (odometria_imu.py): both go only with AMCL.
+        GroupAction(condition=IfCondition(con_amcl), actions=[
+            nodo('nav2_amcl', 'amcl', 'amcl'),
+            nodo('equipo_jar', 'odometria_imu', 'odometria_imu')]),
         *navegacion,
         # Activa los nodos en el orden de la lista (AMCL primero si está). bt_navigator
         # último: cuando aparece navigate_to_pose, todo lo demás ya está activo.
