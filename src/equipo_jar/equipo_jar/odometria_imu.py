@@ -41,11 +41,16 @@ class OdometriaImu(Node):
             'signo_wz_minimo_rads': 0.2,     # only samples where the wheels turn this fast
             'signo_giro_minimo_rad': 0.5,    # wheel rotation needed to decide the sign
             'signo_correlacion_minima': 0.7,
+            'escala_avance': 0.0,            # 0: learned (IMU turn / wheels turn); > 0 fixed
+            'escala_giro_minimo_rad': 1.0,   # wheel turning needed to use the learned scale
+            'escala_minima': 0.7,
+            'escala_maxima': 1.1,
         })
         self.frame_fusionado = self.declare_parameter('frame_fusionado', 'odom_fused').value
         self.rumbo = RumboImu(self.p)
         self.signo_avisado = 0
         self.pasos_avisados = 0
+        self.escala_avisada = 1.0
         self.tf = TransformBroadcaster(self)
         self.frame_odom = 'odom'
         # /odom and /imu/data are reliable (§7.1).
@@ -85,6 +90,12 @@ class OdometriaImu(Node):
         if signo != self.signo_avisado and self.p['fuente_rumbo'] == 'giroscopo':
             self.get_logger().info(f'gyro sign {signo:+d} (wheels vs gyro)')
             self.signo_avisado = signo
+        escala = self.rumbo.escala
+        if abs(escala - self.escala_avisada) >= 0.02:
+            self.get_logger().info(
+                f'odom distance scale {escala:.3f} (IMU turn / wheels turn over '
+                f'{self.rumbo.giro_ruedas:.1f} rad)')
+            self.escala_avisada = escala
         if self.rumbo.pasos_ruedas != self.pasos_avisados:
             self.get_logger().info(
                 f'{self.rumbo.pasos_ruedas} odom steps used the wheels heading '

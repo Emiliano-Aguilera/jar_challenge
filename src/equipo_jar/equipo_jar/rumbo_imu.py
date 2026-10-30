@@ -17,6 +17,12 @@ Heading source (`fuente_rumbo`):
 - `ruedas`: the wheels' heading, as /odom (off: the transform stays the identity).
 Each /odom waits for the IMU sample of its stamp; if none comes within `imu_vieja_s`,
 that step uses the wheels' heading.
+
+Distance (`escala_avance`): the wheels' steps are multiplied by a scale. 0 = learned: the
+IMU's turn over the wheels' turn while turning (bag: 0.80; sim: 1.0). The same wheel
+constant makes /odom count turns and distance too much (bag: turns 0.80, forward 0.78,
+sideways 0.79), so the turn ratio fixes distance too. Used after `escala_giro_minimo_rad` of
+wheel turning, kept within [escala_minima, escala_maxima]. A number > 0 fixes it (1.0: off).
 Checked on the week-10 bag (notes/hans-die/NOTES.md).
 """
 import math
@@ -32,7 +38,8 @@ class RumboImu:
     """Feed it /imu/data and /odom; each call returns the transforms to publish.
 
     `p` is the node's live parameter dict: fuente_rumbo, signo_giroscopo, imu_vieja_s,
-    signo_wz_minimo_rads, signo_giro_minimo_rad, signo_correlacion_minima.
+    signo_wz_minimo_rads, signo_giro_minimo_rad, signo_correlacion_minima, escala_avance,
+    escala_giro_minimo_rad, escala_minima, escala_maxima.
     Times are header stamps in seconds. A transform is (stamp, x, y, yaw) of
     odom_fused -> odom.
     """
@@ -54,6 +61,8 @@ class RumboImu:
         self.integrales = None
         self.pendientes = deque()    # /odom messages waiting for the IMU sample of their stamp
         self.pasos_ruedas = 0        # turning steps that used the wheels' heading, for the log
+        # Turning, wheels vs IMU (rad), over steps where both measured it: the distance scale.
+        self.giro_ruedas = self.giro_imu = 0.0
 
     # --- inputs ---
 
@@ -110,6 +119,17 @@ class RumboImu:
         """Gyro sign in use: the param if set, else the learned one (0: unknown)."""
         fijo = self.p['signo_giroscopo']
         return int(math.copysign(1, fijo)) if fijo else self.signo_auto
+
+    @property
+    def escala(self):
+        """Scale for the wheels' steps: the param if > 0, else the learned one (1.0 until known)."""
+        fija = self.p['escala_avance']
+        if fija > 0.0:
+            return fija
+        if self.giro_ruedas < self.p['escala_giro_minimo_rad']:
+            return 1.0
+        return min(max(self.giro_imu / self.giro_ruedas, self.p['escala_minima']),
+                   self.p['escala_maxima'])
 
     def _aprender_signo(self, t, gz):
         if self.signo_auto or self.odom_wz is None:
@@ -169,11 +189,15 @@ class RumboImu:
                     self.pasos_ruedas += 1
             else:
                 d_yaw = d_imu
+                if abs(d_ruedas) >= self.p['signo_wz_minimo_rads'] * (t - self.t):
+                    self.giro_ruedas += abs(d_ruedas)
+                    self.giro_imu += abs(d_imu)
         fx, fy, fyaw = self.fusionada
         # The wheels' step, turned from odom into odom_fused at the mean heading difference.
         giro = diferencia_angulo(fyaw, yaw0) + 0.5 * (d_yaw - d_ruedas)
         c, s = math.cos(giro), math.sin(giro)
-        dx, dy = x - x0, y - y0
+        k = self.escala
+        dx, dy = k * (x - x0), k * (y - y0)
         self.fusionada = (fx + c * dx - s * dy, fy + s * dx + c * dy, fyaw + d_yaw)
         self.t, self.odom, self.integrales = t, (x, y, yaw), integrales
         return [self._transformada()]

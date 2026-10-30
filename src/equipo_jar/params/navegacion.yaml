@@ -70,6 +70,13 @@ odometria_imu:
     signo_wz_minimo_rads: 0.2         # the sign is learned only while the wheels turn this fast
     signo_giro_minimo_rad: 0.5        # wheel rotation needed to decide the sign
     signo_correlacion_minima: 0.7     # |correlation| gyro vs wheels needed (bag: 0.95)
+    # Distance: the wheels' steps times a scale. 0 = learned as IMU turn / wheels turn (real
+    # robot 0.80: /odom counts turns and distance ~25 % too much; sim 1.0). 1.0 turns it off.
+    # Week-10 bag: AMCL position error median / p90 4.9 / 10.2 cm -> 3.6 / 6.4 cm (learned 0.798).
+    escala_avance: 0.0
+    escala_giro_minimo_rad: 1.0       # wheel turning before the learned scale is used
+    escala_minima: 0.7                # learned scale kept within these
+    escala_maxima: 1.1
 
 localizacion:
   ros__parameters:
