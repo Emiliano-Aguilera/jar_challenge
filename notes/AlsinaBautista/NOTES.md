@@ -216,6 +216,15 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
   chosen spot and counted a try if it was occupied.
 - Not covered yet: with no spot the robot does not turn to face the candidate from where
   it is. A trip that arrives but brings no new observations still counts as a visit.
+- Checked (2026-10-29, branch `mision/inspecciones-y-vuelta`, 9aa5032): laberinto_1 600 s:
+  300, 2 of 3 boxes (run 40978622059). The pocket box (-1.92,1.47) had no spot 3 times and
+  was reported by the final round after the return; the third box was never seen
+  (coverage). No failed inspection trip happened, so the new retry did not act. maze_1
+  300 s: 500, done at 208 s (run 40985063777, recorded). An earlier maze_1 run of the same
+  commit (40978622059) scored 0: from 25 s Nav2's controller dropped every plan
+  ("Resulting plan has 0 poses in it", 274 times) near (3.0,0.3) and every trip failed;
+  development alone scored 500 right after (40985060046), so it is intermittent and in
+  navigation, not in this branch (sent to hans-die).
 - Seen (laberinto_1, 300 s, 3 runs on e0f64a4): in run 1 candidate id 2 at
   (-2.07, 1.53) with 2 observations was the real box at (-1.90, 1.45), 0.19 m off
   (a report there scores 100). No spot, and no new observations came, so no retry;
@@ -454,6 +463,8 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
 - `return_check_max_s` (10 s, 2026-10-29): if mission cannot measure in time (no pose, or the
   robot never stays still), it stops and sends `/done` anyway. Without it the robot could
   stand still for 60 s, which ends the run without `/done` and loses the +100.
+- Seen (maze_1, run 40985063777): first try measured 0.060 m (> 0.05), the retry 0.022 m;
+  judge 0.031 m.
 - Checked with the precise tree (2026-10-29, runs of `mision/objetivos-ocupados`, 300 s):
   both returns passed on the first try; mission measured 0.034 m (maze_1) and 0.045 m
   (maze_3); +100 in both.
