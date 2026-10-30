@@ -747,3 +747,15 @@ is skipped: bt_navigator logs it before its TF is ready). Return = judge's dista
   fixes it (stale LiDAR marks, goal in a marked cell). With Spin first the robot spun in place,
   mission canceled 4 trips ("Nav2 lleva 10 recuperaciones") and lost two boxes and the return.
 - Decided: keep Humble's order. The gap stall costs time, not points.
+
+### Q: xy_goal_tolerance 0.15 instead of 0.10? (rejected)
+
+- Idea: in maze_3 the robot once froze 0.12 m from a corner viewpoint for 56 s; 0.15 would accept it.
+  Branch `navegacion/tolerancia` (on top of `localizacion/afinar-siempre`).
+- Result (600 s, largada 0.2,0.15,0.5): maze_3 600 (167 s), maze_1 500 (194 s), but laberinto_1
+  **100 twice** (577 s and 572 s, no return). Both times the robot stopped in the pocket west of
+  (-1.0, 1.4) and stayed there for minutes: AMCL 0.1-0.33 m off the truth there, empty MPPI plans
+  ("Resulting plan has 0 poses"), "Collision Ahead" on BackUp and Spin. Without the change the same
+  map gave 200 in 4 of 4 runs (590c915, e48ee98, ba920ff, aa147a3; AMCL max 0.10 m).
+- Decided: keep 0.10. The mechanism is not clear (the robot stops 5 cm earlier, nearer the block
+  corner), but 2 of 2 against 0 of 4 is enough.
