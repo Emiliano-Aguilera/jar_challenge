@@ -97,6 +97,7 @@ PARAM_DEFAULTS = {
     # Timing and frames
     'processing_rate_hz': 5.0,
     'sync_tolerance_s': 0.1,             # LiDAR period is ~0.14 s; read at startup only
+    'sync_queue_size': 60,               # 2 s of 30 Hz images; read at startup only
     'robot_frame': 'base_footprint',
     'fixed_frame': 'odom',               # frame used to bridge image time and scan time
     'per_ray_time': True,                # use the time of the blob's middle LiDAR ray, not the scan stamp
@@ -131,10 +132,11 @@ class Detection(Node):
             self, Image, '/cam_1/color/image_raw', qos_profile=qos_profile_sensor_data)
         sub_scan = message_filters.Subscriber(
             self, LaserScan, '/scan', qos_profile=qos_profile_sensor_data)
-        #PARAM: queue_size = messages held per topic while waiting for a partner. Support:
-        #       >= 1. 10 covers one LiDAR period of 30 Hz images.
+        # The Python synchronizer pairs a message only with partners still queued, so the queue
+        # must hold the images taken while a late scan is still in transit.
         self.sync = message_filters.ApproximateTimeSynchronizer(
-            [sub_img, sub_scan], queue_size=10, slop=float(self.p['sync_tolerance_s']))
+            [sub_img, sub_scan], queue_size=int(self.p['sync_queue_size']),
+            slop=float(self.p['sync_tolerance_s']))
         self.sync.registerCallback(self.on_pair)
         self.create_subscription(
             CameraInfo, '/cam_1/color/camera_info', self.on_camera_info, qos_profile_sensor_data)

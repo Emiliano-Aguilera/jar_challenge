@@ -115,6 +115,11 @@ deteccion:
     #PARAM: max image-scan timestamp gap to pair them, s (> 0; LiDAR period is ~0.14 s).
     #       Read at startup only.
     sync_tolerance_s: 0.1
+    #PARAM: messages held per topic while waiting for a partner (>= 1). Must cover the images
+    #       (30 Hz) taken while a scan is in transit: 10 lost 80 % of pairs with scans 0.3 s
+    #       late; 60 kept 99.5 % up to 1.5 s late (week-10 bag, delays injected). ~14 MB of
+    #       images. Read at startup only.
+    sync_queue_size: 60
     #PARAM: robot base frame in /tf (base_footprint on this robot).
     robot_frame: base_footprint
     #PARAM: frame used to bridge image time and scan time (odom: smooth, always available).
