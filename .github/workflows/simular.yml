@@ -17,7 +17,7 @@ on:
         type: string
         default: development
       mapas:
-        description: Maps, comma-separated (maze_1_6x5, maze_2_6x5, maze_3_6x6, maze_4_metal_6x6, laberinto_1, laberinto_simple)
+        description: Maps, comma-separated (maze_1_6x5, maze_2_6x5, maze_3_6x6, maze_4_metal_6x6, laberinto_1, laberinto_simple) or worlds on the mundos branch
         type: string
         default: maze_1_6x5
       repeticiones:
@@ -47,7 +47,17 @@ jobs:
     timeout-minutes: 5
     outputs:
       corridas: ${{ steps.plan.outputs.corridas }}
+      mundos: ${{ steps.mundos.outputs.sha }}
     steps:
+      # One mundos commit for every run of the request, even if someone pushes meanwhile.
+      - name: Pin the mundos branch
+        id: mundos
+        env:
+          REPO: ${{ github.repository }}
+        run: |
+          sha="$(git ls-remote "https://github.com/$REPO" refs/heads/mundos | cut -f1)"
+          [[ -z "$sha" || "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::bad mundos ref"; exit 1; }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"; echo "mundos: ${sha:-none}"
       - name: Check the request and list its runs
         id: plan
         env:
@@ -94,29 +104,37 @@ jobs:
           DURACION: ${{ inputs.duracion }}
           GRABAR: ${{ inputs.grabar }}
           LARGADA: ${{ inputs.largada }}
+          MUNDOS: ${{ needs.plan.outputs.mundos }}
           JARSIM_ID_FILE: ${{ runner.temp }}/lote-id
+          JARSIM_ERROR_FILE: ${{ runner.temp }}/error
         # exec: cancelling the job signals correr-lote itself, which removes its containers.
         # JARSIM_GPU comes from the runner (each one has its GPU).
         run: >-
           exec /srv/jarsim/bin/correr-lote --rama "$RAMA" --mapas "$MAPA"
           --repeticiones 1 --duracion "$DURACION" --grabar "$GRABAR" --largada "$LARGADA"
+          ${MUNDOS:+--mundos "$MUNDOS"}
 
       - name: Summary
         id: resumen
         if: always()
         env:
           JARSIM_ID_FILE: ${{ runner.temp }}/lote-id
+          JARSIM_ERROR_FILE: ${{ runner.temp }}/error
           MAPA: ${{ matrix.mapa }}
           REP: ${{ matrix.rep }}
         run: |
+          echo "### $MAPA · repetition $REP" >> "$GITHUB_STEP_SUMMARY"
+          # One line from the server (custom-world checks and other refusals), already sanitized.
+          if [ -f "$JARSIM_ERROR_FILE" ]; then
+            echo "**Error:** $(head -c 400 "$JARSIM_ERROR_FILE" | tr -d '\`<>')" >> "$GITHUB_STEP_SUMMARY"
+          fi
           [ -f "$JARSIM_ID_FILE" ] || { echo "No run was started (see the step above)."; exit 0; }
           id="$(cat "$JARSIM_ID_FILE")"
           [[ "$id" =~ ^[0-9]{8}-[0-9]{6}-[0-9a-f]{7}(-[2-9])?$ ]] || { echo "bad batch id"; exit 1; }
           lote="/srv/jarsim-data/runs/$id"
           echo "lote=$id" >> "$GITHUB_OUTPUT"
-          echo "### $MAPA · repetition $REP" >> "$GITHUB_STEP_SUMMARY"
           if [ -f "$lote/resumen.md" ]; then cat "$lote/resumen.md" >> "$GITHUB_STEP_SUMMARY"
-          else echo "Run \`$id\` ended without a summary (see the step above)." >> "$GITHUB_STEP_SUMMARY"; fi
+          elif [ ! -f "$JARSIM_ERROR_FILE" ]; then echo "Run \`$id\` ended without a summary (see the step above)." >> "$GITHUB_STEP_SUMMARY"; fi
           # Small artifact: summaries, results and plots, never the recordings (on the viewer).
           # Run folders are written by the tested code: copy regular files only, no symlinks.
           art="$RUNNER_TEMP/artefacto"; rm -rf "$art"; mkdir -p "$art"

@@ -19,7 +19,7 @@ on:
         type: string
         default: development
       mapa:
-        description: Map (maze_1_6x5, maze_2_6x5, maze_3_6x6, maze_4_metal_6x6, laberinto_1, laberinto_simple)
+        description: Map (maze_1_6x5, maze_2_6x5, maze_3_6x6, maze_4_metal_6x6, laberinto_1, laberinto_simple) or a world on the mundos branch
         type: string
         default: maze_1_6x5
       launch:
@@ -50,6 +50,7 @@ jobs:
           LAUNCH: ${{ inputs.launch }}
           MINUTOS: ${{ inputs.minutos }}
           JARSIM_ID_FILE: ${{ runner.temp }}/sesion-id
+          JARSIM_ERROR_FILE: ${{ runner.temp }}/error
         # JARSIM_GPU comes from the runner (each one has its GPU).
         run: |
           /srv/jarsim/bin/sesion iniciar --rama "$RAMA" --mapa "$MAPA" --launch "$LAUNCH" --minutos "$MINUTOS"
@@ -80,7 +81,12 @@ jobs:
         if: always()
         env:
           JARSIM_ID_FILE: ${{ runner.temp }}/sesion-id
+          JARSIM_ERROR_FILE: ${{ runner.temp }}/error
         run: |
+          # One line from the server (custom-world checks and other refusals), already sanitized.
+          if [ -f "$JARSIM_ERROR_FILE" ]; then
+            echo "**Error:** $(head -c 400 "$JARSIM_ERROR_FILE" | tr -d '\`<>')" >> "$GITHUB_STEP_SUMMARY"
+          fi
           [ -f "$JARSIM_ID_FILE" ] || { echo "No session was started."; exit 0; }
           id="$(cat "$JARSIM_ID_FILE")"
           [[ "$id" =~ ^[0-9]{8}-[0-9]{6}-[0-9a-f]{7}-sesion(-[2-9])?$ ]] || { echo "bad session id"; exit 1; }
