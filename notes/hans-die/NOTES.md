@@ -716,3 +716,46 @@ is skipped: bt_navigator logs it before its TF is ready). Return = judge's dista
 - maze_2 at yaw 3.0: the return got stuck ~30 s at (-0.8, 0.46) (5 "Failed to make progress", 1 spin);
   mission's second try arrived at 4.4 cm. The fine-tune fired 5 times there for ~1° heading
   differences (the robot creeps while MPPI tries): harmless, but `afinar_quieto: false` turns it off.
+
+### Q: does the watch work with the real robot's lower scores? (week-10 bag replay)
+
+- Replay (scratchpad `inicio/bag_vigia2.py`): the 125 still scans of the bag, AMCL taken as the
+  reference pose (moved half a cell to AMCL's map reading) plus an offset in a random direction and
+  1° of heading noise; the node's Vigia and fine-tune logic on each scan.
+- Before: when AMCL is 6-9 cm off, the real score drops below 0.5, the watch searches, finds no pose
+  >= 0.10 m away, and nothing is fixed (fine-tune ran only when the score was fine).
+
+| AMCL off | False moves | Fine-tunes before | Fine-tunes now | Closer / farther (now) |
+| --- | --- | --- | --- | --- |
+| 0 cm | 0 | 38 (heading only, all better) | 38 | - |
+| 3 cm | 0 | 58 | 92 | 92 / 0 |
+| 6 cm | 0 | 27 | 89 | 89 / 0 |
+| 9 cm | 0 | 1 | 88 | 88 / 0 |
+
+- Change: if the watch does not move AMCL, the fine-tune runs anyway (it has its own checks:
+  fit >= 0.75 and sharp). The "Localization check" warning is logged only when the watch has a
+  candidate, not for every low score (on the real robot that would be ~1 in 3 stops).
+
+### Q: can the Spin come first in the recovery round? (rejected)
+
+- Idea: stalls at narrow gaps end with the BT's Spin, which comes after the costmap-clearing round
+  (~20 s later). Branch `navegacion/spin-primero`: RoundRobin Spin -> clear costmaps -> Wait -> BackUp.
+- Result (600 s): maze_1 x4: 500 (done 172 s, 1 close call 2.8 cm at the gap wall end), 500 (174 s),
+  **100** (579 s, 111 planner failures, 38 spins, never returned); maze_2 at 172° 600 (no stall);
+  laberinto_1 200 (no recoveries at all). Development's tree: 0 close calls in 22 runs.
+- Why: recoveries also run when the planner fails, and there clearing the costmaps first is what
+  fixes it (stale LiDAR marks, goal in a marked cell). With Spin first the robot spun in place,
+  mission canceled 4 trips ("Nav2 lleva 10 recuperaciones") and lost two boxes and the return.
+- Decided: keep Humble's order. The gap stall costs time, not points.
+
+### Q: xy_goal_tolerance 0.15 instead of 0.10? (rejected)
+
+- Idea: in maze_3 the robot once froze 0.12 m from a corner viewpoint for 56 s; 0.15 would accept it.
+  Branch `navegacion/tolerancia` (on top of `localizacion/afinar-siempre`).
+- Result (600 s, largada 0.2,0.15,0.5): maze_3 600 (167 s), maze_1 500 (194 s), but laberinto_1
+  **100 twice** (577 s and 572 s, no return). Both times the robot stopped in the pocket west of
+  (-1.0, 1.4) and stayed there for minutes: AMCL 0.1-0.33 m off the truth there, empty MPPI plans
+  ("Resulting plan has 0 poses"), "Collision Ahead" on BackUp and Spin. Without the change the same
+  map gave 200 in 4 of 4 runs (590c915, e48ee98, ba920ff, aa147a3; AMCL max 0.10 m).
+- Decided: keep 0.10. The mechanism is not clear (the robot stops 5 cm earlier, nearer the block
+  corner), but 2 of 2 against 0 of 4 is enough.

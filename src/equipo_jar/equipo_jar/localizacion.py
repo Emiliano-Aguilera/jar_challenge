@@ -17,8 +17,8 @@ Tres tareas:
 
 3. Watch (vigia.py): while the robot is still (once soon after it stops, then every
    `vigia_periodo_s`) it scores the last sweep at AMCL's pose against /map and logs it.
-   - AMCL lost (low score): moves AMCL to a clearly better nearby pose.
-   - AMCL fine: fine-tunes it (`afinar_*`): a small search around AMCL's pose; if the fit
+   - AMCL lost (low score): moves AMCL to a clearly better pose >= 0.10 m away.
+   - Otherwise it fine-tunes it (`afinar_*`): a small search around AMCL's pose; if the fit
      is sharp and a few cm away, AMCL is moved there with a small spread. AMCL alone wanders
      a few cm at the same spot (practice map: start pose 0.06 m off, return 0.09 m); the
      same match at the start and at the return gives the same pose, map errors included.
@@ -405,25 +405,31 @@ class Localizacion(Node):
                 f'Localization check, last 30 s: {len(v)} still sweeps, LiDAR-map score at '
                 f'AMCL pose median {v[len(v) // 2]:.2f} min {v[0]:.2f} (right: ~0.8-0.9)')
             self.vigia_puntajes, self.vigia_ultimo_log = [], ahora
-        if not self.vigia.hace_falta_buscar(puntaje):
+        if self.vigia.hace_falta_buscar(puntaje):
+            x, y, yaw, mejor, _ = b.buscar(puntos, *pose, radio_m=self.p['vigia_radio_m'],
+                                           rango_yaw_rad=self.p['vigia_rango_yaw_rad'])
+            nueva = self.vigia.revisar(pose, puntaje, (x, y, yaw, mejor))
+            if nueva is not None or self.vigia.vistas > 0:
+                self.get_logger().warning(
+                    f'Localization check: score {puntaje:.2f} at AMCL pose ({pose[0]:.2f}, '
+                    f'{pose[1]:.2f}, {pose[2]:.2f}); best nearby {mejor:.2f} at ({x:.2f}, {y:.2f}, '
+                    f'{yaw:.2f})')
+            if nueva is not None:
+                self.get_logger().warning(
+                    f'AMCL lost: moving it to ({nueva[0]:.2f}, {nueva[1]:.2f}, {nueva[2]:.2f}) '
+                    f'(move {self.vigia.reubicaciones})')
+                self.pose_inicio = (float(nueva[0]), float(nueva[1]), float(nueva[2]),
+                                    self.p['desvio_xy_encontrada'], self.p['desvio_yaw_encontrada'])
+                self.enviar_pose_inicial()
+                self.pedidos_vigia = 5
+                return
+        else:
             self.vigia.descartar()
-            if self.p['afinar_quieto']:
-                self.afinar(puntos, pose)
-            return
-        x, y, yaw, mejor, _ = b.buscar(puntos, *pose, radio_m=self.p['vigia_radio_m'],
-                                       rango_yaw_rad=self.p['vigia_rango_yaw_rad'])
-        self.get_logger().warning(
-            f'Localization check: score {puntaje:.2f} at AMCL pose ({pose[0]:.2f}, {pose[1]:.2f}, '
-            f'{pose[2]:.2f}); best nearby {mejor:.2f} at ({x:.2f}, {y:.2f}, {yaw:.2f})')
-        nueva = self.vigia.revisar(pose, puntaje, (x, y, yaw, mejor))
-        if nueva is not None:
-            self.get_logger().warning(
-                f'AMCL lost: moving it to ({nueva[0]:.2f}, {nueva[1]:.2f}, {nueva[2]:.2f}) '
-                f'(move {self.vigia.reubicaciones})')
-            self.pose_inicio = (float(nueva[0]), float(nueva[1]), float(nueva[2]),
-                                self.p['desvio_xy_encontrada'], self.p['desvio_yaw_encontrada'])
-            self.enviar_pose_inicial()
-            self.pedidos_vigia = 5
+        # A low score with no clearly better pose >= 0.10 m away is also what AMCL a few cm
+        # off looks like on the real robot (week-10 bag: right pose median 0.71, 6 cm off
+        # < 0.5): the fine-tune, with its own checks, fixes that.
+        if self.p['afinar_quieto']:
+            self.afinar(puntos, pose)
 
     def afinar(self, puntos, pose):
         """Move AMCL to the sharp best fit within afinar_radio_m, if it is a few cm away."""
