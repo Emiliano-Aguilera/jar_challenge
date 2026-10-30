@@ -85,7 +85,8 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
   `localizacion` node settles it in about 5 s).
 - Decided: until the first goal the robot has not moved, so the latest pose is the
   best estimate of the start. Mission updates `start_pose` on every tick and freezes
-  it when it sends the first goal (`go_to`). Reports are not delayed.
+  it when it sends the first goal (`go_to`). Reports also wait for the start (since
+  2026-10-29; before, they were checked from /map on).
 - First version: no goal during the first `start_wait_s` (4 s) after /map. That was
   measured in the simulator; the real robot can take longer or shorter.
 - Decided (2026-10-29): mission starts on the first `true` of
@@ -102,6 +103,13 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
   warning. 500 and 600, 0 collisions, judge's distance to the start 0.031 / 0.051 m. Done
   at 194 / 170 s (182 / 153 s on the previous branch): exploration varies run to run;
   maze_1's trip to (0.03,-2.82) took 41 s with 8 Nav2 recoveries (37 s with 7 before).
+- Checked with a hand-placement offset (2026-10-29, maze_1, 300 s, `largada=0.15,-0.1,0.2`,
+  batch 20261029-193656-2c554b7): AMCL's pose at 0.7 s was (0.03,-0.02, yaw 0.01), still the
+  guess at the origin, 0.14 m off. The flag turned `true` at 2.3 s; the start pose was fixed
+  at 2.8 s at (0.12,-0.07, yaw 0.17), ~0.04 m and 0.03 rad from the real start. Return:
+  mission 0.035 m, judge 0.03 m from the real start; 500, 0 collisions, done at 177 s.
+  Fixing the start with the first estimate would have put the return ~0.14 m off, outside
+  the 0.10 m the 4-wheel rule leaves.
 - Measured (laberinto_1, 5 runs on 2026-10-26, after /map): AMCL settled at
   2.1-2.2 s, Nav2 active at 2.7-3.2 s, coverage plan at 4.7-5.3 s. With 8 s the
   first goal went out at 8.2 s, ~3 s after everything was ready. With 4 s it went
@@ -198,8 +206,16 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
   give a spot; the same center gives the same answer) and fewer than
   `visit_max_attempts` (3) tries. Until then it is skipped, so it does not hide
   other candidates or block the return for "no plan points left".
-- Not covered yet: a failed trip still counts as a visit, and with no spot the
-  robot does not turn to face the candidate from where it is.
+- Failed trip (2026-10-29): if Nav2 does not reach the spot, the candidate is taken out
+  of the visited ones and the failure counts as a try, with the observations it has
+  then (`forget_failed_inspection`, `inspeccion.py`). Same rule as "no spot": tried again
+  only with more observations and fewer than `visit_max_attempts` tries. Before, a failed
+  trip counted as a visit and the candidate was never looked at again.
+- Costmap (2026-10-29): `viewpoint_for` gets `blocked(x, y)` and skips spots occupied in
+  Nav2's costmap while it chooses, so a free spot can win. Before, mission checked only the
+  chosen spot and counted a try if it was occupied.
+- Not covered yet: with no spot the robot does not turn to face the candidate from where
+  it is. A trip that arrives but brings no new observations still counts as a visit.
 - Seen (laberinto_1, 300 s, 3 runs on e0f64a4): in run 1 candidate id 2 at
   (-2.07, 1.53) with 2 observations was the real box at (-1.90, 1.45), 0.19 m off
   (a report there scores 100). No spot, and no new observations came, so no retry;
@@ -407,7 +423,7 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
   the position error (localization + arrival) must stay under 0.10 m (contact points
   only, 0.116 m, would leave 0.134 m).
 - Decided: after the trip back, state `checking`. Mission waits until the robot is
-  still (moved < `return_still_m`, 0.01 m, in `odom` for `return_still_s`, 0.5 s), then
+  still (moved < `return_still_m`, 0.01 m, in `odom` for `return_still_s`, 2.0 s), then
   compares its position in `map` with the start pose. `return_verdict` (`exploracion.py`)
   decides: within `return_tolerance_m` (0.05) -> `stopping`; otherwise, while fewer than
   `return_max_tries` (3) trips back were sent, it sends the start pose again; else it
@@ -432,6 +448,12 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
   tolerance, so the error is mostly that tolerance, not localization. maze_3's 0.082 m
   leaves 1.8 cm under the 4-wheel rule (0.10 m): that is why the precise tree was
   needed. Scores 500 and 600, done at 204 s and 159 s, no collisions or close calls.
+- `return_still_s` 0.5 -> 2.0 s (2026-10-29, hans-die's suggestion after #48): localization
+  fine-tunes AMCL with a LiDAR match 0.3-2.5 s after the robot stops; at 0.5 s mission
+  measured AMCL before it. Costs ~1.5 s per try.
+- `return_check_max_s` (10 s, 2026-10-29): if mission cannot measure in time (no pose, or the
+  robot never stays still), it stops and sends `/done` anyway. Without it the robot could
+  stand still for 60 s, which ends the run without `/done` and loses the +100.
 - Checked with the precise tree (2026-10-29, runs of `mision/objetivos-ocupados`, 300 s):
   both returns passed on the first try; mission measured 0.034 m (maze_1) and 0.045 m
   (maze_3); +100 in both.
@@ -446,14 +468,13 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
   100 obstacle, 99 the robot's center there would touch, 1-98 margin only, 0 free, -1
   unknown). `goal_blocked` (`exploracion.py`): a point is blocked if its cell is >=
   `costmap_blocked_value` (99). Unknown or outside the grid is not blocked: Nav2 decides.
-- Before sending: a blocked plan point is marked visited and skipped; a blocked inspection
-  view counts as a failed attempt (same as "no place to look"). Turns in place are not
-  checked: the robot stays where it is.
+- Before sending: a blocked plan point is marked visited and skipped. Inspection spots are
+  checked inside `viewpoint_for` (since 2026-10-29; before, only the chosen spot, and a
+  blocked one counted as a failed try). Turns in place are not checked: the robot stays
+  where it is.
 - While moving (`check_goal_blocked`, like `check_goal_near_box`): if the plan point
   becomes blocked, mission cancels the trip; the next `explore()` sees it blocked and
   skips it. Not for turns in place, inspection trips or the trip back.
-- Limit: `viewpoint_for` returns its first valid view from `/map`; if that one is
-  blocked, mission does not try the next one.
 - Checked (2026-10-29, 300 s, 1 run per map): maze_1 500 of 500, done at 182 s (before:
   196-250 s); the trip to (4.08,0.78) was cancelled 1 s after it started and the point
   skipped. maze_3 600 of 600, done at 153 s, 3 of 3 reports (before: always 300); the
@@ -473,7 +494,14 @@ Pending, in this order:
 1. Long trips back: NavFn caps paths at ~2x the map's longest side (~12 m on maze_1), so
    the trip back can fail from far away. Mission fallback: go back through visited
    points. (The A* failures to extract existing paths were fixed in #33: Dijkstra.)
-2. Tests: shifted and turned starts, unmapped obstacles, Nav2 failures (retries, return).
+2. Tests: unmapped obstacles other than the blue boxes (a decoy blocking a corridor, one
+   near the start): the simulator cannot add them yet (asked Emiliano-Aguilera). Shifted
+   and turned starts: done (`largada`, see "Where is the start pose?" and hans-die's #48).
+3. Not done, on purpose (Codex audit, 2026-10-29): a failed coverage trip still counts as
+   visited. Retrying it would repeat trips like maze_1's (0.03,-2.82) gap, 30-40 s each
+   (hans-die's notes), with no evidence it adds points. A goal whose acceptance never
+   comes (state `sending`) has no timeout: only seen in a synthetic test; `finish_time_s`
+   still ends the run.
 
 For other modules:
 - Perception: the point cloud subscription is always created (`deteccion.py`;

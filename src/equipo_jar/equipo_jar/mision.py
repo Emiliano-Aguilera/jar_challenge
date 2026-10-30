@@ -24,7 +24,7 @@ from equipo_jar.reportes import armar_reporte
 from equipo_jar_msgs.msg import Candidatas
 from equipo_jar.confirmacion import select_to_report
 from equipo_jar.exploracion import yaw_from_quaternion, first_pending, angle_difference, goal_position, box_zones, near_box, return_verdict, goal_blocked, start_ready
-from equipo_jar.inspeccion import pick_doubtful, viewpoint_for
+from equipo_jar.inspeccion import pick_doubtful, viewpoint_for, forget_failed_inspection
 from equipo_jar.mapa import Grid
 
 from tf2_ros import Buffer, TransformListener, TransformException
@@ -56,7 +56,8 @@ class Mision(Node):
                                             'box_clearance_m': 0.42, 'box_clearance_sigmas': 1.0,    
                                             'visit_transit_radius_m': 0.15, 'visit_free_threshold': 25,
                                             'settle_s': 0.0, 'max_recoveries': 10, 'return_tolerance_m': 0.05,
-                                            'return_max_tries': 3, 'return_still_s': 0.5, 'return_still_m': 0.01,
+                                            'return_max_tries': 3, 'return_still_s': 2.0, 'return_still_m': 0.01,
+                                            'return_check_max_s': 10.0,
                                             'costmap_blocked_value': 99})  # parámetros ajustables
 
         self.mapa = None
@@ -83,6 +84,7 @@ class Mision(Node):
 
         self.visited = []
         self.current_point = None
+        self.current_inspection = None  # (id, x, y, observaciones) del viaje de inspección en curso
         self.settle_until = None
         self.current_goal = None
         self.current_in_place = False
@@ -93,6 +95,7 @@ class Mision(Node):
         self.return_tries = 0
         self.check_since = None
         self.check_pose = None
+        self.check_started = None
         self.canceling = False
 
         self.idle_since = None
@@ -140,6 +143,9 @@ class Mision(Node):
 
     def on_costmap(self, msg):
         self.costmap = msg
+
+    def is_blocked(self, x, y):
+        return goal_blocked(self.costmap, x, y, self.p['costmap_blocked_value'])
 
     def on_localization_ready(self, msg):
         if msg.data:
@@ -271,7 +277,7 @@ class Mision(Node):
             return
         x = self.current_point.pose.position.x
         y = self.current_point.pose.position.y
-        if goal_blocked(self.costmap, x, y, self.p['costmap_blocked_value']):
+        if self.is_blocked(x, y):
             self.current_goal.cancel_goal_async()
             self.get_logger().info(f'Cancelo el viaje: el punto del plan ({x:.2f},{y:.2f}) '
                                 f'quedó ocupado en el costmap')
@@ -354,12 +360,13 @@ class Mision(Node):
             self.get_logger().info('Se termina el tiempo de la corrida')
             self.change_state('stopping')
             return
-        self.check_reports(self.p['min_observations'], self.p['max_deviation_m'])
         if not start_ready(self.localization_ready, self.seconds_since_t0(), self.p['localization_wait_max_s']):
             return
         if not self.localization_ready and not self.start_timeout_logged:
             self.get_logger().warning('Localización no avisó que está lista: arranco igual')
             self.start_timeout_logged = True
+        # Después del arranque: sin localización lista, una candidata podría quedar mal ubicada.
+        self.check_reports(self.p['min_observations'], self.p['max_deviation_m'])
         self.check_stuck()
         self.check_goal_near_box()
         self.check_goal_blocked()
@@ -396,6 +403,18 @@ class Mision(Node):
                 y = self.current_point.pose.position.y
                 yaw = yaw_from_quaternion(self.current_point.pose.orientation)
                 self.visited.append((x, y, yaw))
+            if self.current_inspection is not None:
+                if self.nav_state == 'failed':
+                    # Observaciones de ahora, no las del envío: reintenta solo si llegan más después.
+                    cand_id, cand_x, cand_y, observations = self.current_inspection
+                    for c in self.candidatas or []:
+                        if c.id == cand_id:
+                            observations = c.observaciones
+                    attempts = forget_failed_inspection(self.inspected_points, self.failed_inspections,
+                                                        cand_id, cand_x, cand_y, observations)
+                    self.get_logger().info(f'No llegué a mirar la candidata id={cand_id}: intento fallido '
+                                           f'{attempts} de {self.p["visit_max_attempts"]}')
+                self.current_inspection = None
             self.current_point = None
             self.nav_state = 'idle'
             self.settle_until = self.seconds_since_t0() + self.p['settle_s']
@@ -424,7 +443,7 @@ class Mision(Node):
         q = point.pose.orientation
         yaw = yaw_from_quaternion(q)
         x, y, in_place = goal_position(plan_x, plan_y, self.current_pose(), self.p['turn_in_place_m'])
-        if not in_place and goal_blocked(self.costmap, x, y, self.p['costmap_blocked_value']):
+        if not in_place and self.is_blocked(x, y):
             self.visited.append((plan_x, plan_y, yaw))
             self.get_logger().info(f'Salteo el punto del plan ({plan_x:.2f},{plan_y:.2f}): ocupado en el costmap')
             return
@@ -501,11 +520,17 @@ class Mision(Node):
         if self.return_sent and (self.nav_state == 'arrived' or self.nav_state == 'failed'):
             self.get_logger().info(f'Vuelta terminada: {self.nav_state}')
             self.check_since = None
+            self.check_started = self.seconds_since_t0()
             self.change_state('checking')
             return
 
     def check_return(self):
         now = self.seconds_since_t0()
+        if now - self.check_started > self.p['return_check_max_s']:
+            # Sin pose o sin quedarse quieto a tiempo: mejor /done que quedarse 60 s quieto.
+            self.get_logger().warning('No pude medir la vuelta a tiempo: termino')
+            self.change_state('stopping')
+            return
         odom = self.odom_pose()
         if odom is None:
             return
@@ -561,10 +586,7 @@ class Mision(Node):
             return False
         view = viewpoint_for(self.mapa, c.centro.x, c.centro.y, x_robot, y_robot, self.p['visit_distance_m'], 
                             self.p['visit_clearance_m'], self.p['visit_angles'], self.p['visit_min_shift_m'],
-                            self.p['visit_box_margin_m'], self.grid, reachable)
-        if view is not None and goal_blocked(self.costmap, view[0], view[1], self.p['costmap_blocked_value']):
-            self.get_logger().info(f'El lugar para mirar la candidata id={c.id} está ocupado en el costmap')
-            view = None
+                            self.p['visit_box_margin_m'], self.grid, reachable, self.is_blocked)
         if view is None:
             _, attempts = self.failed_inspections.get(c.id, (0, 0))
             self.failed_inspections[c.id] = (c.observaciones, attempts + 1)
@@ -576,6 +598,7 @@ class Mision(Node):
             x, y, yaw = view
             if self.go_to(self.make_pose(x, y, yaw)):
                 self.inspected_points.append((c.centro.x, c.centro.y))
+                self.current_inspection = (c.id, c.centro.x, c.centro.y, c.observaciones)
                 self.get_logger().info(f'Voy a mirar la candidata id={c.id} desde ({x:.2f},{y:.2f})')
                 self.idle_since = None
                 return True
