@@ -70,20 +70,20 @@
     </light>
     <include>
       <uri>model://floor_parquet2</uri>
-      <pose>0.5 -0.5 0 0 0 0</pose>
+      <pose>-0.5 0.5 0.0 0.0 0.0 3.141592653589793</pose>
     </include>
     <include>
       <uri>model://maze_3_6x6</uri>
-      <pose>-2.5 -3.5 0 0 0 0</pose>
+      <pose>2.5 3.5 0.0 0.0 0.0 3.141592653589793</pose>
     </include>
     <include>
       <uri>model://maze_3_tags</uri>
-      <pose>-2.5 -3.5 0 0 0 0</pose>
+      <pose>2.5 3.5 0.0 0.0 0.0 3.141592653589793</pose>
     </include>
     <model name="marcas_color">
       <static>1</static>
       <link name="cuadrado_azul_1">
-        <pose>0.9563 -1.9086 0.15 0 0 0</pose>
+        <pose>-0.9563 1.9086 0.15 0.0 0.0 3.141592653589793</pose>
         <collision name="collision">
           <geometry>
             <box>
@@ -105,7 +105,7 @@
         </visual>
       </link>
       <link name="cuadrado_rojo_2">
-        <pose>2.9552 -2.0360 0.15 0 0 0</pose>
+        <pose>-2.9552 2.036 0.15 0.0 0.0 3.141592653589793</pose>
         <collision name="collision">
           <geometry>
             <box>
@@ -127,7 +127,7 @@
         </visual>
       </link>
       <link name="cuadrado_azul_2">
-        <pose>-0.0847 -2.9586 0.15 0 0 0</pose>
+        <pose>0.0847 2.9586 0.15 0.0 0.0 3.141592653589793</pose>
         <collision name="collision">
           <geometry>
             <box>
@@ -149,7 +149,7 @@
         </visual>
       </link>
       <link name="cuadrado_rojo_3">
-        <pose>-2.0847 -2.0202 0.15 0 0 0</pose>
+        <pose>2.0847 2.0202 0.15 0.0 0.0 3.141592653589793</pose>
         <collision name="collision">
           <geometry>
             <box>
@@ -174,7 +174,7 @@
     <model name="pared_inicio_tars">
       <static>true</static>
       <link name="panel_inicio">
-        <pose>-0.455 0 0.3 0 0 0</pose>
+        <pose>0.455 -0.0 0.3 0.0 0.0 3.141592653589793</pose>
         <collision name="collision">
           <geometry>
             <box>
