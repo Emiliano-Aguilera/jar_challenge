@@ -119,6 +119,10 @@ deteccion:
     robot_frame: base_footprint
     #PARAM: frame used to bridge image time and scan time (odom: smooth, always available).
     fixed_frame: odom
+    #PARAM: look up the camera-LiDAR transform at the time the LiDAR measured the middle of the blob
+    #       (~0.13 s sweep, ray i at stamp + (n-1-i) * time_increment) instead of the scan stamp.
+    #       No effect when time_increment is 0 (simulator).
+    per_ray_time: true
     #PARAM: publish /jar/deteccion/debug (costs CPU; false in competition). Startup only.
     publish_debug: false
 

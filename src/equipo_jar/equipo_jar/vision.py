@@ -224,6 +224,17 @@ def scan_to_points(ranges: np.ndarray, angle_min: float, increment: float,
     return np.stack([ranges[ok] * np.cos(angles[ok]), ranges[ok] * np.sin(angles[ok])], axis=1)
 
 
+def mid_ray_delay(bearing: float, angle_min: float, increment: float, n_rays: int,
+                  time_increment: float) -> float:
+    """Seconds after the scan stamp at which the ray pointing at `bearing` (LiDAR frame) was measured.
+
+    The sweep runs backwards in index: ray i is measured at stamp + (n - 1 - i) * time_increment
+    (measured on the real robot, sweep ~0.134 s; the simulator has time_increment = 0 -> 0.0).
+    """
+    i = int(round((bearing - angle_min) / increment)) % n_rays
+    return (n_rays - 1 - i) * time_increment
+
+
 def points_in_wedge(points_xy: np.ndarray, origin_xy: np.ndarray,
                     dir_left_xy: np.ndarray, dir_right_xy: np.ndarray,
                     margin_rad: float) -> np.ndarray:

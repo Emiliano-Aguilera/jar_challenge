@@ -22,7 +22,9 @@ Per synchronized (image, scan) pair:
   1. red mask + box-shaped contours                                vision.red_mask, find_blobs
   2. camera rays through the blob's left/right edges -> LiDAR frame,
      at the scan time, through `odom` (robot motion between the two
-     timestamps is compensated)                                     tf2 lookup_transform_full
+     timestamps is compensated; with per_ray_time, at the time the
+     middle ray of the blob was measured)                           tf2 lookup_transform_full,
+                                                                    vision.mid_ray_delay
   3. the LiDAR beams in the central part of that span, grouped by
      range; the largest group is the box face                       vision.central_cluster
      (if none and use_cloud_fallback: depth cloud median, if a
@@ -97,6 +99,7 @@ PARAM_DEFAULTS = {
     'sync_tolerance_s': 0.1,             # LiDAR period is ~0.14 s; read at startup only
     'robot_frame': 'base_footprint',
     'fixed_frame': 'odom',               # frame used to bridge image time and scan time
+    'per_ray_time': True,                # use the time of the blob's middle LiDAR ray, not the scan stamp
     'publish_debug': False,
 }
 
@@ -281,30 +284,43 @@ class Detection(Node):
 
         self._log_summary(t)
         side = float(self.p['box_side_m'])
-        lidar_origin_map = None            # computed once per frame, only if the wall check runs
 
         for blob in blobs:
             x, y, w, h = blob.bbox
             v_mid = y + h / 2.0
+            tr, origin, stamp = tr_cam_to_lidar, cam_origin_l, scan_stamp
+            # The sweep takes ~0.134 s and ray i is measured at stamp + (n-1-i) * time_increment.
+            # Redo the transform at the time of the ray in the middle of the blob. 0 in the simulator.
+            if self.p['per_ray_time'] and scan_msg.time_increment > 0.0:
+                d_mid = self._apply(tr, vision.pixel_ray(self.K, x + w / 2.0, v_mid)) - origin
+                delay = vision.mid_ray_delay(
+                    np.arctan2(d_mid[1], d_mid[0]), scan_msg.angle_min, scan_msg.angle_increment,
+                    len(scan_msg.ranges), scan_msg.time_increment)
+                stamp_ray = scan_stamp + Duration(seconds=delay)
+                tr_ray = self._lookup_full(lidar_frame, stamp_ray, cam_frame, img_stamp)
+                if tr_ray is not None:     # else: late transform, keep the scan stamp as today
+                    tr, stamp = tr_ray, stamp_ray
+                    origin = self._apply(tr, np.zeros(3))
+            lidar_origin_map = None        # computed once per blob, only if the wall check runs
             # Rays through the left and right edges of the blob, in the LiDAR frame.
-            d_left = self._apply(tr_cam_to_lidar, vision.pixel_ray(self.K, x, v_mid)) - cam_origin_l
-            d_right = self._apply(tr_cam_to_lidar, vision.pixel_ray(self.K, x + w, v_mid)) - cam_origin_l
+            d_left = self._apply(tr, vision.pixel_ray(self.K, x, v_mid)) - origin
+            d_right = self._apply(tr, vision.pixel_ray(self.K, x + w, v_mid)) - origin
 
             # --- primary: the LiDAR beams in the central part of the blob ---
             face_robot = None
             source = 'lidar'
             cluster = vision.central_cluster(
-                scan_pts, cam_origin_l[:2], d_left[:2], d_right[:2],
+                scan_pts, origin[:2], d_left[:2], d_right[:2],
                 float(self.p['central_fraction']), float(self.p['lidar_cluster_depth_m']),
                 int(self.p['lidar_min_points']), float(self.p['min_cluster_coverage']))
             if cluster is not None:
                 face_xy, _, _ = cluster
                 face_lidar = np.array([face_xy[0], face_xy[1], 0.0])
-                face_robot = self._transform(face_lidar, lidar_frame, robot_frame, scan_stamp)
+                face_robot = self._transform(face_lidar, lidar_frame, robot_frame, stamp)
 
             # --- fallback: depth cloud median ---
             if face_robot is None and self.p['use_cloud_fallback']:
-                face_robot = self._face_from_cloud(blob, bgr.shape, vp, cam_frame, robot_frame, scan_stamp)
+                face_robot = self._face_from_cloud(blob, bgr.shape, vp, cam_frame, robot_frame, stamp)
                 source = 'cloud'
             if face_robot is None:
                 self._reject('no_range')
@@ -340,7 +356,7 @@ class Detection(Node):
             # Skipped when the LiDAR range is below the cloud's own minimum range: there the
             # cloud can only show something farther, which is not a contradiction.
             if source == 'lidar' and self.p['cloud_check'] and distance >= vp.z_min_m:
-                face_cloud = self._face_from_cloud(blob, bgr.shape, vp, cam_frame, robot_frame, scan_stamp)
+                face_cloud = self._face_from_cloud(blob, bgr.shape, vp, cam_frame, robot_frame, stamp)
                 if face_cloud is not None:
                     d_cloud = float(np.linalg.norm(face_cloud[:2]))
                     if abs(d_cloud - distance) > float(self.p['cloud_lidar_max_gap_m']):
@@ -348,21 +364,21 @@ class Detection(Node):
                         self.get_logger().debug(
                             f'dropped: LiDAR {distance:.2f} m vs cloud {d_cloud:.2f} m')
                         continue
-            face_map = self._transform(face_robot, robot_frame, 'map', scan_stamp)
+            face_map = self._transform(face_robot, robot_frame, 'map', stamp)
             if face_map is None:
                 self._reject('no_tf_map')
                 continue
             if self.p['map_wall_check']:
                 if lidar_origin_map is None:
-                    lidar_origin_map = self._transform(np.zeros(3), lidar_frame, 'map', scan_stamp)
+                    lidar_origin_map = self._transform(np.zeros(3), lidar_frame, 'map', stamp)
                 if lidar_origin_map is not None and self._hits_mapped_wall(lidar_origin_map, face_map):
                     self._reject('mapped_wall')
                     self.get_logger().debug(f'dropped: hit on a mapped wall at {distance:.2f} m')
                     continue
 
-            # Face -> center (half a side back), then to map at the scan time.
+            # Face -> center (half a side back), then to map at the same time.
             center_robot = vision.center_from_face(face_robot, side)
-            center_map = self._transform(center_robot, robot_frame, 'map', scan_stamp)
+            center_map = self._transform(center_robot, robot_frame, 'map', stamp)
             if center_map is None:
                 self._reject('no_tf_map')
                 continue
