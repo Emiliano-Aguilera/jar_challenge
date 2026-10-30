@@ -735,3 +735,15 @@ is skipped: bt_navigator logs it before its TF is ready). Return = judge's dista
 - Change: if the watch does not move AMCL, the fine-tune runs anyway (it has its own checks:
   fit >= 0.75 and sharp). The "Localization check" warning is logged only when the watch has a
   candidate, not for every low score (on the real robot that would be ~1 in 3 stops).
+
+### Q: can the Spin come first in the recovery round? (rejected)
+
+- Idea: stalls at narrow gaps end with the BT's Spin, which comes after the costmap-clearing round
+  (~20 s later). Branch `navegacion/spin-primero`: RoundRobin Spin -> clear costmaps -> Wait -> BackUp.
+- Result (600 s): maze_1 x4: 500 (done 172 s, 1 close call 2.8 cm at the gap wall end), 500 (174 s),
+  **100** (579 s, 111 planner failures, 38 spins, never returned); maze_2 at 172° 600 (no stall);
+  laberinto_1 200 (no recoveries at all). Development's tree: 0 close calls in 22 runs.
+- Why: recoveries also run when the planner fails, and there clearing the costmaps first is what
+  fixes it (stale LiDAR marks, goal in a marked cell). With Spin first the robot spun in place,
+  mission canceled 4 trips ("Nav2 lleva 10 recuperaciones") and lost two boxes and the return.
+- Decided: keep Humble's order. The gap stall costs time, not points.
