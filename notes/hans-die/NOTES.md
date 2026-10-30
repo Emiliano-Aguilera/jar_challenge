@@ -759,3 +759,24 @@ is skipped: bt_navigator logs it before its TF is ready). Return = judge's dista
   map gave 200 in 4 of 4 runs (590c915, e48ee98, ba920ff, aa147a3; AMCL max 0.10 m).
 - Decided: keep 0.10. The mechanism is not clear (the robot stops 5 cm earlier, nearer the block
   corner), but 2 of 2 against 0 of 4 is enough.
+
+## Real robot: distance scale and recovery speeds (2026-10-30, PR #51, asked in #39)
+
+### Q: the wheels also overcount distance; does it matter with the gyro heading?
+
+- Week-10 bag (`bag_replay/eval_rumbo_imu.py`, reference `refO_1`, 10 seeds): with the gyro
+  heading, AMCL position error median / p90 is 4.9 / 10.2 cm; with the wheels' steps x0.79,
+  3.4 / 5.7 cm; x0.9, 4.0 / 7.7 cm. Heading at stops barely changes (1.8° -> 1.7°).
+- Decided: scale learned in `rumbo_imu.py` as IMU turn / wheels turn while turning (the same
+  wheel constant overcounts turns, forward and sideways alike: 0.80 / 0.78 / 0.79). Used after
+  1 rad of turning, clamped to 0.7-1.1. `escala_avance` > 0 fixes it. The sim learns ~1.0, so
+  no sim-only switch.
+- Checked: bag, learned 0.798, AMCL 3.6 / 6.4 cm, heading at stops 1.6°. Sim (98f3f81, 600 s):
+  laberinto_1 200, return 1.9 cm; maze_3 at 86° 600, return 1.0 cm, AMCL median 1.5 cm; no
+  "distance scale" log line (stayed within 0.02 of 1.0); 0 collisions.
+
+### Q: recovery speeds
+
+- Organizers' floor tests: from rest the real robot needs ~0.15 m/s or ~0.5 rad/s to move.
+  BackUp was 0.05 m/s (never moves) and Spin's minimum 0.4 rad/s. Now 0.15 and 0.5.
+- Open: MPPI may still ask for less than 0.15 m/s near goals; the Rosario team watches for it.

@@ -6,7 +6,9 @@ import pytest
 from equipo_jar.rumbo_imu import RumboImu
 
 P = {'fuente_rumbo': 'giroscopo', 'signo_giroscopo': 0, 'imu_vieja_s': 0.5,
-     'signo_wz_minimo_rads': 0.2, 'signo_giro_minimo_rad': 0.5, 'signo_correlacion_minima': 0.7}
+     'signo_wz_minimo_rads': 0.2, 'signo_giro_minimo_rad': 0.5, 'signo_correlacion_minima': 0.7,
+     'escala_avance': 0.0, 'escala_giro_minimo_rad': 1.0, 'escala_minima': 0.7,
+     'escala_maxima': 1.1}
 
 
 def componer(a, b):
@@ -83,7 +85,7 @@ def test_gyro_sign_is_learned_and_heading_follows_the_imu():
 
 
 def test_fixed_sign_trajectory_is_wheel_steps_turned_with_the_imu():
-    robot = Robot({'signo_giroscopo': -1}, escala=1.25)
+    robot = Robot({'signo_giroscopo': -1, 'escala_avance': 1.0}, escala=1.25)
     girar(robot, math.pi / 2)
     avanzar(robot, 1.0)
     x, y, yaw = robot.fusionada()
@@ -129,3 +131,31 @@ def test_sign_is_not_learned_without_turning():
     robot = Robot({})
     avanzar(robot, 1.0)
     assert robot.r.signo == 0
+
+
+def test_distance_scale_is_learned_from_the_turns():
+    robot = Robot({}, escala=1.25)
+    girar(robot, 0.6)                              # sign learned, not enough turning yet
+    assert robot.r.escala == 1.0
+    girar(robot, math.pi / 2)
+    assert robot.r.escala == pytest.approx(0.8, abs=0.01)
+    x0, y0, _ = robot.fusionada()
+    rx, ry = robot.real[0], robot.real[1]
+    avanzar(robot, 1.0)
+    x, y, _ = robot.fusionada()
+    # Distance now follows the real one, not the wheels' 25 % excess.
+    assert math.hypot(x - x0, y - y0) == pytest.approx(
+        math.hypot(robot.real[0] - rx, robot.real[1] - ry), rel=0.02)
+
+
+def test_exact_odometry_learns_scale_one():
+    robot = Robot({}, escala=1.0)
+    girar(robot, 2.0)
+    girar(robot, -2.0)
+    assert robot.r.escala == pytest.approx(1.0, abs=0.01)
+
+
+def test_learned_scale_is_clamped():
+    robot = Robot({}, escala=2.0)
+    girar(robot, 2.0)
+    assert robot.r.escala == 0.7
