@@ -159,7 +159,9 @@ controller_server:
     general_goal_checker:
       plugin: nav2_controller::SimpleGoalChecker
       stateful: true                  # primero llega a la posición, después gira
-      xy_goal_tolerance: 0.10
+      # 0.15: a viewpoint does not need more. With 0.10 the robot froze 0.12 m from a goal in
+      # a corner for 56 s (maze_3); the real robot reacts ~0.25 s late and AMCL is ~4 cm off.
+      xy_goal_tolerance: 0.15
       yaw_goal_tolerance: 0.25
     precise_goal_checker:             # return bonus: 4 wheels inside 0.25 m -> position error < 0.10 m
       plugin: nav2_controller::SimpleGoalChecker
@@ -317,7 +319,7 @@ planner_server:
     GridBased:
       plugin: nav2_navfn_planner/NavfnPlanner
       # Si el objetivo cae en zona prohibida, planifica hasta una celda libre a <= 0.05 m (0.07 en
-      # diagonal): menos que xy_goal_tolerance (0.10), así el final del camino cuenta como llegada.
+      # diagonal): menos que xy_goal_tolerance (0.15), así el final del camino cuenta como llegada.
       # Con 0.2 el camino terminaba hasta 0.28 m lejos y el robot quedaba ahí sin llegar nunca
       # (punto de vista sobre una caja: 50 s). Con 0 rechazaba objetivos en el borde (+9 s).
       tolerance: 0.05
