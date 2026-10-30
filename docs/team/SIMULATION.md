@@ -44,7 +44,7 @@ gh workflow run simular.yml -R Emiliano-Aguilera/jar_challenge \
 | Input | Default | What |
 | --- | --- | --- |
 | `rama` | `development` | Branch to test |
-| `mapas` | `maze_1_6x5` | Comma-separated: `maze_1_6x5`, `maze_2_6x5`, `maze_3_6x6`, `maze_4_metal_6x6`, `laberinto_1`, `laberinto_simple` |
+| `mapas` | `maze_1_6x5` | Comma-separated: `maze_1_6x5`, `maze_2_6x5`, `maze_3_6x6`, `maze_4_metal_6x6`, `laberinto_1`, `laberinto_simple`, or worlds on the `mundos` branch ("Your own worlds") |
 | `repeticiones` | `1` | Runs per map, 1–10 |
 | `duracion` | `120` | Seconds per run after the judge publishes `/map`, 10–600 |
 | `grabar` | `false` | `true`: record an MCAP per run for the viewer |
@@ -170,6 +170,50 @@ Known issues:
   reload the link.
 - No Gazebo 3D view: only ROS data, in Lichtblick.
 
+## Your own worlds
+
+Test on a world you design: put it on the `mundos` branch and use its name in `mapas` (or `mapa`).
+The server checks it, draws its `/map` and runs it with the same judge and collision counter.
+
+1. **Start from a copy of a practice world** (`maze_1_6x5_victimas.world`, in the simulator repo
+   `yahboom_rosmaster_gazebo/worlds/`, or `mundos/ejemplo_senuelos/` on the branch). It already
+   has the floor, the 6 `<plugin>` lines and the victims model. Move walls and boxes; don't write
+   one from nothing.
+2. Save it as `mundos/<name>/<name>.world` (`<name>`: lowercase letters, digits, `_`; not a
+   built-in name). Extra models go in `mundos/<name>/models/<model>/` (`model.config` +
+   `model.sdf`) and are used with `<include><uri>model://<model></uri></include>`. Built-in models
+   (`plywood_panel`, `wooden_joint`, …) need no upload; don't reuse their names.
+3. Push to `mundos`. It is an orphan branch (only `mundos/` and a README): never merge it, never
+   open a PR from it. Everything on it is public.
+   ```bash
+   git fetch origin mundos && git worktree add ../mundos origin/mundos && cd ../mundos
+   # add mundos/<name>/..., then:
+   git add mundos/<name> && git commit -m "mundos: <name>" && git push origin HEAD:mundos
+   ```
+   Or on GitHub: switch to branch `mundos` → Add file → Upload files.
+4. Run: `gh workflow run simular.yml -R Emiliano-Aguilera/jar_challenge -f rama=<branch> -f mapas=<name> -f duracion=120`.
+
+Rules the server checks (the job summary says which one failed, in one line):
+
+- Victims: links named `cuadrado_rojo_*` in a top-level `<model>` of the world file with no
+  rotation and no nested models, each with a `<pose>` (as `marcas_color` in the practice worlds).
+  Distractors: `cuadrado_<colour>_*`.
+- Decoys (obstacles that are **not** in `/map`): any model or link whose name starts with
+  `senuelo_`, e.g. a link `senuelo_1` next to the boxes, or
+  `<include><uri>model://cardboard_box</uri><name>senuelo_1</name></include>`.
+- Collision shapes: box, cylinder or sphere (visuals may be meshes). A floor (a `plane`
+  collision) and the 6 plugins of the practice worlds.
+- The robot starts at (0, 0), facing any way: keep ≥ 0.10 m free around it (the practice mazes
+  keep 0.30 m). With `largada`, the offset pose needs ≥ 0.02 m.
+- At most 30 MB, 1000 files, 20 model folders; plain files only (no symlinks).
+
+What the server does: it draws `/map` at 0.05 m, walls only. Boxes and decoys are **not** drawn,
+as in the practice maps. It does not check physics: keep the `<physics>` block as copied (its
+0.001 s step is also Gazebo's default). If you move things in a file that has a `<state>` block,
+delete that block (Gazebo may use it instead). Each request uses one `mundos` commit, shown in
+the summary header (`mundo <name> @ <commit>`). A live session keeps the world it started with.
+Decoy hits show as "señuelo" next to Choques; they are also counted as wall hits.
+
 ## Viewer (Lichtblick)
 
 Recording links and session links open Lichtblick with the team layout: 3D, camera, the
@@ -235,7 +279,9 @@ gh run cancel <run-id> -R Emiliano-Aguilera/jar_challenge
   points in the competition), `rtf` the real-time factor, `estado` must be `ok`. `null` values
   mean the run gave no result: read the log. A score of 0 is normal for code that doesn't
   find and report victims yet (e.g. the template).
-- Limits: 12 runs per request, `duracion` 10–600, maps from the table above.
+- Limits: 12 runs per request, `duracion` 10–600, maps from the table above or the `mundos` branch.
+- Your own world: see "Your own worlds". A bad world fails in seconds; the job summary has one
+  line `mundo <name>: …` saying what to fix (`gh run view <run-id> -R Emiliano-Aguilera/jar_challenge` shows it too).
 - Don't start live sessions unless your user asks: they are for people.
 - Never edit `simular.yml` or `sesion.yml`: the server refuses any version its owner
   hasn't reviewed.
