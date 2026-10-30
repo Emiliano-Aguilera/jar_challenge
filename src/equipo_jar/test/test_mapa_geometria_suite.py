@@ -8,7 +8,7 @@ import sys
 def test_map_coordinate_suite():
     root = Path(__file__).resolve().parents[3]
     suites = [root / 'pruebas' / name for name in (
-        'test_mapa_coordenadas.py', 'test_mapa_alcanzable.py')]
+        'test_mapa_coordenadas.py', 'test_mapa_alcanzable.py', 'test_rayos_mapa.py')]
     assert all(suite.is_file() for suite in suites), 'Run map tests from the full source checkout'
     environment = dict(os.environ)
     environment['PYTHONPATH'] = (
