@@ -74,3 +74,6 @@ def goal_blocked(costmap, x, y, blocked_value):
         return False
     value = cell_value(costmap, x, y)
     return value is not None and value >= blocked_value
+
+def start_ready(localization_ready, elapsed_s, max_wait_s):
+    return localization_ready or elapsed_s >= max_wait_s

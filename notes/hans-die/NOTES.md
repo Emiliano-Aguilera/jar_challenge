@@ -493,3 +493,290 @@ Asked by mission (Bautista, 2026-10-27/28).
   heading median 1.1-1.2° (0.8° with 0.2), p90 3.2-3.4° (2.4°), max 5.9-7.3° (5.4°).
   Decided: `alpha1` stays 0.2 for now; set it for the real robot with the new bags or in
   Rosario (it is a param).
+
+### Q: how does the node fix the heading after a turn? (from 2026-10-28)
+
+- Decided (`correccion_giro.py`, used by `localizacion.py`): a turn is a run of /odom samples
+  with |wz| >= `girando_rads` (0.3 rad/s) and at least `giro_minimo_rad` (0.3) of signed yaw
+  change over the run. After a turn the heading is in doubt. When the turn ends the node asks
+  AMCL for a no-motion update every 0.2 s tick, and trusts the heading again after
+  `actualizaciones_giro` (10) AMCL updates with scans taken after the turn (motion updates
+  count too), or after `max_correccion_s` (4 s) from the turn end or `max_duda_s` (15 s) in all.
+  `/jar/localizacion_lista` (Bool, transient local): false until the start-up updates are done
+  (counted when AMCL publishes, not when requested) and while in doubt.
+- Tried first: "turning" = |wz| >= 0.05 and requests only with the robot fully still. On the
+  bag small heading corrections while driving kept restarting the count and the bag's stops
+  are ~3 scans: boxes > 0.25 m off at stops only 59 % -> 31 %, flag false 59 of 121 s.
+- Second version (first push of PR #34): any rotation since the last stop added up (`abs`),
+  and any sample with |wz| >= 0.3 restarted the count. Emiliano's review: wobble while driving
+  adds up to a "turn" (flag false 19-24 % of a straight drive), and wz dithering around 0.3
+  kept the flag false with no timeout. Replaced by the signed per-turn rule above, plus
+  `max_duda_s`.
+- Correction (2026-10-29): the first table here was read one row off. `eval_nodo.py` printed
+  the "when the flag turns true" line before its variant's line, not after. The old logic
+  really gave 4.8° / 5.6 % with 5 updates and 1.3° / 0 % with 10, so the default 5 was wrong.
+  The script now prints it after.
+- Checked on the week-10 bag (`eval_nodo.py`, the node's own class driving the replay, 10
+  seeds, current logic). "At the stop end" = the last still scan of each stop in the recorded
+  motion (the bag robot did not wait); "when the flag turns true" = what detection/mission
+  would see if they wait for the flag:
+
+| Variant | Heading at stop end, median | Box > 0.25 m at stop end | Heading when flag turns true, median / p90 | Box > 0.25 m then | Flag false |
+| --- | --- | --- | --- | --- | --- |
+| off | 10.9° | 59 % | - | - | 0 s |
+| 5 updates | 7.7° | 33 % | 5.4° / 8.5° | 11 % | 41 of 121 s |
+| **10 updates** | 6.8° | 22 % | **1.9° / 4.7°** | **0.8 %** | 59 s |
+| 15 updates | 6.7° | 21 % | 1.1° / 3.3° | 0 % | 70 s |
+| alpha1 0.5 + 10 updates | 5.1° | 2.4 % | 1.5° / 3.9° | 0 % | 59 s |
+| old logic, 10 updates | 6.9° | 21 % | 1.3° / 3.9° | 0 % | 67 s |
+
+  The flag is false mostly while the robot turns and drives, not only at stops: the time
+  mission would wait is much less. The IMU heading (PR #44) removes most of the error without
+  waiting; with it `actualizaciones_giro` can go lower.
+- Checked in the simulator (branch at 4ff5abd, second version with 5 updates, 600 s):
+  laberinto_1 200, maze_1 500, maze_3 300 (same as before: laberinto_1's second box is
+  found only on some return paths, maze_3 always 300). Fixes 35 / 21 / 9, each 0.9 s on
+  average (max 1.2 s), none timed out. "Localization ready" once at start-up. AMCL error
+  unchanged (max 0.13 / 0.09 / 0.07 m). If mission waited at every fix the cost would be at
+  most ~30 / 20 / 9 s.
+- Checked in the simulator again (3830adf, current logic, 10 updates, development with #37/#43,
+  600 s): laberinto_1 300, maze_1 500, maze_3 600, all with `/done` and the return bonus.
+  Fixes 28 / 14 / 17, 1.2 / 1.5 / 1.7 s on average (max 2.1 s). Timeouts 9 / 2 / 1, all from
+  `max_duda_s` while driving with many turns in a row, none from `max_correccion_s`. AMCL
+  error max 0.13 / 0.06 / 0.10 m. If mission waited at every fix: at most ~34 / 21 / 29 s.
+- Pending: mission waits on the flag (Bautista), detection skips frames (Santos). Then set
+  `settle_s` 0. alpha1 for the real robot with the new bags.
+
+### Q: can AMCL take the heading from the IMU instead of the wheels? (from 2026-10-29)
+
+- Idea (Emiliano): a second odometry, `odom_fused`, that keeps the wheels' steps in the robot
+  frame but turns them with the IMU heading. AMCL uses it as its odom frame. The real IMU
+  measures turns well (0.80 of `/odom`, like the lidar), so AMCL no longer sees the 25 % excess.
+- Decided (`odometria_imu.py` node, logic in `rumbo_imu.py`): publishes TF `odom_fused -> odom`
+  with each `/odom` stamp; AMCL `odom_frame_id: odom_fused`. Tree: map -> odom_fused -> odom ->
+  base_footprint. The robot's `odom`, `/odom` and everything that uses them (local costmap,
+  behaviors, mission, detection's fixed frame) are unchanged. Launched only with AMCL.
+  - Heading: gyro z integrated, each sample's rate over the interval that ends at its stamp
+    (the trapezoid rule gave 3.1° instead of 1.8° at stops on the bag). The real gyro has the
+    wrong sign: the sign is learned from the wheels (correlation >= 0.7 after 0.5 rad of
+    turning faster than 0.2 rad/s; bag: -0.95). Until then, and when the IMU is silent for
+    `imu_vieja_s`, a step uses the wheels' heading.
+  - On the robot `/imu/data` has the same stamps as `/odom` and comes within ~1 ms: each
+    `/odom` waits for its IMU sample (TF ~1.3 ms after `/odom` on the bag, max 5 ms).
+  - Params under `odometria_imu` in `navegacion.yaml`. `fuente_rumbo: ruedas` turns it off
+    (identity transform); `orientacion` uses the IMU orientation's yaw instead of the gyro.
+- Checked on the week-10 bag (`bag_replay/eval_rumbo_imu.py`, the node's class fed in bag
+  order, 10 seeds). Same stops as above (end of each stop after a turn):
+
+| Variant | Heading at stops: median / p90 / max | Box 1.5 m > 0.25 m off | Heading, whole run: median / p90 |
+| --- | --- | --- | --- |
+| wheels (today) | 10.9° / 14.6° / 18.2° | 59 % | 4.1° / 13.1° |
+| wheels + PR #34 fix (5 updates) | 6.5° / 11.5° / 14.1° | 32 % | 3.1° / 10.5° |
+| `ruedas` (off) | 10.9° / 14.6° / 18.2° | 59 % | 4.1° / 13.1° |
+| **gyro, learned sign** | **1.8° / 4.0° / 6.1°** | **0 %** | 1.3° / 3.9° |
+| gyro + PR #34 fix | 1.3° / 3.3° / 5.5° | 0 % | 1.2° / 3.7° |
+| IMU orientation | 1.8° / 4.1° / 7.1° | 0 % | 1.2° / 4.0° |
+
+  Sign learned at 24 s (first real turn); before that the wheels' heading put odom_fused ~6°
+  off, which AMCL fixed. Caveat: the reference pose was seeded with the IMU, so it favours the
+  IMU; its own error is ~1-3°.
+- Checked in the simulator (6731f9f, 600 s): laberinto_1 300, maze_1 500, maze_3 600 (dev +
+  PR #34 at 4ff5abd: 200, 500, 300; laberinto_1 varies with the return path, maze_3 found its
+  third box this time). Reports 0.01-0.09 m from the box centers, return 0.04-0.09 m. AMCL
+  position error at each "Begin navigating" vs the true trajectory: max 0.159 / 0.054 /
+  0.060 m (4ff5abd: 0.137 / 0.062 / 0.065). Gyro sign learned -1 in the sim too, 6-12 s after
+  `/map`. Start-up TF warnings are the same as development. New: detection logged 2 (maze_1)
+  and 5 (maze_3) "no transform base_footprint -> map ... extrapolation into the future" by
+  10-20 ms (throttled to one per 5 s): the chain now waits for `odom_fused -> odom` too, which
+  comes with `/odom` (10 Hz). It drops a few camera frames; scores were not affected.
+- With this, PR #34's fix after turns adds little on the bag (1.8° -> 1.3°). Its flag
+  (`/jar/localizacion_lista`) is still useful; `actualizaciones_giro` can be lowered or set to 0.
+
+## Localization: start pose from the LiDAR, watch and fine-tune (from 2026-10-29)
+
+### Q: what if the robot is placed off the origin or turned? (Emiliano's `largada` input)
+
+- Evidence (sim, development 0ac52a9): with `largada=0.1,0.1,1.5` (86° turned) on maze_3 AMCL
+  stayed at yaw -0.05 (never converged), 55 planner failures, a wrong report, 0 points. With a
+  sloppy `0.2,0.15,0.5` AMCL converged but the start pose mission saved was 0.06-0.11 m off
+  (it is only fixed when the robot moves), and the return check uses it.
+- Decided (`pose_inicial.py`, used by `localizacion`): one sweep of 360 LiDAR points matched
+  against /map. Score = mean of exp(-d²/2σ²), d = distance from each point to the nearest wall
+  (σ 0.05 m, capped at 4σ). Coarse grid: every 0.05 m within 0.5 m of the guess, every 2° of
+  heading; then two finer grids around the 4 best poses near the guessed heading and the 4 best
+  overall. A heading > 0.8 rad from the guess must score 10 % better (symmetric spots). The
+  result goes to AMCL with σ 0.05 m / 0.05 rad. If the score is < 0.5, or no scan/TF in 3 s,
+  the guess is used as before (σ 0.2 / 0.3).
+- Checked offline (scratchpad `inicio/`):
+  - 6 practice maps, any heading, 0-0.25 m off: 0 failures, ~1-2 cm, < 1.5°. Same with the
+    world walls moved/thickened by up to 2 cm: <= 6.5 cm, no gross error.
+  - Real bag (week 10): from guesses up to 180° off, < 0.5 cm from the reference start, score 0.88.
+  - 100 random mazes x 5 starts (2-5 boxes missing from the map): any heading 495/500 right
+    (median 0.8 cm); the 5 wrong are 180° flips in symmetric mazes with the robot reversed.
+    Heading within ±46° of the guess: 500/500, max 2.1 cm / 1.6°.
+- Checked in sim (a7b19b3, 600 s): match 1.2-1.4 s, score 0.93-0.99.
+
+| Map | largada | Score | Start error | Return | Before (development) |
+| --- | --- | --- | --- | --- | --- |
+| laberinto_1 | 0.2,0.15,0.5 | 200 | 0.057 | 0.089 | 200, start 0.112, return 0.071 |
+| maze_1 | 0.2,0.15,0.5 | 500 | 0.022 | 0.029 | 500, start 0.058, return 0.042 |
+| laberinto_simple | 0.1,0.1,1.5 | 500 (max) | 0.014 | 0.045 | - |
+| maze_3 | 0.1,0.1,1.5 | 600 (max) | 0.022 | 0.044 | 0 (AMCL lost) |
+
+  laberinto_1's start error is the map/world offset of that map (match 0.161,0.211 vs placed
+  0.2,0.15; see "Why AMCL is off by ~0.1 m on laberinto_1 only").
+
+### Q: what if AMCL gets lost during the run? (vigia)
+
+- On the real robot a slip or a bump can move it; AMCL alone may not come back (alpha4 0.01
+  keeps the cloud tight). `vigia.py`: every 2 s while the robot is still, score the last sweep
+  at AMCL's pose. Week-10 bag: median 0.71 at the reference pose (p10 0.55, 3 % below 0.5);
+  0.1 m off gives 0.33, 10° off 0.44. Below 0.5: search 0.5 m / ±0.35 rad around. A pose that
+  scores >= 0.7 and 0.2 more, >= 0.10 m or 0.1 rad away, seen twice at the same spot (5 cm):
+  AMCL is moved there (σ 0.05). Logs a 30 s summary of the scores.
+
+### Q: can AMCL be more precise when the robot stops? (fine-tune)
+
+- Evidence: returns 0.03-0.09 m off the start while the reports are 0.01-0.09 m off; AMCL
+  wanders a few cm around the true pose at a stop.
+- Decided: when the vigia score is fine, also search 0.15 m / ±0.1 rad around AMCL's pose. If
+  the best pose scores >= 0.75, its sharpness (score drop 5 cm / 2° away) is >= 0.03 (a plain
+  corridor slides: no fix along it) and it is >= 1.5 cm or 0.015 rad away: send it to AMCL with
+  σ 0.02. The flag stays false until AMCL takes it (max 2 s). Also done once at the start,
+  before the flag first turns true, so mission saves the fine-tuned start pose.
+
+## Navigation: speed limits (from 2026-10-29)
+
+### Q: how fast can it go, and where does the factory limit go?
+
+- One place: `limites` at the top of `navegacion.yaml` (`lineal_max_ms`, `reversa_max_ms`,
+  `giro_max_rads`, `margen_giro_smoother`). `navegacion.launch.py` copies them into MPPI
+  (vx_max, vy_max, vx_min, wz_max) and the velocity smoother (max/min_velocity). If the robots
+  come with a lower factory limit, set it there: MPPI must plan with the speed the robot really
+  reaches, or it turns and stops late.
+- Evidence (sim, 0.5 m/s cap): the robot moves at median 0.20-0.28 m/s, p90 0.35-0.38. Short
+  legs between viewpoints and turns, not the cap, set the time.
+- Tried 0.7 m/s (temporary branch, 300 s): laberinto_1 100 (p50 0.26, p90 0.45); maze_1 500,
+  done 187.6 s vs 210.7 s, but 1 wall collision (t ~107.6 s at (-0.49,-2.36), in the stuck
+  episode at the box gap below). Every 0.5 m/s run had 0 collisions.
+- Real robot (week-10 bag): steady state follows `/cmd_vel` (0.5 m/s -> 0.48-0.51), with
+  ~0.2-0.3 s dead time and ~0.5 s ramp. With that delay, 0.7 m/s means ~0.2 m before a
+  correction acts.
+- Decided: keep 0.5 / 0.35 / 1.9. Not worth -50 per collision for ~10 % time.
+
+### Q: the maze_1 pause at the red box (-0.17,-2.02)
+
+- Every maze_1 run: the leg from (-1.12,-1.47) to (0.03,-2.82) goes through the diagonal gap
+  between the box and the wall end at (-0.5,-2.42). Free width ~0.31-0.36 m, robot 0.24 m wide
+  with padding: MPPI stalls ~30-40 s (3-4 "Failed to make progress", mission cancels, Spin),
+  then passes or takes the other side. The controller also misses its 20 Hz there.
+- Blocking such gaps in the planner needs an inscribed radius >= 0.18 m (offline NavFn model:
+  0.17 still plans through it). Ground truth of 11 recent runs: the robot centre is closer than
+  0.18 m to a wall or box 0-8 s per run, so the planner would start inside lethal cost and fail
+  there. Not changed: the pause costs time, not points (all reports before 300 s).
+
+### Q: why does the start match sit ~3 cm from where AMCL settles? (half a cell)
+
+- Evidence (6 runs, 590c915-fce08da): the match minus the true start is about (+0.02, +0.03) m on
+  maze_1, laberinto_simple and maze_4, the same at yaw 0.5 and 1.5 (so a map offset, not a robot-frame
+  one). After the 10 settling updates AMCL had moved 2.4-3.0 cm away from the match in 4 runs, and the
+  start fine-tune pulled it back. maze_4 (placed at 0,0,0): match (0.017, 0.028), fine-tune to
+  (0.020, 0.022), and AMCL was back at (0.00, 0.00) when mission saved the start pose.
+- Cause: Nav2 Humble AMCL centres map cell i at origin + i * resolution (`convertMap` sets
+  origin + size/2 * scale, `MAP_GXWX` rounds). The match (like costmap_2d) used origin + (i + 0.5) *
+  resolution. So the two disagree by half a cell, (0.025, 0.025) m, and the fine-tune fought AMCL.
+- Which one fits the world: the match with AMCL's reading would be (-0.003, +0.005), (-0.003, +0.003),
+  (-0.008, +0.003), (+0.003, -0.031), (-0.031, +0.008) m off on maze_1, laberinto_simple, maze_4,
+  maze_2, maze_3 (mean ~1.6 cm); with the + 0.5 reading ~3.4 cm. On these practice maps AMCL's
+  reading fits the world better (maze_2 and maze_3 are ~3 cm off along one axis either way).
+- Change: the match reads cells as AMCL does. Offline benches are unaffected (scans and match used
+  the same reading); the unit tests now raycast with AMCL's reading and require < 1.5 cm (a half-cell
+  mismatch gives 3.5 cm). Side note: the costmaps keep the + 0.5 reading, so static walls are
+  2.5 cm off in +x/+y relative to AMCL; the LiDAR layer marks the real walls, and padding is 2 cm.
+
+## Final validation of navegacion/rosario (2026-10-29, 600 s, one map per request)
+
+AMCL error = `Begin navigating` poses vs the judge's trajectory (the first goal's "(0.00, 0.00)" line
+is skipped: bt_navigator logs it before its TF is ready). Return = judge's distance at `/done`.
+
+| Commit | Map | largada | Score | Done | Collisions | AMCL median / max | Return |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 32d67a8 | maze_1 | 0.2,0.15,0.5 | 500/500 | 190 s | 0 | 1.1 / 6.1 cm | 0.7 cm |
+| 32d67a8 | maze_4 | 0,0,0 | 500/500 | 156 s | 0 | 2.1 / 4.2 cm | 3.6 cm |
+| 32d67a8 | laberinto_simple | 0.1,0.1,1.5 | 500/500 | 52 s | 0 | 1.5 / 1.9 cm | 2.5 cm |
+| fce08da | maze_2 | 0.15,-0.1,3.0 | 600/600 | 159 s | 0 | 1.4 / 2.3 cm | 5.4 cm |
+| fce08da | maze_3 | 0.1,0.1,1.5 | 600/600 | 163 s | 0 | 2.9 / 5.8 cm | 8.4 cm |
+| 590c915 | maze_2 / maze_3 / maze_1 | as above | 600 / 600 / 500 | 112 / 174 / 197 s | 0 | 2.2-2.7 / 5-6 cm | 4.6-9.0 cm |
+| 590c915 | laberinto_1 | 0.2,0.15,0.5 | 200 (1 of 3 boxes found) | 365 s | 0 | 5.2 / 11.4 cm (map offset) | 10.2 cm |
+| b24caf2 | maze_4 / laberinto_simple | 0,0,0 / 0.2,0.15,0.5 | 500 / 500 | 139 / 52 s | 0 | 2.6-2.9 / 3.3-7.1 cm | 4.9 / 6.3 cm |
+
+- Start match with 32d67a8: 0.6-0.8 cm from the true start (was 3.3-3.9 cm with the + 0.5 reading).
+- Mission checks the return 0.5 s after arriving (`return_still_s`); the fine-tune lands 0.3-2.5 s
+  after the stop, so the check sees AMCL before it. Suggested to mission: `return_still_s: 2.0`.
+- maze_2 at yaw 3.0: the return got stuck ~30 s at (-0.8, 0.46) (5 "Failed to make progress", 1 spin);
+  mission's second try arrived at 4.4 cm. The fine-tune fired 5 times there for ~1° heading
+  differences (the robot creeps while MPPI tries): harmless, but `afinar_quieto: false` turns it off.
+
+### Q: does the watch work with the real robot's lower scores? (week-10 bag replay)
+
+- Replay (scratchpad `inicio/bag_vigia2.py`): the 125 still scans of the bag, AMCL taken as the
+  reference pose (moved half a cell to AMCL's map reading) plus an offset in a random direction and
+  1° of heading noise; the node's Vigia and fine-tune logic on each scan.
+- Before: when AMCL is 6-9 cm off, the real score drops below 0.5, the watch searches, finds no pose
+  >= 0.10 m away, and nothing is fixed (fine-tune ran only when the score was fine).
+
+| AMCL off | False moves | Fine-tunes before | Fine-tunes now | Closer / farther (now) |
+| --- | --- | --- | --- | --- |
+| 0 cm | 0 | 38 (heading only, all better) | 38 | - |
+| 3 cm | 0 | 58 | 92 | 92 / 0 |
+| 6 cm | 0 | 27 | 89 | 89 / 0 |
+| 9 cm | 0 | 1 | 88 | 88 / 0 |
+
+- Change: if the watch does not move AMCL, the fine-tune runs anyway (it has its own checks:
+  fit >= 0.75 and sharp). The "Localization check" warning is logged only when the watch has a
+  candidate, not for every low score (on the real robot that would be ~1 in 3 stops).
+
+### Q: can the Spin come first in the recovery round? (rejected)
+
+- Idea: stalls at narrow gaps end with the BT's Spin, which comes after the costmap-clearing round
+  (~20 s later). Branch `navegacion/spin-primero`: RoundRobin Spin -> clear costmaps -> Wait -> BackUp.
+- Result (600 s): maze_1 x4: 500 (done 172 s, 1 close call 2.8 cm at the gap wall end), 500 (174 s),
+  **100** (579 s, 111 planner failures, 38 spins, never returned); maze_2 at 172° 600 (no stall);
+  laberinto_1 200 (no recoveries at all). Development's tree: 0 close calls in 22 runs.
+- Why: recoveries also run when the planner fails, and there clearing the costmaps first is what
+  fixes it (stale LiDAR marks, goal in a marked cell). With Spin first the robot spun in place,
+  mission canceled 4 trips ("Nav2 lleva 10 recuperaciones") and lost two boxes and the return.
+- Decided: keep Humble's order. The gap stall costs time, not points.
+
+### Q: xy_goal_tolerance 0.15 instead of 0.10? (rejected)
+
+- Idea: in maze_3 the robot once froze 0.12 m from a corner viewpoint for 56 s; 0.15 would accept it.
+  Branch `navegacion/tolerancia` (on top of `localizacion/afinar-siempre`).
+- Result (600 s, largada 0.2,0.15,0.5): maze_3 600 (167 s), maze_1 500 (194 s), but laberinto_1
+  **100 twice** (577 s and 572 s, no return). Both times the robot stopped in the pocket west of
+  (-1.0, 1.4) and stayed there for minutes: AMCL 0.1-0.33 m off the truth there, empty MPPI plans
+  ("Resulting plan has 0 poses"), "Collision Ahead" on BackUp and Spin. Without the change the same
+  map gave 200 in 4 of 4 runs (590c915, e48ee98, ba920ff, aa147a3; AMCL max 0.10 m).
+- Decided: keep 0.10. The mechanism is not clear (the robot stops 5 cm earlier, nearer the block
+  corner), but 2 of 2 against 0 of 4 is enough.
+
+## Real robot: distance scale and recovery speeds (2026-10-30, PR #51, asked in #39)
+
+### Q: the wheels also overcount distance; does it matter with the gyro heading?
+
+- Week-10 bag (`bag_replay/eval_rumbo_imu.py`, reference `refO_1`, 10 seeds): with the gyro
+  heading, AMCL position error median / p90 is 4.9 / 10.2 cm; with the wheels' steps x0.79,
+  3.4 / 5.7 cm; x0.9, 4.0 / 7.7 cm. Heading at stops barely changes (1.8° -> 1.7°).
+- Decided: scale learned in `rumbo_imu.py` as IMU turn / wheels turn while turning (the same
+  wheel constant overcounts turns, forward and sideways alike: 0.80 / 0.78 / 0.79). Used after
+  1 rad of turning, clamped to 0.7-1.1. `escala_avance` > 0 fixes it. The sim learns ~1.0, so
+  no sim-only switch.
+- Checked: bag, learned 0.798, AMCL 3.6 / 6.4 cm, heading at stops 1.6°. Sim (98f3f81, 600 s):
+  laberinto_1 200, return 1.9 cm; maze_3 at 86° 600, return 1.0 cm, AMCL median 1.5 cm; no
+  "distance scale" log line (stayed within 0.02 of 1.0); 0 collisions.
+
+### Q: recovery speeds
+
+- Organizers' floor tests: from rest the real robot needs ~0.15 m/s or ~0.5 rad/s to move.
+  BackUp was 0.05 m/s (never moves) and Spin's minimum 0.4 rad/s. Now 0.15 and 0.5.
+- Open: MPPI may still ask for less than 0.15 m/s near goals; the Rosario team watches for it.

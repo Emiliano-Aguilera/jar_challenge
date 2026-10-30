@@ -5,6 +5,30 @@ and `docs/team/INTERFACES.md`. Read `notes/marcorita/NOTES.md` for decisions.
 
 ## Local planner
 
+### Current task: ray boundaries (2026-10-30)
+
+Marco authorized a local fix of Grid.visible, on a separate task branch, with
+an independent oracle, 18-plan comparison and full verifier. Branch
+cobertura/rayos-bordes in jar_challenge-rayos starts at development 53ecc6b.
+Marco subsequently authorized publishing this verified ray fix and merging
+its PR after green CI with no pending issues (2026-10-30). This exception is
+only for cobertura/rayos-bordes. Mission PR #36 and PR #16 remain separate;
+do not merge them under this authorization.
+Read RAY_BOUNDARIES.md. No mission, inspection, perception, parameters,
+launch, navigation, tools or workflows are changed. The PR #36 checkout is
+preserved at b75ef35 and remains draft; PR #16 also remains separate/draft.
+The CPU optimization stays uncommitted in jar_challenge-mapa. Research scripts
+are in ../investigacion-caras-2026-10-30; do not activate the face prototype.
+The ray fix does not establish a camera/score improvement in the pocket.
+Final local verification is complete: 64 focused tests, all 18 complete plans
+identical with no dense loss, 213 package tests and full verifier green.
+Final source SHA256 starts 8bfb728c. Three alternating CPU pairs on three maps
+vary -6.94% to +6.57%, max extra median 0.342 s. No speedup claim. All changes
+were verified locally before publication. GitHub and the local receipt hold
+the publication/merge state.
+No new manual simulation is authorized. Verification status is in the ray
+note and ../auditoria-rayos-2026-10-30/ESTADO.md.
+
 ### Current task: execution audit and organizer tips (2026-10-28)
 
 Branch cobertura/auditoria-robusta started from development 93bdd59 and was

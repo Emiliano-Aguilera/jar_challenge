@@ -120,6 +120,10 @@ deteccion:
     robot_frame: base_footprint
     #PARAM: frame used to bridge image time and scan time (odom: smooth, always available).
     fixed_frame: odom
+    #PARAM: look up the camera-LiDAR transform at the time the LiDAR measured the middle of the blob
+    #       (~0.13 s sweep, ray i at stamp + (n-1-i) * time_increment) instead of the scan stamp.
+    #       No effect when time_increment is 0 (simulator).
+    per_ray_time: true
     #PARAM: publish /jar/deteccion/debug (costs CPU; false in competition). Startup only.
     publish_debug: false
 
@@ -165,7 +169,7 @@ mision:
     visit_angles: 12
     visit_min_shift_m: 0.4
     visit_box_margin_m: 0.25
-    start_wait_s: 4.0
+    localization_wait_max_s: 10.0
     goal_timeout_s: 90.0
     stuck_time_s: 20.0
     stuck_distance_m: 0.05
@@ -183,6 +187,7 @@ mision:
     max_recoveries: 10
     return_tolerance_m: 0.05
     return_max_tries: 3
-    return_still_s: 0.5
+    return_still_s: 2.0
     return_still_m: 0.01
+    return_check_max_s: 10.0
     costmap_blocked_value: 99
