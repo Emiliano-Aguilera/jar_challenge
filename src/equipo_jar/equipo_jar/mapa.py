@@ -196,29 +196,71 @@ class Grid:
         return safe
 
     def visible(self, start, end, threshold):
-        """Supercover ray: a wall touched at a grid corner blocks the ray too."""
-        first, last = self.cell(*start), self.cell(*end)
-        if first is None or last is None:
+        """Closed-segment supercover; occupied/unknown boundary touches block.
+
+        Traverse cells entered by the open segment; check its closed endpoints
+        separately. A boundary's floor cell may be touched but never entered.
+        """
+        if not all(math.isfinite(v) for v in (*start, *end)):
             return False
+        ax, ay = start[0] - self.origin.x, start[1] - self.origin.y
+        bx, by = end[0] - self.origin.x, end[1] - self.origin.y
+        sx = (self.cos * ax + self.sin * ay) / self.resolution
+        sy = (-self.sin * ax + self.cos * ay) / self.resolution
+        ex = (self.cos * bx + self.sin * by) / self.resolution
+        ey = (-self.sin * bx + self.cos * by) / self.resolution
+        # Only absorb floating-point transform noise, in units of cells.
+        nx, ny, mx, my = round(sx), round(sy), round(ex), round(ey)
+        sx = nx if abs(sx - nx) <= 1e-12 else sx
+        sy = ny if abs(sy - ny) <= 1e-12 else sy
+        ex = mx if abs(ex - mx) <= 1e-12 else ex
+        ey = my if abs(ey - my) <= 1e-12 else ey
         clear = self._free_mask(threshold)
         width, height = self.width, self.height
-        i, j = first
-        if not clear[j * width + i]:
-            return False
-        end_i, end_j = last
-        dxw, dyw = end[0] - start[0], end[1] - start[1]
-        dx = (self.cos * dxw + self.sin * dyw) / self.resolution
-        dy = (-self.sin * dxw + self.cos * dyw) / self.resolution
-        sxw, syw = start[0] - self.origin.x, start[1] - self.origin.y
-        sx = (self.cos * sxw + self.sin * syw) / self.resolution
-        sy = (-self.sin * sxw + self.cos * syw) / self.resolution
+        # A closed endpoint on a grid line/corner touches two/four squares.
+        for x, y in ((sx, sy), (ex, ey)):
+            i, j = math.floor(x), math.floor(y)
+            if not (0 <= i < width and 0 <= j < height and clear[j * width + i]):
+                return False
+            if x == i and (i == 0 or not clear[j * width + i - 1]):
+                return False
+            if y == j and (j == 0 or not clear[(j - 1) * width + i]):
+                return False
+            if x == i and y == j and not clear[(j - 1) * width + i - 1]:
+                return False
+        dx, dy = ex - sx, ey - sy
+        if dx == 0 and dy == 0:
+            return True
+        i, j = math.floor(sx), math.floor(sy)
+        if dx < 0 and sx == i:
+            i -= 1
+        if dy < 0 and sy == j:
+            j -= 1
+        end_i, end_j = math.floor(ex), math.floor(ey)
+        if dx > 0 and ex == end_i:
+            end_i -= 1
+        if dy > 0 and ey == end_j:
+            end_j -= 1
+        along_x_edge = dx == 0 and sx == i
+        along_y_edge = dy == 0 and sy == j
         step_i, step_j = (1 if dx > 0 else -1), (1 if dy > 0 else -1)
         ti = ((i + (dx > 0) - sx) / dx) if dx else math.inf
         tj = ((j + (dy > 0) - sy) / dy) if dy else math.inf
         delta_i = abs(1 / dx) if dx else math.inf
         delta_j = abs(1 / dy) if dy else math.inf
-        while i != end_i or j != end_j:
+        while True:
+            if not (0 <= i < width and 0 <= j < height and clear[j * width + i]):
+                return False
+            # A ray on a grid line touches both strips for its whole length.
+            if along_x_edge and (i == 0 or not clear[j * width + i - 1]):
+                return False
+            if along_y_edge and (j == 0 or not clear[(j - 1) * width + i]):
+                return False
+            if i == end_i and j == end_j:
+                return True  # Endpoint contacts have already been checked.
             if math.isclose(ti, tj, rel_tol=1e-12, abs_tol=1e-12):
+                if ti >= 1.0 or tj >= 1.0:
+                    return True  # A near-corner tie must not step past the endpoint.
                 ni, nj = i + step_i, j + step_j
                 if not (0 <= ni < width and 0 <= nj < height
                         and clear[j * width + ni] and clear[nj * width + i]):
@@ -229,9 +271,6 @@ class Grid:
                 i, ti = i + step_i, ti + delta_i
             else:
                 j, tj = j + step_j, tj + delta_j
-            if not (0 <= i < width and 0 <= j < height and clear[j * width + i]):
-                return False
-        return True
 
 
 def reachable_cells(safe, start, cancel=None):

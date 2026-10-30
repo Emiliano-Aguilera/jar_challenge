@@ -1,6 +1,28 @@
 # Coverage work status
 
-## Current task: execution audit (2026-10-28)
+## Current task: visibility boundaries (2026-10-30)
+
+- Local branch cobertura/rayos-bordes in jar_challenge-rayos, base 53ecc6b.
+  Marco authorized local correction and verification, then explicitly asked
+  to publish and merge this verified fix after green checks and no pending
+  issues (2026-10-30). This does not authorize merging PR #36 or PR #16.
+- Grid.visible now checks closed endpoints/all touched cells and traverses
+  interior cells, including both strips along grid edges. Signatures, the
+  legacy map helpers, mission, inspection, parameters and launch are unchanged.
+- 64 focused tests pass, including independent square-intersection checks,
+  rotated origins and exhaustive small-map half-cell pairs.
+- All final 18 plans are exactly identical to development; no dense visibility
+  loss when rechecking both routes with the corrected ray model. The source
+  hash matches that saved comparison. Final full verifier passes 213 tests,
+  build/static/params, interface audit (17 nodes, zero problems) and map wait
+  (zero motion/reports before map, zero violations). Final paired medians vary
+  -6.94% to +6.57%; maximum extra median 0.342 s in three sampled maps.
+  This is correctness, not a CPU/score improvement. See RAY_BOUNDARIES.md.
+- PR #36 and PR #16 remain separate/draft; local CPU optimization remains in
+  jar_challenge-mapa. Do not activate the offline face prototype or claim the
+  ray correction solves the pocket camera/detection issue.
+
+## Previous task: execution audit (2026-10-28)
 
 - Branch cobertura/auditoria-robusta, started at 93bdd59, now updated to b271132
   after mission #31 (10-recovery cancellation, except return). Mission #25,
