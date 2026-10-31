@@ -3,8 +3,10 @@ from equipo_jar.mapa import is_free, line_is_clear
 from equipo_jar.confirmacion import near_any
 
 def viewpoint_for(grid, cx, cy, robot_x, robot_y, distance, clearance, n_angles, min_shift, box_margin,
-                cell_grid, reachable, blocked=None):
+                cell_grid, reachable, blocked=None, tried=()):
     # blocked(x, y): optional; True skips that spot (mission: occupied in Nav2's costmap).
+    # tried: (x, y) spots this candidate was already looked at from without a result, or that
+    # Nav2 did not reach; a spot closer than min_shift to one of them is the same view.
     best = None
     best_dist = None
     for k in range(n_angles):
@@ -25,6 +27,8 @@ def viewpoint_for(grid, cx, cy, robot_x, robot_y, distance, clearance, n_angles,
             continue
         d = math.hypot(vx - robot_x, vy - robot_y)
         if d < min_shift:
+            continue
+        if near_any(vx, vy, tried, min_shift - 1e-9):
             continue
         if best is None or d < best_dist:
             yaw = math.atan2(cy - vy, cx - vx)

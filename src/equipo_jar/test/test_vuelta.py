@@ -12,22 +12,29 @@ THRESHOLD = 25
 SNAP = 0.3
 
 
-def u_map(closed=False):
+def u_map(closed=False, door=False, box_in_door=False):
     """Mapa de 4 x 2 m en forma de U, origen (0, 0).
 
     Bordes ocupados. Una pared en y de 0.95 a 1.05 va desde x = 0 hasta x = 3.0, así que
     los dos pasillos (abajo y arriba) se unen solo por la derecha. Desde (0.5, 1.5) la
     largada (0.5, 0.5) está a 1 m en línea recta pero a ~7 m por el camino.
     `closed`: la pared llega hasta el borde derecho y los pasillos quedan separados.
+    `door`: la pared tiene una puerta de x 0.20 a 0.80, un atajo de ~1 m a la largada.
+    `box_in_door`: además una caja (100) tapa la puerta, como la ve el costmap de Nav2
+    aunque /map no la tenga, con su borde inscripto (99).
     """
     width, height = 80, 40
     data = [0] * (width * height)
     for j in range(height):
         for i in range(width):
             edge = i in (0, width - 1) or j in (0, height - 1)
-            wall = j in (19, 20) and (i < 60 or closed)
-            if edge or wall:
+            wall = j in (19, 20) and (i < 60 or closed) and not (door and 4 <= i < 16)
+            box = box_in_door and 4 <= i < 16 and 18 <= j <= 21
+            rim = box_in_door and 2 <= i < 18 and 16 <= j <= 23
+            if edge or wall or box:
                 data[j * width + i] = 100
+            elif rim:
+                data[j * width + i] = 99
     return Grid(width, height, RES, data)
 
 
@@ -158,3 +165,30 @@ def test_legs_one_after_another_reach_the_start(grid, steps):
         assert legs < 10
     assert legs == 3
     assert way_back_m(grid, steps, x, y, SNAP) <= 2.0
+
+
+# --- La vuelta en el costmap: obstáculos que /map no tiene ---
+# En el costmap el radio del robot ya está en la inflación: misión busca con radio 0 y
+# libre por debajo de 99 (costmap_blocked_value - 1).
+
+def test_the_door_is_a_shortcut_on_the_map():
+    door = u_map(door=True)
+    steps = steps_to_start(door, *START, RADIUS, THRESHOLD, SNAP)
+    assert way_back_m(door, steps, *ROBOT, SNAP) < 1.5
+
+
+def test_a_box_in_the_door_sends_the_way_back_around():
+    # Lo que reprodujo la revisión del #57: en /map el tramo cruza la puerta, pero la caja
+    # obliga a dar toda la vuelta y NavFn no llega. En el costmap la vuelta ya la rodea.
+    costmap = u_map(door=True, box_in_door=True)
+    steps = steps_to_start(costmap, *START, 0.0, 98, SNAP)
+    assert 5.5 < way_back_m(costmap, steps, *ROBOT, SNAP) < 8.5
+    x, y, _ = return_leg(costmap, steps, *ROBOT, 2.0, SNAP)
+    assert y > 1.05 and x > ROBOT[0] + 1.0
+
+
+def test_inscribed_cells_are_not_free_in_the_costmap():
+    # 99 (inscripto) cuenta como ocupado: por ahí el planner de Nav2 tampoco pasa.
+    costmap = u_map(door=True, box_in_door=True)
+    steps = steps_to_start(costmap, *START, 0.0, 98, SNAP)
+    assert costmap.cell(0.1, 0.9) not in steps

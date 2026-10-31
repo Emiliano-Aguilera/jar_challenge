@@ -275,6 +275,12 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
 - Checked (`mundo_falso.py`, first view hidden, 2026-10-31): 1st view gave nothing, 2 s,
   2nd view 0.42 m away, reported at 19 s. Same world with `development`: the robot left at
   once, never went back, and the box was reported by the final round at `/done`.
+- Fixed (review of #57, 2026-10-31): with the robot at B, the nearest spot >= 0.4 m away
+  could be A again (A -> B -> A: the third attempt repeated a view that gave nothing).
+  Mission keeps, per candidate, the spots that gave nothing or that Nav2 did not reach
+  (`tried_views`), and `viewpoint_for` skips spots closer than `visit_min_shift_m` to
+  them (`tried`). Checked (`mundo_falso.py -p hidden_views:=2`): #57 went A -> B -> A and
+  the box was reported only at `/done` (44 s); now A -> B -> C, reported at 24 s.
 
 ## What if mission hits an unexpected error?
 
@@ -502,7 +508,7 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
   (`max_cycles` in `navfn_planner.cpp`): ~14 m on a 6.9 m map, and the way back was
   ~28 m. It is in Nav2's code, not a parameter, so the same goal fails again. Navigation
   can change the planner (asked hans-die: Smac 2D); mission's part, either way:
-- Decided (2026-10-31): the trip back in legs (`vuelta.py`). Once, mission counts the
+- Decided (2026-10-31): the trip back in legs (`vuelta.py`). Mission counts the
   steps from the start to every cell where the robot fits on `/map` (breadth-first, along
   x and y, with `visit_transit_radius_m` and `visit_free_threshold`; the start snaps to
   the nearest such cell within `return_snap_m`, 0.3 m). It goes by legs when that way
@@ -522,6 +528,15 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
   and the direct trip: 0.00 m, `/done` at 38 s. With `return_direct_max_m` 0: one failed
   direct try, the same legs, 0.00 m. Same world with `development`: 3 failed tries,
   `/done` 3.44 m away. Steps: 0.15 s once on a 6 x 6 m map; < 1 ms per leg.
+- Fixed (review of #57, 2026-10-31): searched on `/map` only, the way back did not see
+  obstacles the map lacks (boxes, decoys): one blocking a shortcut turned a 5 m leg into
+  ~34 m for NavFn, and it failed. Now the way back is searched again before each leg, on
+  Nav2's global costmap when mission has it (`route_grid`: what the LiDAR saw, radius 0
+  because its inflation already holds the robot, free below `costmap_blocked_value`),
+  and on `/map` before the first costmap. After a failed leg, the next search sees what
+  the LiDAR saw during it. Checked (`mundo_falso.py -p decoy:=true`: a door in `/map`
+  blocked by an obstacle only in the costmap): #57 went direct, then one leg to the
+  door, and ended 1.63 m away; now 15.1 m in the costmap, 3 legs around, 0.00 m.
 
 ## How does mission skip goals on obstacles that are not in `/map`?
 
@@ -587,8 +602,9 @@ named parameter in `params/`.
   `ros2 run tf2_ros static_transform_publisher`.
 - `notes/AlsinaBautista/mundo_falso.py` (2026-10-31): fake map (an S, way back ~15 m),
   TF, plan, fusion and Nav2 in one node. Nav2 moves the robot to each goal and fails
-  paths longer than `limit_m` (8 m, like NavFn); fusion gives nothing at the first spot
-  where the robot stands near the box. Prints a RESULT line at `/done`. Run it, then
-  mission with `-p cantidad_victimas:=1` (commands in its docstring).
+  paths longer than `limit_m` (8 m, like NavFn); fusion gives nothing at the first
+  `hidden_views` (1) spots where the robot stands near the box; `decoy:=true` blocks a
+  door of `/map` with an obstacle only in a fake global costmap. Prints a RESULT line at
+  `/done`. Run it, then mission with `-p cantidad_victimas:=1` (commands in its docstring).
 - Unit tests (no ROS needed) in `src/equipo_jar/test/`: `test_confirmacion.py`,
   `test_exploracion.py`, `test_mapa.py`, `test_inspeccion.py` and `test_vuelta.py`.

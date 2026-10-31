@@ -92,6 +92,8 @@ class Mision(Node):
         self.current_point = None
         self.current_inspection = None  # (id, x, y, observaciones) del viaje de inspección en curso
         self.look_until = None  # al llegar a mirar una candidata: hasta cuándo espera a que se confirme
+        self.inspection_spot = None  # (x, y) desde donde se mira la candidata del viaje en curso
+        self.tried_views = {}   # por id: lugares que no dieron resultado o a los que Nav2 no llegó
         self.settle_until = None
         self.current_goal = None
         self.current_in_place = False
@@ -104,7 +106,6 @@ class Mision(Node):
         self.return_legs = 0          # tramos mandados
         self.return_leg_active = False  # el viaje en curso es un tramo, no la largada
         self.failed_legs = 0          # tramos fallidos seguidos
-        self.return_steps = None      # pasos hasta la largada en /map, se calcula una vez
         self.check_since = None
         self.check_pose = None
         self.check_started = None
@@ -425,6 +426,7 @@ class Mision(Node):
                             observations = c.observaciones
                     attempts = forget_failed_inspection(self.inspected_points, self.failed_inspections,
                                                         cand_id, cand_x, cand_y, observations)
+                    self.tried_views.setdefault(cand_id, []).append(self.inspection_spot)
                     self.get_logger().info(f'No llegué a mirar la candidata id={cand_id}: intento fallido '
                                            f'{attempts} de {self.p["visit_max_attempts"]}')
                     self.current_inspection = None
@@ -579,11 +581,13 @@ class Mision(Node):
     def next_return_goal(self):
         """((x, y, yaw), árbol, es_tramo): la largada, o un tramo hacia ella.
 
-        Va por tramos si el camino de vuelta en /map mide más de return_direct_max_m (0 = nunca
-        de entrada), o si Nav2 ya falló yendo directo. Cada tramo mide hasta return_leg_m, como
-        mucho return_max_legs, y deja de usarlos tras return_max_failed_legs fallidos seguidos.
-        El último trecho, y cualquier problema, van directo a la largada con el árbol preciso,
-        como antes (vuelta.py explica por qué hace falta).
+        Va por tramos si el camino de vuelta mide más de return_direct_max_m (0 = nunca de
+        entrada), o si Nav2 ya falló yendo directo. El camino se busca de nuevo antes de cada
+        tramo, en el costmap global si llegó (route_grid): así un tramo fallido por un
+        obstáculo que vio el LiDAR hace que el siguiente lo rodee. Cada tramo mide hasta
+        return_leg_m, como mucho return_max_legs, y deja de usarlos tras
+        return_max_failed_legs fallidos seguidos. El último trecho, y cualquier problema, van
+        directo a la largada con el árbol preciso, como antes (vuelta.py explica por qué).
         """
         start = (self.start_pose, self.return_tree, False)
         pose = self.current_pose()
@@ -591,27 +595,41 @@ class Mision(Node):
                 or self.failed_legs >= self.p['return_max_failed_legs']):
             return start
         try:
-            if self.return_steps is None:
-                x0, y0, _ = self.start_pose
-                self.return_steps = steps_to_start(self.grid, x0, y0, self.p['visit_transit_radius_m'],
-                                                   self.p['visit_free_threshold'], self.p['return_snap_m'])
+            grid, radius, threshold, source = self.route_grid()
+            x0, y0, _ = self.start_pose
+            steps = steps_to_start(grid, x0, y0, radius, threshold, self.p['return_snap_m'])
             if not self.return_by_legs and self.p['return_direct_max_m'] > 0:
-                length = way_back_m(self.grid, self.return_steps, pose[0], pose[1], self.p['return_snap_m'])
+                length = way_back_m(grid, steps, pose[0], pose[1], self.p['return_snap_m'])
                 if length is not None and length > self.p['return_direct_max_m']:
                     self.return_by_legs = True
-                    self.get_logger().info(f'La vuelta mide {length:.1f} m en el mapa: voy por tramos')
+                    self.get_logger().info(f'La vuelta mide {length:.1f} m en {source}: voy por tramos')
             if not self.return_by_legs:
                 return start
             zones = self.current_box_zones()
-            leg = return_leg(self.grid, self.return_steps, pose[0], pose[1], self.p['return_leg_m'],
+            leg = return_leg(grid, steps, pose[0], pose[1], self.p['return_leg_m'],
                              self.p['return_snap_m'], lambda x, y: self.is_blocked(x, y) or near_box(x, y, zones))
         except ValueError as e:
             self.get_logger().warning(f'No pude armar la vuelta por tramos: {e}. Voy directo')
-            self.return_steps = {}
             return start
         if leg is None:
             return start
         return (leg, '', True)
+
+    def route_grid(self):
+        """(grilla, radio, umbral, nombre) donde buscar la vuelta: el costmap global, o /map.
+
+        El costmap global de Nav2 tiene lo que /map no: cajas y obstáculos que vio el LiDAR. Su
+        inflación ya incluye el radio del robot, así que va con radio 0, y libre es lo que el
+        planner usa: por debajo de costmap_blocked_value (99 = inscripto, 100 = ocupado).
+        Sin costmap todavía, /map con el radio de las inspecciones, como antes.
+        """
+        if self.costmap is not None:
+            try:
+                grid = Grid.from_occupancy_grid(self.costmap)
+                return grid, 0.0, self.p['costmap_blocked_value'] - 1, 'el costmap'
+            except ValueError as e:
+                self.get_logger().warning(f'No uso el costmap para la vuelta: {e}', throttle_duration_sec=5.0)
+        return self.grid, self.p['visit_transit_radius_m'], self.p['visit_free_threshold'], '/map'
 
     def check_return(self):
         now = self.seconds_since_t0()
@@ -675,7 +693,8 @@ class Mision(Node):
             return False
         view = viewpoint_for(self.mapa, c.centro.x, c.centro.y, x_robot, y_robot, self.p['visit_distance_m'], 
                             self.p['visit_clearance_m'], self.p['visit_angles'], self.p['visit_min_shift_m'],
-                            self.p['visit_box_margin_m'], self.grid, reachable, self.is_blocked)
+                            self.p['visit_box_margin_m'], self.grid, reachable, self.is_blocked,
+                            self.tried_views.get(c.id, ()))
         if view is None:
             _, attempts = self.failed_inspections.get(c.id, (0, 0))
             self.failed_inspections[c.id] = (c.observaciones, attempts + 1)
@@ -688,6 +707,7 @@ class Mision(Node):
             if self.go_to(self.make_pose(x, y, yaw)):
                 self.inspected_points.append((c.centro.x, c.centro.y))
                 self.current_inspection = (c.id, c.centro.x, c.centro.y, c.observaciones)
+                self.inspection_spot = (x, y)
                 self.get_logger().info(f'Voy a mirar la candidata id={c.id} desde ({x:.2f},{y:.2f})')
                 self.idle_since = None
                 return True
@@ -705,6 +725,9 @@ class Mision(Node):
         else:
             attempts = unhelpful_inspection(self.inspected_points, self.failed_inspections,
                                             cand_id, cand_x, cand_y)
+            if outcome == 'unhelpful':
+                # La próxima vista no puede ser esta ni otra cerca (A -> B -> A gastaba un intento).
+                self.tried_views.setdefault(cand_id, []).append(self.inspection_spot)
             if outcome == 'gone':
                 self.get_logger().info(f'La candidata id={cand_id} desapareció mientras la miraba')
             elif attempts < self.p['visit_max_attempts']:

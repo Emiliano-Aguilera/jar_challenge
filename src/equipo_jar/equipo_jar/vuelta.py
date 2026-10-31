@@ -8,7 +8,9 @@ finds the way on /map itself and sends it to Nav2 in legs it can plan.
 
 The way back is a breadth-first search over the cells where the robot fits
 (`Grid.safe_cells`), moving only along x and y. Its length is never shorter than the
-real path, so a leg of `leg_m` is at most that long for Nav2.
+real path, so a leg of `leg_m` is at most that long for Nav2. Mission runs it on Nav2's
+global costmap when it has one (boxes and obstacles the LiDAR saw, which /map lacks;
+radius 0, since the inflation already holds the robot), and on /map otherwise.
 """
 from collections import deque
 import math

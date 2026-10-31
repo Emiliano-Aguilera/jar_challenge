@@ -168,6 +168,50 @@ def test_robot_inside_a_wall_raises():
         reach(grid, 2.02, 2.0)
 
 
+# --- Lugares ya probados (tried) ---
+# Pasillo horizontal (y de 1.25 a 2.75) con una pared vertical en x = 2.30 justo a la
+# derecha de la caja (2, 2): de los 12 lugares solo valen 3, todos a la izquierda.
+# A = 180° (1.2, 2.0), B = 150° (1.31, 2.4) y C = 210° (1.31, 1.6).
+CORRIDOR = ([(i, 24) for i in range(80)] + [(i, 55) for i in range(80)]
+            + [(46, j) for j in range(24, 56)])
+SPOT_A, SPOT_B, SPOT_C = (1.2, 2.0), (2.0 + 0.8 * math.cos(5 * math.pi / 6), 2.4), \
+    (2.0 + 0.8 * math.cos(7 * math.pi / 6), 1.6)
+
+
+def corridor_view(robot, tried=()):
+    grid = make_grid(CORRIDOR)
+    view = viewpoint_for(grid, 2.0, 2.0, *robot, **VIEW, **reach(grid, *robot), tried=tried)
+    return None if view is None else (round(view[0], 3), round(view[1], 3))
+
+
+def same(spot, other):
+    return spot is not None and math.hypot(spot[0] - other[0], spot[1] - other[1]) < 1e-3
+
+
+def test_without_tried_spots_it_goes_back_to_a():
+    # Lo que reprodujo la revisión del #57: A -> B -> A gasta el tercer intento en A.
+    assert same(corridor_view((0.5, 2.0)), SPOT_A)
+    first = corridor_view(SPOT_A)
+    assert same(first, SPOT_B) or same(first, SPOT_C)
+    assert same(corridor_view(first), SPOT_A)
+
+
+def test_tried_spots_are_not_picked_again():
+    b = corridor_view(SPOT_A, tried=[SPOT_A])
+    third = corridor_view(b, tried=[SPOT_A, b])
+    other = SPOT_C if same(b, SPOT_B) else SPOT_B
+    assert same(third, other)
+
+
+def test_a_spot_near_a_tried_one_is_the_same_view():
+    # A 0.2 m de A (menos que min_shift) cuenta como A.
+    assert not same(corridor_view((0.5, 2.0), tried=[(1.2, 2.2)]), SPOT_A)
+
+
+def test_every_spot_tried_gives_no_view():
+    assert corridor_view(SPOT_A, tried=[SPOT_A, SPOT_B, SPOT_C]) is None
+
+
 # --- pick_doubtful ---
 
 MIN_OBS = 2
