@@ -61,8 +61,10 @@ class Mision(Node):
                                             'return_max_tries': 3, 'return_still_s': 2.0, 'return_still_m': 0.01,
                                             'return_check_max_s': 10.0,
                                             'costmap_blocked_value': 99, 'inspection_wait_s': 2.0,
+                                            'final_look_s': 1.0,
                                             'return_direct_max_m': 10.0, 'return_leg_m': 5.0,
-                                            'return_max_legs': 10, 'return_snap_m': 0.3})  # parámetros ajustables
+                                            'return_max_legs': 10, 'return_max_failed_legs': 2,
+                                            'return_snap_m': 0.3})  # parámetros ajustables
 
         self.mapa = None
         self.grid = None
@@ -101,6 +103,7 @@ class Mision(Node):
         self.return_by_legs = False   # la vuelta va por tramos (larga, o Nav2 no llegó directo)
         self.return_legs = 0          # tramos mandados
         self.return_leg_active = False  # el viaje en curso es un tramo, no la largada
+        self.failed_legs = 0          # tramos fallidos seguidos
         self.return_steps = None      # pasos hasta la largada en /map, se calcula una vez
         self.check_since = None
         self.check_pose = None
@@ -108,6 +111,7 @@ class Mision(Node):
         self.canceling = False
 
         self.idle_since = None
+        self.nothing_left_since = None  # desde cuándo no quedan puntos ni dudosas
 
         self.start_locked = False
         self.localization_ready = False
@@ -498,10 +502,20 @@ class Mision(Node):
         elif self.seconds_since_t0() >= self.p['return_time_s']:
             return 'se termina el tiempo'
         elif (self.plan is not None and self.nav_state != 'sending' and self.nav_state != 'moving'
-                and self.look_until is None
+                # Una inspección en curso (viaje o espera) todavía puede confirmar una caja,
+                # también si su llegada todavía no se procesó en explore().
+                and self.current_inspection is None
                 and first_pending(self.plan.poses, self.visited, self.p['same_point_distance_m'], 
                 self.p['same_point_angle_rad'], self.current_box_zones()) is None and self.next_doubtful() is None):
-            return 'no quedan puntos ni dudosas'
+            # Desde el último punto del plan también se puede ver una caja: antes de volver,
+            # le da final_look_s a percepción y fusión.
+            now = self.seconds_since_t0()
+            if self.nothing_left_since is None:
+                self.nothing_left_since = now
+            if now - self.nothing_left_since >= self.p['final_look_s']:
+                return 'no quedan puntos ni dudosas'
+            return None
+        self.nothing_left_since = None
         return None
 
     def make_pose(self, x, y, yaw):
@@ -544,6 +558,10 @@ class Mision(Node):
         if self.return_sent and self.return_leg_active and (self.nav_state == 'arrived' or self.nav_state == 'failed'):
             # Un tramo no se mide: se manda el siguiente (o la largada) en el próximo ciclo.
             self.get_logger().info(f'Tramo {self.return_legs} terminado: {self.nav_state}')
+            self.failed_legs = self.failed_legs + 1 if self.nav_state == 'failed' else 0
+            if self.failed_legs >= self.p['return_max_failed_legs']:
+                # El próximo tramo saldría del mismo lugar al mismo punto: vuelve a ir directo.
+                self.get_logger().warning(f'{self.failed_legs} tramos fallidos seguidos: voy directo a la largada')
             self.return_sent = False
             self.return_leg_active = False
             return
@@ -563,12 +581,14 @@ class Mision(Node):
 
         Va por tramos si el camino de vuelta en /map mide más de return_direct_max_m (0 = nunca
         de entrada), o si Nav2 ya falló yendo directo. Cada tramo mide hasta return_leg_m, como
-        mucho return_max_legs. El último trecho, y cualquier problema, van directo a la largada
-        con el árbol preciso, como antes (vuelta.py explica por qué hace falta).
+        mucho return_max_legs, y deja de usarlos tras return_max_failed_legs fallidos seguidos.
+        El último trecho, y cualquier problema, van directo a la largada con el árbol preciso,
+        como antes (vuelta.py explica por qué hace falta).
         """
         start = (self.start_pose, self.return_tree, False)
         pose = self.current_pose()
-        if pose is None or self.grid is None or self.return_legs >= self.p['return_max_legs']:
+        if (pose is None or self.grid is None or self.return_legs >= self.p['return_max_legs']
+                or self.failed_legs >= self.p['return_max_failed_legs']):
             return start
         try:
             if self.return_steps is None:

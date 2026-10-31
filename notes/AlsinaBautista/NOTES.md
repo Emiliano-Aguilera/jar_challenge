@@ -255,8 +255,11 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
   `settle_s` 0 the robot left the spot in the same tick it arrived.
 - Decided (2026-10-31): arriving is not enough. Mission stays at the spot until the
   candidate is reported or `inspection_wait_s` (2.0 s) passes (`look_at_inspection`;
-  `inspection_outcome` in `inspeccion.py`). Reports are checked every tick of the wait,
-  and "no plan points left" does not start the return during it. Still doubtful after
+  `inspection_outcome` in `inspeccion.py`). Reports are checked every tick of the wait.
+  "No plan points left" does not start the return while an inspection trip or its wait
+  is on (`current_inspection`): when the inspection was the last thing left, the arrival
+  came in the same tick and mission went back before waiting (seen in `mundo_falso.py`;
+  `development` did the same). Still doubtful after
   the wait: `unhelpful_inspection` takes it out of the inspected ones and counts one
   attempt, without asking for new observations: the robot is at this spot, so
   `viewpoint_for` picks another one >= 0.4 m away, which also lifts fusion's one-spot
@@ -264,6 +267,11 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
   wait. `visit_max_attempts` (3) counts both kinds of attempt; a failed trip after an
   unhelpful one again needs new observations.
 - Cost: only for doubtful candidates (1 in Ventanas): 2 s per view plus the trip.
+- Decided (2026-10-31): before going back for "no plan points nor doubtful candidates",
+  mission waits until that has held for `final_look_s` (1.0 s; coverage plans
+  `observation_time` 1.0 s per view). In `mundo_falso.py` the box was seen only from the
+  last plan point, and mission went back 0.1 s after arriving, before fusion sent the
+  candidate: it was reported only by the final round. Costs 1 s once per run.
 - Checked (`mundo_falso.py`, first view hidden, 2026-10-31): 1st view gave nothing, 2 s,
   2nd view 0.42 m away, reported at 19 s. Same world with `development`: the robot left at
   once, never went back, and the box was reported by the final round at `/done`.
@@ -502,8 +510,10 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
   or after a direct try fails. Each leg ends `return_leg_m` (5 m) along the way, facing
   along it, shorter if it would end on a costmap obstacle or near a box. Legs are not
   measured and do not use up `return_max_tries`. When the start is closer than one leg,
-  the usual direct trip (precise tree) and check follow. At most `return_max_legs` (10);
-  after that, or on any error, straight to the start as before.
+  the usual direct trip (precise tree) and check follow. At most `return_max_legs` (10),
+  and none after `return_max_failed_legs` (2) failed legs in a row (the next one would
+  leave from the same spot to the same goal); after that, or on any error, straight to
+  the start as before.
 - Why 10 and 5: steps along x and y are never shorter than the real path, so 10 m on
   `/map` stays under NavFn's ~14 m, and a 5 m leg leaves room for Nav2's detours. If
   navigation moves to Smac, `return_direct_max_m` 0 keeps the legs only as a fallback

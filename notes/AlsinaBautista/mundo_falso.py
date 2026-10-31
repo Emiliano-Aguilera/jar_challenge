@@ -7,7 +7,7 @@ One red box at (4.5, 3.3), at the far end: the way back from it is ~15 m.
   than `limit_m` (like NavFn's limit in Humble); otherwise waits path / `speed` and moves
   the robot to the goal.
 - Fusion (/jar/candidatas): the box appears with 2 observations and 0.15 m of error when
-  the robot gets within 2.5 m. It gains observations only while the robot stands still
+  the robot sees it (no wall in between) from 2.5 m or less. It gains observations only while the robot stands still
   within 1.2 m of it, and not at the first spot where it stood (`hide_first_view`: as in
   Ventanas, that view gives nothing). At 5 observations the error drops to 0.05 m.
 - At /done it prints one RESULT line (reports, time, distance to the start) and exits.
@@ -168,7 +168,8 @@ class FakeWorld(Node):
             return
         x, y, _ = self.pose
         dist = math.hypot(x - BOX[0], y - BOX[1])
-        if not self.detected and dist < 2.5:
+        seen = self.grid.visible((x, y), BOX, 50)
+        if not self.detected and dist < 2.5 and seen:
             self.detected = True
             self.observations = 2
             self.get_logger().info(f'[{self.seconds():5.1f} s] fusion: box seen from far (2 obs, 0.15 m)')
