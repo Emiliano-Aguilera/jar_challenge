@@ -1,7 +1,9 @@
-# Dependencias de Python que NO vienen con ROS (se instalan con pip al construir
-# la imagen). Las de ROS van en src/equipo_jar/package.xml y se resuelven con rosdep.
-# Fijá versiones (paquete==1.2.3) para que la imagen se construya igual siempre.
+# Dependencias de Python que NO vienen con ROS y que la organización haya aceptado
+# (lista en tools/dependencias_permitidas.yaml, sección `pip`; hoy está vacía).
 #
-# OpenCV for perception (deteccion). The headless build has no GUI libraries and keeps the
-# system numpy (1.21 on Ubuntu 22.04 satisfies its requirement), so it does not touch ROS.
-opencv-python-headless==4.9.0.80
+# Casi todo lo que necesitás ya está como paquete del sistema y va en
+# src/equipo_jar/package.xml: numpy (python3-numpy), OpenCV (python3-opencv),
+# scipy (python3-scipy). Dejá este archivo vacío a menos que la organización te
+# haya confirmado un paquete de pip.
+#
+# Formato: un nombre por línea, con la versión fija (paquete==1.2.3).
