@@ -1,0 +1,1590 @@
+<?xml version='1.0' encoding='utf-8'?>
+<sdf version="1.5">
+  <world name="tars_borde_angostos">
+    <physics type="ode">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1</real_time_factor>
+      <real_time_update_rate>1000</real_time_update_rate>
+      <gravity>0 0 -9.8</gravity>
+    </physics>
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics" />
+    <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands" />
+    <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster" />
+    <plugin filename="gz-sim-contact-system" name="gz::sim::systems::Contact" />
+    <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+    <plugin filename="gz-sim-imu-system" name="gz::sim::systems::Imu" />
+    <scene>
+      <shadows>false</shadows>
+      <ambient>0.2 0.2 0.2 1</ambient>
+      <background>1 1 1 1</background>
+      <grid>false</grid>
+      <origin_visual>false</origin_visual>
+    </scene>
+    <include>
+      <uri>model://sun</uri>
+    </include>
+    <light name="camera_spot_1_light" type="spot">
+      <pose>-6 4 4 0 -1 -0.8</pose>
+      <diffuse>0.5 0.5 0.5 1</diffuse>
+      <specular>0.1 0.1 0.1 1</specular>
+      <direction>0 0 -1</direction>
+      <attenuation>
+        <range>20</range>
+        <constant>0.2</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <cast_shadows>0</cast_shadows>
+      <spot>
+        <inner_angle>0.6</inner_angle>
+        <outer_angle>1</outer_angle>
+        <falloff>1</falloff>
+      </spot>
+    </light>
+    <light name="camera_spot_2_light" type="spot">
+      <pose>5 -3 4 0 0.8 -0.6</pose>
+      <diffuse>0.5 0.5 0.5 1</diffuse>
+      <specular>0.1 0.1 0.1 1</specular>
+      <direction>0 0 -1</direction>
+      <attenuation>
+        <range>20</range>
+        <constant>0.3</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <cast_shadows>0</cast_shadows>
+      <spot>
+        <inner_angle>0.6</inner_angle>
+        <outer_angle>1</outer_angle>
+        <falloff>1</falloff>
+      </spot>
+    </light>
+    <include>
+      <uri>model://floor_parquet2</uri>
+      <pose>2.1 2.1 0 0 0 0</pose>
+    </include>
+    <model name="paredes_borde">
+      <static>true</static>
+      <link name="pared_1">
+        <pose>2.1 -0.525 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>5.250000000000001 0.1 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>5.250000000000001 0.1 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_2">
+        <pose>4.7250000000000005 2.1 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.1 5.250000000000001 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.1 5.250000000000001 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_3">
+        <pose>2.1 4.7250000000000005 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>5.250000000000001 0.1 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>5.250000000000001 0.1 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_4">
+        <pose>-0.525 2.1 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.1 5.250000000000001 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.1 5.250000000000001 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_5">
+        <pose>0.525 -0.4175 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.1 0.21500000000000002 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.1 0.21500000000000002 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_6">
+        <pose>0.525 0.4175 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.1 0.21500000000000002 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.1 0.21500000000000002 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_7">
+        <pose>0.0 0.525 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>1.05 0.1 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>1.05 0.1 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_8">
+        <pose>0.525 0.6325000000000001 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.1 0.21499999999999997 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.1 0.21499999999999997 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_9">
+        <pose>0.525 1.4675000000000002 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.1 0.21500000000000008 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.1 0.21500000000000008 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_10">
+        <pose>-0.4175 1.5750000000000002 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.21500000000000002 0.1 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.21500000000000002 0.1 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_11">
+        <pose>0.4175 1.5750000000000002 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.21500000000000002 0.1 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.21500000000000002 0.1 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_12">
+        <pose>0.525 2.1 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.1 1.0499999999999998 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.1 1.0499999999999998 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_13">
+        <pose>-0.4175 2.625 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.21500000000000002 0.1 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.21500000000000002 0.1 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_14">
+        <pose>0.4175 2.625 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.21500000000000002 0.1 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.21500000000000002 0.1 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_15">
+        <pose>0.525 3.1500000000000004 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.1 1.0499999999999998 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.1 1.0499999999999998 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_16">
+        <pose>-0.4175 3.6750000000000003 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.21500000000000002 0.1 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.21500000000000002 0.1 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_17">
+        <pose>0.4175 3.6750000000000003 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.21500000000000002 0.1 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.21500000000000002 0.1 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_18">
+        <pose>0.525 4.2 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.1 1.0500000000000003 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.1 1.0500000000000003 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_19">
+        <pose>1.5750000000000002 -0.4175 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.1 0.21500000000000002 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.1 0.21500000000000002 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_20">
+        <pose>1.5750000000000002 0.4175 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.1 0.21500000000000002 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.1 0.21500000000000002 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_21">
+        <pose>0.6325000000000001 0.525 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.21499999999999997 0.1 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.21499999999999997 0.1 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_22">
+        <pose>1.4675000000000002 0.525 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.21500000000000008 0.1 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.21500000000000008 0.1 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_23">
+        <pose>1.5750000000000002 1.05 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.1 1.0500000000000003 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.1 1.0500000000000003 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_24">
+        <pose>0.6325000000000001 1.5750000000000002 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.21499999999999997 0.1 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.21499999999999997 0.1 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_25">
+        <pose>1.4675000000000002 1.5750000000000002 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.21500000000000008 0.1 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.21500000000000008 0.1 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_26">
+        <pose>1.5750000000000002 2.1 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.1 1.0499999999999998 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.1 1.0499999999999998 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_27">
+        <pose>0.6325000000000001 2.625 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.21499999999999997 0.1 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.21499999999999997 0.1 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_28">
+        <pose>1.4675000000000002 2.625 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.21500000000000008 0.1 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.21500000000000008 0.1 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_29">
+        <pose>1.5750000000000002 3.1500000000000004 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.1 1.0499999999999998 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.1 1.0499999999999998 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_30">
+        <pose>0.6325000000000001 3.6750000000000003 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.21499999999999997 0.1 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.21499999999999997 0.1 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_31">
+        <pose>1.4675000000000002 3.6750000000000003 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.21500000000000008 0.1 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.21500000000000008 0.1 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_32">
+        <pose>1.5750000000000002 3.7825 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.1 0.21499999999999986 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.1 0.21499999999999986 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_33">
+        <pose>1.5750000000000002 4.6175 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.1 0.21500000000000075 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.1 0.21500000000000075 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_34">
+        <pose>2.625 0.0 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.1 1.05 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.1 1.05 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_35">
+        <pose>1.6825 0.525 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.21499999999999986 0.1 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.21499999999999986 0.1 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_36">
+        <pose>2.5175 0.525 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.21499999999999986 0.1 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.21499999999999986 0.1 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_37">
+        <pose>2.625 0.6325000000000001 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.1 0.21499999999999997 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.1 0.21499999999999997 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_38">
+        <pose>2.625 1.4675000000000002 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.1 0.21500000000000008 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.1 0.21500000000000008 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_39">
+        <pose>2.1 1.5750000000000002 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>1.0499999999999998 0.1 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>1.0499999999999998 0.1 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_40">
+        <pose>2.625 1.6825 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.1 0.21499999999999986 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.1 0.21499999999999986 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_41">
+        <pose>2.625 2.5175 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.1 0.21499999999999986 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.1 0.21499999999999986 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_42">
+        <pose>1.6825 2.625 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.21499999999999986 0.1 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.21499999999999986 0.1 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_43">
+        <pose>2.5175 2.625 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.21499999999999986 0.1 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.21499999999999986 0.1 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_44">
+        <pose>2.625 3.1500000000000004 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.1 1.0499999999999998 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.1 1.0499999999999998 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_45">
+        <pose>1.6825 3.6750000000000003 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.21499999999999986 0.1 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.21499999999999986 0.1 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_46">
+        <pose>2.5175 3.6750000000000003 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.21499999999999986 0.1 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.21499999999999986 0.1 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_47">
+        <pose>2.625 3.7825 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.1 0.21499999999999986 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.1 0.21499999999999986 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_48">
+        <pose>2.625 4.6175 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.1 0.21500000000000075 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.1 0.21500000000000075 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_49">
+        <pose>3.6750000000000003 -0.3825 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.1 0.28500000000000003 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.1 0.28500000000000003 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_50">
+        <pose>3.6750000000000003 0.3825 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.1 0.28500000000000003 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.1 0.28500000000000003 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_51">
+        <pose>3.1500000000000004 0.525 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>1.0499999999999998 0.1 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>1.0499999999999998 0.1 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_52">
+        <pose>3.6750000000000003 1.05 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.1 1.0500000000000003 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.1 1.0500000000000003 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_53">
+        <pose>2.7325000000000004 1.5750000000000002 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.21499999999999986 0.1 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.21499999999999986 0.1 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_54">
+        <pose>3.5675000000000003 1.5750000000000002 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.21499999999999986 0.1 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.21499999999999986 0.1 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_55">
+        <pose>3.6750000000000003 2.1 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.1 1.0499999999999998 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.1 1.0499999999999998 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_56">
+        <pose>3.1500000000000004 2.625 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>1.0499999999999998 0.1 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>1.0499999999999998 0.1 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_57">
+        <pose>3.6750000000000003 2.7325000000000004 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.1 0.21499999999999986 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.1 0.21499999999999986 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_58">
+        <pose>3.6750000000000003 3.5675000000000003 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.1 0.21499999999999986 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.1 0.21499999999999986 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_59">
+        <pose>2.7325000000000004 3.6750000000000003 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.21499999999999986 0.1 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.21499999999999986 0.1 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_60">
+        <pose>3.5675000000000003 3.6750000000000003 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.21499999999999986 0.1 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.21499999999999986 0.1 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_61">
+        <pose>3.6750000000000003 4.2 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.1 1.0500000000000003 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.1 1.0500000000000003 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_62">
+        <pose>3.8125 0.525 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.2749999999999999 0.1 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.2749999999999999 0.1 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_63">
+        <pose>4.5875 0.525 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.27500000000000036 0.1 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.27500000000000036 0.1 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_64">
+        <pose>3.8025 1.5750000000000002 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.2549999999999999 0.1 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.2549999999999999 0.1 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_65">
+        <pose>4.5975 1.5750000000000002 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.2549999999999999 0.1 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.2549999999999999 0.1 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_66">
+        <pose>3.7925000000000004 2.625 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.23499999999999988 0.1 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.23499999999999988 0.1 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_67">
+        <pose>4.6075 2.625 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.23500000000000032 0.1 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.23500000000000032 0.1 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_68">
+        <pose>3.7825 3.6750000000000003 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.21499999999999986 0.1 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.21499999999999986 0.1 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="pared_69">
+        <pose>4.6175 3.6750000000000003 0.5 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.21500000000000075 0.1 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.21500000000000075 0.1 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.65 0.48 0.30 1</ambient>
+            <diffuse>0.65 0.48 0.30 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="marcas_color">
+      <static>true</static>
+      <link name="cuadrado_rojo_1">
+        <pose>3.1500000000000004 0.0 .15 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.25 0.25 0.3</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.25 0.25 0.3</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+      <link name="cuadrado_rojo_2">
+        <pose>4.2 4.2 .15 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.25 0.25 0.3</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.25 0.25 0.3</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+      <link name="cuadrado_rojo_3">
+        <pose>0.0 4.2 .15 0 0 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.25 0.25 0.3</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.25 0.25 0.3</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.8 0.05 0.05 1</ambient>
+            <diffuse>0.8 0.05 0.05 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+  </world>
+</sdf>
