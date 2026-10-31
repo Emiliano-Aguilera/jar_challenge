@@ -3,8 +3,10 @@ from equipo_jar.mapa import is_free, line_is_clear
 from equipo_jar.confirmacion import near_any
 
 def viewpoint_for(grid, cx, cy, robot_x, robot_y, distance, clearance, n_angles, min_shift, box_margin,
-                cell_grid, reachable, blocked=None):
+                cell_grid, reachable, blocked=None, tried=()):
     # blocked(x, y): optional; True skips that spot (mission: occupied in Nav2's costmap).
+    # tried: (x, y) spots this candidate was already looked at from without a result, or that
+    # Nav2 did not reach; a spot closer than min_shift to one of them is the same view.
     best = None
     best_dist = None
     for k in range(n_angles):
@@ -25,6 +27,8 @@ def viewpoint_for(grid, cx, cy, robot_x, robot_y, distance, clearance, n_angles,
             continue
         d = math.hypot(vx - robot_x, vy - robot_y)
         if d < min_shift:
+            continue
+        if near_any(vx, vy, tried, min_shift - 1e-9):
             continue
         if best is None or d < best_dist:
             yaw = math.atan2(cy - vy, cx - vx)
@@ -58,15 +62,26 @@ def pick_doubtful(cands, reported_ids, reported_points, inspected_points, min_ob
     return best
 
 def forget_failed_inspection(inspected_points, failed, cand_id, x, y, observations):
-    """Nav2 did not reach the view: the candidate is not inspected, and the attempt counts.
-
-    Mission marks a candidate inspected when it sends the trip (no loops while it is
-    on its way). If the trip fails, this takes it back out of `inspected_points` and
-    adds a failed attempt with its observations at the time: `pick_doubtful` tries it
-    again only with new observations and attempts left. Returns the attempt count.
-    """
     if (x, y) in inspected_points:
         inspected_points.remove((x, y))
     _, attempts = failed.get(cand_id, (0, 0))
     failed[cand_id] = (observations, attempts + 1)
     return attempts + 1
+
+def unhelpful_inspection(inspected_points, failed, cand_id, x, y):
+    return forget_failed_inspection(inspected_points, failed, cand_id, x, y, 0)
+
+def inspection_outcome(cands, cand_id, reported_ids, reported_points, dist_min, now, look_until):
+    if cand_id in reported_ids:
+        return 'reported'
+    current = None
+    for c in cands or []:
+        if c.id == cand_id:
+            current = c
+    if current is None:
+        return 'gone'
+    if near_any(current.centro.x, current.centro.y, reported_points, dist_min):
+        return 'reported'
+    if now < look_until:
+        return 'looking'
+    return 'unhelpful'

@@ -196,3 +196,17 @@ mision:
     return_still_m: 0.01
     return_check_max_s: 10.0
     costmap_blocked_value: 99
+    # After arriving at an inspection spot, wait this long (s) for fusion to confirm the
+    # candidate. Still doubtful after it: one attempt, and the next view is another spot.
+    inspection_wait_s: 2.0
+    # No plan points nor doubtful candidates left: wait this long (s) before going back, so
+    # perception and fusion can report a box seen only from the last plan point.
+    final_look_s: 1.0
+    # Trip back in legs (vuelta.py): Nav2's NavFn cannot plan paths longer than ~2x the map side.
+    # Legs from the start if the way back on /map is longer than this (m; 0 = only after a
+    # failed direct try).
+    return_direct_max_m: 10.0
+    return_leg_m: 5.0                 # length of each leg on /map (m)
+    return_max_legs: 10               # legs per run; then straight to the start, as before
+    return_max_failed_legs: 2         # failed legs in a row before going straight to the start
+    return_snap_m: 0.3                # start or robot this close to a wall still count (m)

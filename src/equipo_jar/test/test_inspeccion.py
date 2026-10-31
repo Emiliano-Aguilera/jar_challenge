@@ -3,7 +3,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from equipo_jar.inspeccion import forget_failed_inspection, pick_doubtful, viewpoint_for
+from equipo_jar.inspeccion import (forget_failed_inspection, inspection_outcome, pick_doubtful,
+                                   unhelpful_inspection, viewpoint_for)
 from equipo_jar.mapa import Grid
 
 RES = 0.05
@@ -167,6 +168,50 @@ def test_robot_inside_a_wall_raises():
         reach(grid, 2.02, 2.0)
 
 
+# --- Lugares ya probados (tried) ---
+# Pasillo horizontal (y de 1.25 a 2.75) con una pared vertical en x = 2.30 justo a la
+# derecha de la caja (2, 2): de los 12 lugares solo valen 3, todos a la izquierda.
+# A = 180° (1.2, 2.0), B = 150° (1.31, 2.4) y C = 210° (1.31, 1.6).
+CORRIDOR = ([(i, 24) for i in range(80)] + [(i, 55) for i in range(80)]
+            + [(46, j) for j in range(24, 56)])
+SPOT_A, SPOT_B, SPOT_C = (1.2, 2.0), (2.0 + 0.8 * math.cos(5 * math.pi / 6), 2.4), \
+    (2.0 + 0.8 * math.cos(7 * math.pi / 6), 1.6)
+
+
+def corridor_view(robot, tried=()):
+    grid = make_grid(CORRIDOR)
+    view = viewpoint_for(grid, 2.0, 2.0, *robot, **VIEW, **reach(grid, *robot), tried=tried)
+    return None if view is None else (round(view[0], 3), round(view[1], 3))
+
+
+def same(spot, other):
+    return spot is not None and math.hypot(spot[0] - other[0], spot[1] - other[1]) < 1e-3
+
+
+def test_without_tried_spots_it_goes_back_to_a():
+    # Lo que reprodujo la revisión del #57: A -> B -> A gasta el tercer intento en A.
+    assert same(corridor_view((0.5, 2.0)), SPOT_A)
+    first = corridor_view(SPOT_A)
+    assert same(first, SPOT_B) or same(first, SPOT_C)
+    assert same(corridor_view(first), SPOT_A)
+
+
+def test_tried_spots_are_not_picked_again():
+    b = corridor_view(SPOT_A, tried=[SPOT_A])
+    third = corridor_view(b, tried=[SPOT_A, b])
+    other = SPOT_C if same(b, SPOT_B) else SPOT_B
+    assert same(third, other)
+
+
+def test_a_spot_near_a_tried_one_is_the_same_view():
+    # A 0.2 m de A (menos que min_shift) cuenta como A.
+    assert not same(corridor_view((0.5, 2.0), tried=[(1.2, 2.2)]), SPOT_A)
+
+
+def test_every_spot_tried_gives_no_view():
+    assert corridor_view(SPOT_A, tried=[SPOT_A, SPOT_B, SPOT_C]) is None
+
+
 # --- pick_doubtful ---
 
 MIN_OBS = 2
@@ -305,3 +350,86 @@ def test_failed_trip_not_in_the_list_still_counts():
     failed = {}
     assert forget_failed_inspection([], failed, 7, 1.0, 0.0, 2) == 1
     assert failed == {7: (2, 1)}
+
+
+# --- Inspección que llegó pero no confirmó la candidata ---
+# Llegar al lugar no alcanza: si después de inspection_wait_s sigue sin reportar,
+# unhelpful_inspection la saca de inspected_points y suma un intento, pero la vuelve a
+# elegir aunque no tenga observaciones nuevas (la próxima vista es otro lugar).
+
+def test_unhelpful_inspection_is_no_longer_inspected():
+    inspected, failed = [(1.0, 0.0), (5.0, 5.0)], {}
+    unhelpful_inspection(inspected, failed, 1, 1.0, 0.0)
+    assert inspected == [(5.0, 5.0)]
+
+
+def test_unhelpful_inspection_counts_an_attempt():
+    failed = {1: (3, 1)}
+    assert unhelpful_inspection([(1.0, 0.0)], failed, 1, 1.0, 0.0) == 2
+    assert failed[1][1] == 2
+
+
+def test_unhelpful_inspection_is_retried_without_new_observations():
+    # El caso de Ventanas: llegó, siguió con las mismas observaciones y nunca se volvió a mirar.
+    inspected, failed = [(1.0, 0.0)], {}
+    unhelpful_inspection(inspected, failed, 1, 1.0, 0.0)
+    assert pick(TWO, inspected_points=inspected, failed=failed).id == 1
+
+
+def test_unhelpful_inspections_stop_at_max_attempts():
+    inspected, failed = [], {}
+    for _ in range(MAX_ATTEMPTS):
+        inspected.append((1.0, 0.0))
+        unhelpful_inspection(inspected, failed, 1, 1.0, 0.0)
+    assert pick(TWO, inspected_points=inspected, failed=failed).id == 2
+
+
+def test_failed_trip_after_an_unhelpful_one_needs_new_observations():
+    # Si después Nav2 no llega a la otra vista, vuelve la regla de los viajes fallidos.
+    inspected, failed = [(1.0, 0.0)], {}
+    unhelpful_inspection(inspected, failed, 1, 1.0, 0.0)
+    inspected.append((1.0, 0.0))
+    assert forget_failed_inspection(inspected, failed, 1, 1.0, 0.0, 3) == 2
+    assert pick(TWO, inspected_points=inspected, failed=failed).id == 2
+    cands = [cand(1, 1.0, 0.0, observaciones=4), cand(2, 3.0, 0.0)]
+    assert pick(cands, inspected_points=inspected, failed=failed).id == 1
+
+
+# --- inspection_outcome: qué pasa mientras misión espera en el lugar ---
+
+def outcome(cands, reported_ids=None, reported_points=None, now=1.0, look_until=2.0):
+    # Siempre pregunta por la candidata id 1.
+    return inspection_outcome(cands, 1, reported_ids or set(), reported_points or [],
+                              DIST_MIN, now, look_until)
+
+
+def test_keeps_looking_while_doubtful_and_in_time():
+    assert outcome(TWO) == 'looking'
+
+
+def test_unhelpful_when_the_wait_is_over():
+    assert outcome(TWO, now=2.0) == 'unhelpful'
+    assert outcome(TWO, now=5.0) == 'unhelpful'
+
+
+def test_reported_by_id_ends_the_wait():
+    assert outcome(TWO, reported_ids={1}) == 'reported'
+    # Aunque fusión ya no la mande: el reporte cuenta igual.
+    assert outcome([cand(2, 3.0, 0.0)], reported_ids={1}) == 'reported'
+
+
+def test_reported_with_another_id_at_the_same_box():
+    assert outcome(TWO, reported_points=[(1.1, 0.1)]) == 'reported'
+    assert outcome(TWO, reported_points=[(3.0, 0.0)]) == 'looking'
+
+
+def test_gone_when_fusion_no_longer_sends_it():
+    assert outcome([cand(2, 3.0, 0.0)]) == 'gone'
+    assert outcome([]) == 'gone'
+    assert outcome(None) == 'gone'
+
+
+def test_uses_the_current_center():
+    # El centro de ahora, no el del envío: fusión lo puede haber movido hasta un reporte.
+    moved = [cand(1, 3.0, 0.0), cand(2, 5.0, 0.0)]
+    assert outcome(moved, reported_points=[(3.1, 0.0)]) == 'reported'
