@@ -15,7 +15,9 @@ propose it as an interface change.
   module code unless he asks. Tests and test tools are fine to write when he asks.
 - The module's decisions so far are in `NOTES.md`. Keep it up to date when a
   decision changes.
-- He tests on macOS with Docker: `docker build -t equipo-jar .`, the node in a
+- He tests on macOS with Docker. The root Dockerfile left the template on 2026-10-30
+  (delivery without Docker), so the dev image is `notes/AlsinaBautista/Dockerfile`:
+  `docker build -f notes/AlsinaBautista/Dockerfile -t equipo-jar .`, the node in a
   container named `jar`, and the fakes with `docker exec -it jar ...`. The image
   only has `src/`, so `nav_falso.py` goes in with
   `docker cp notes/AlsinaBautista/nav_falso.py jar:/tmp/nav_falso.py`.
