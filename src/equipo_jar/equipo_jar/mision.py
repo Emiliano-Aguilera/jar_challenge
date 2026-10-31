@@ -694,16 +694,10 @@ class Mision(Node):
         return False
 
     def look_at_inspection(self):
-        """Ya en el lugar de la inspección: True mientras el robot se queda mirando.
-
-        Termina cuando la candidata se reporta, cuando desaparece (fusión la juntó con otra o
-        la descartó) o a los inspection_wait_s. Si sigue dudosa, no cuenta como inspeccionada:
-        suma un intento y la próxima vez se mira desde otro lugar (unhelpful_inspection).
-        """
         cand_id, cand_x, cand_y, _ = self.current_inspection
         outcome = inspection_outcome(self.candidatas, cand_id, self.reported_ids, self.reported_points,
-                                     self.p['min_report_distance_m'], self.seconds_since_t0(),
-                                     self.look_until)
+                                    self.p['min_report_distance_m'], self.seconds_since_t0(),
+                                    self.look_until)
         if outcome == 'looking':
             return True
         if outcome == 'reported':
@@ -715,10 +709,10 @@ class Mision(Node):
                 self.get_logger().info(f'La candidata id={cand_id} desapareció mientras la miraba')
             elif attempts < self.p['visit_max_attempts']:
                 self.get_logger().info(f'La inspección no confirmó la candidata id={cand_id} (intento '
-                                       f'{attempts} de {self.p["visit_max_attempts"]}): la miro desde otro lugar')
+                                        f'{attempts} de {self.p["visit_max_attempts"]}): la miro desde otro lugar')
             else:
                 self.get_logger().info(f'La inspección no confirmó la candidata id={cand_id} (intento '
-                                       f'{attempts} de {self.p["visit_max_attempts"]}): no la miro más')
+                                        f'{attempts} de {self.p["visit_max_attempts"]}): no la miro más')
         self.current_inspection = None
         self.look_until = None
         return False

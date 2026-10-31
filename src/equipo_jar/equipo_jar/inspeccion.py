@@ -58,13 +58,6 @@ def pick_doubtful(cands, reported_ids, reported_points, inspected_points, min_ob
     return best
 
 def forget_failed_inspection(inspected_points, failed, cand_id, x, y, observations):
-    """Nav2 did not reach the view: the candidate is not inspected, and the attempt counts.
-
-    Mission marks a candidate inspected when it sends the trip (no loops while it is
-    on its way). If the trip fails, this takes it back out of `inspected_points` and
-    adds a failed attempt with its observations at the time: `pick_doubtful` tries it
-    again only with new observations and attempts left. Returns the attempt count.
-    """
     if (x, y) in inspected_points:
         inspected_points.remove((x, y))
     _, attempts = failed.get(cand_id, (0, 0))
@@ -72,24 +65,9 @@ def forget_failed_inspection(inspected_points, failed, cand_id, x, y, observatio
     return attempts + 1
 
 def unhelpful_inspection(inspected_points, failed, cand_id, x, y):
-    """Nav2 reached the view, but after the wait the candidate is still not reported.
-
-    Like a failed trip: it is not inspected anymore and the attempt counts. But the retry
-    does not need new observations: the next view is another spot (`viewpoint_for` skips
-    spots near the robot, and the robot is at this one), so it can give fusion what this
-    one did not. It is stored as 0 observations, and every candidate `pick_doubtful`
-    looks at has more. Returns the attempt count.
-    """
     return forget_failed_inspection(inspected_points, failed, cand_id, x, y, 0)
 
 def inspection_outcome(cands, cand_id, reported_ids, reported_points, dist_min, now, look_until):
-    """What happened to the candidate of an inspection that arrived, while mission waits.
-
-    'reported': reported by id, or another id was reported at the same box.
-    'gone': fusion dropped it or merged it into another one.
-    'looking': still doubtful, and `now` is before `look_until`.
-    'unhelpful': still doubtful, and the wait is over.
-    """
     if cand_id in reported_ids:
         return 'reported'
     current = None
