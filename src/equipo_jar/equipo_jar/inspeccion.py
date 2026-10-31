@@ -70,3 +70,36 @@ def forget_failed_inspection(inspected_points, failed, cand_id, x, y, observatio
     _, attempts = failed.get(cand_id, (0, 0))
     failed[cand_id] = (observations, attempts + 1)
     return attempts + 1
+
+def unhelpful_inspection(inspected_points, failed, cand_id, x, y):
+    """Nav2 reached the view, but after the wait the candidate is still not reported.
+
+    Like a failed trip: it is not inspected anymore and the attempt counts. But the retry
+    does not need new observations: the next view is another spot (`viewpoint_for` skips
+    spots near the robot, and the robot is at this one), so it can give fusion what this
+    one did not. It is stored as 0 observations, and every candidate `pick_doubtful`
+    looks at has more. Returns the attempt count.
+    """
+    return forget_failed_inspection(inspected_points, failed, cand_id, x, y, 0)
+
+def inspection_outcome(cands, cand_id, reported_ids, reported_points, dist_min, now, look_until):
+    """What happened to the candidate of an inspection that arrived, while mission waits.
+
+    'reported': reported by id, or another id was reported at the same box.
+    'gone': fusion dropped it or merged it into another one.
+    'looking': still doubtful, and `now` is before `look_until`.
+    'unhelpful': still doubtful, and the wait is over.
+    """
+    if cand_id in reported_ids:
+        return 'reported'
+    current = None
+    for c in cands or []:
+        if c.id == cand_id:
+            current = c
+    if current is None:
+        return 'gone'
+    if near_any(current.centro.x, current.centro.y, reported_points, dist_min):
+        return 'reported'
+    if now < look_until:
+        return 'looking'
+    return 'unhelpful'

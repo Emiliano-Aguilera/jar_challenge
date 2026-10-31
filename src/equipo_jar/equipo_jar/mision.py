@@ -24,8 +24,10 @@ from equipo_jar.reportes import armar_reporte
 from equipo_jar_msgs.msg import Candidatas
 from equipo_jar.confirmacion import select_to_report
 from equipo_jar.exploracion import yaw_from_quaternion, first_pending, angle_difference, goal_position, box_zones, near_box, return_verdict, goal_blocked, start_ready
-from equipo_jar.inspeccion import pick_doubtful, viewpoint_for, forget_failed_inspection
+from equipo_jar.inspeccion import (pick_doubtful, viewpoint_for, forget_failed_inspection,
+                                   unhelpful_inspection, inspection_outcome)
 from equipo_jar.mapa import Grid
+from equipo_jar.vuelta import steps_to_start, way_back_m, return_leg
 
 from tf2_ros import Buffer, TransformListener, TransformException
 from rclpy.time import Time
@@ -58,7 +60,9 @@ class Mision(Node):
                                             'settle_s': 0.0, 'max_recoveries': 10, 'return_tolerance_m': 0.05,
                                             'return_max_tries': 3, 'return_still_s': 2.0, 'return_still_m': 0.01,
                                             'return_check_max_s': 10.0,
-                                            'costmap_blocked_value': 99})  # parámetros ajustables
+                                            'costmap_blocked_value': 99, 'inspection_wait_s': 2.0,
+                                            'return_direct_max_m': 10.0, 'return_leg_m': 5.0,
+                                            'return_max_legs': 10, 'return_snap_m': 0.3})  # parámetros ajustables
 
         self.mapa = None
         self.grid = None
@@ -85,6 +89,7 @@ class Mision(Node):
         self.visited = []
         self.current_point = None
         self.current_inspection = None  # (id, x, y, observaciones) del viaje de inspección en curso
+        self.look_until = None  # al llegar a mirar una candidata: hasta cuándo espera a que se confirme
         self.settle_until = None
         self.current_goal = None
         self.current_in_place = False
@@ -93,6 +98,10 @@ class Mision(Node):
         self.return_tree = os.path.join(get_package_share_directory('equipo_jar'),
                                 'behavior_trees', 'vuelta_precisa.xml')
         self.return_tries = 0
+        self.return_by_legs = False   # la vuelta va por tramos (larga, o Nav2 no llegó directo)
+        self.return_legs = 0          # tramos mandados
+        self.return_leg_active = False  # el viaje en curso es un tramo, no la largada
+        self.return_steps = None      # pasos hasta la largada en /map, se calcula una vez
         self.check_since = None
         self.check_pose = None
         self.check_started = None
@@ -414,11 +423,19 @@ class Mision(Node):
                                                         cand_id, cand_x, cand_y, observations)
                     self.get_logger().info(f'No llegué a mirar la candidata id={cand_id}: intento fallido '
                                            f'{attempts} de {self.p["visit_max_attempts"]}')
-                self.current_inspection = None
+                    self.current_inspection = None
+                else:
+                    # Llegó: no alcanza con estar ahí. Se queda quieto hasta que fusión la confirme
+                    # o pase inspection_wait_s (look_at_inspection).
+                    self.look_until = self.seconds_since_t0() + self.p['inspection_wait_s']
+                    self.get_logger().info(f'Llegué a mirar la candidata id={self.current_inspection[0]}: '
+                                           f'espero hasta {self.p["inspection_wait_s"]:.1f} s a que se confirme')
             self.current_point = None
             self.nav_state = 'idle'
             self.settle_until = self.seconds_since_t0() + self.p['settle_s']
-        if self.settle_until is not None and self.seconds_since_t0() < self.settle_until: 
+        if self.look_until is not None and self.look_at_inspection():
+            return
+        if self.settle_until is not None and self.seconds_since_t0() < self.settle_until:
             return
         if self.inspect_doubtful():
             return
@@ -480,7 +497,8 @@ class Mision(Node):
             return 'todas reportadas'
         elif self.seconds_since_t0() >= self.p['return_time_s']:
             return 'se termina el tiempo'
-        elif (self.plan is not None and self.nav_state != 'sending' and self.nav_state != 'moving' 
+        elif (self.plan is not None and self.nav_state != 'sending' and self.nav_state != 'moving'
+                and self.look_until is None
                 and first_pending(self.plan.poses, self.visited, self.p['same_point_distance_m'], 
                 self.p['same_point_angle_rad'], self.current_box_zones()) is None and self.next_doubtful() is None):
             return 'no quedan puntos ni dudosas'
@@ -511,18 +529,69 @@ class Mision(Node):
                 self.change_state('stopping')
                 return
             else:
-                x, y, yaw = self.start_pose
-                sent = self.go_to(self.make_pose(x, y, yaw), self.return_tree)
+                (x, y, yaw), tree, is_leg = self.next_return_goal()
+                sent = self.go_to(self.make_pose(x, y, yaw), tree)
                 if sent:
                     self.return_sent = True
-                    self.return_tries += 1
+                    self.return_leg_active = is_leg
+                    if is_leg:
+                        self.return_legs += 1
+                        self.get_logger().info(f'Vuelta por tramos: tramo {self.return_legs} hasta '
+                                               f'({x:.2f},{y:.2f})')
+                    else:
+                        self.return_tries += 1
                     return
+        if self.return_sent and self.return_leg_active and (self.nav_state == 'arrived' or self.nav_state == 'failed'):
+            # Un tramo no se mide: se manda el siguiente (o la largada) en el próximo ciclo.
+            self.get_logger().info(f'Tramo {self.return_legs} terminado: {self.nav_state}')
+            self.return_sent = False
+            self.return_leg_active = False
+            return
         if self.return_sent and (self.nav_state == 'arrived' or self.nav_state == 'failed'):
+            if self.nav_state == 'failed' and not self.return_by_legs:
+                # Si Nav2 no pudo, mandar lo mismo falla igual: el próximo intento va por tramos.
+                self.return_by_legs = True
+                self.get_logger().info('Nav2 no llegó a la largada: el próximo intento va por tramos')
             self.get_logger().info(f'Vuelta terminada: {self.nav_state}')
             self.check_since = None
             self.check_started = self.seconds_since_t0()
             self.change_state('checking')
             return
+
+    def next_return_goal(self):
+        """((x, y, yaw), árbol, es_tramo): la largada, o un tramo hacia ella.
+
+        Va por tramos si el camino de vuelta en /map mide más de return_direct_max_m (0 = nunca
+        de entrada), o si Nav2 ya falló yendo directo. Cada tramo mide hasta return_leg_m, como
+        mucho return_max_legs. El último trecho, y cualquier problema, van directo a la largada
+        con el árbol preciso, como antes (vuelta.py explica por qué hace falta).
+        """
+        start = (self.start_pose, self.return_tree, False)
+        pose = self.current_pose()
+        if pose is None or self.grid is None or self.return_legs >= self.p['return_max_legs']:
+            return start
+        try:
+            if self.return_steps is None:
+                x0, y0, _ = self.start_pose
+                self.return_steps = steps_to_start(self.grid, x0, y0, self.p['visit_transit_radius_m'],
+                                                   self.p['visit_free_threshold'], self.p['return_snap_m'])
+            if not self.return_by_legs and self.p['return_direct_max_m'] > 0:
+                length = way_back_m(self.grid, self.return_steps, pose[0], pose[1], self.p['return_snap_m'])
+                if length is not None and length > self.p['return_direct_max_m']:
+                    self.return_by_legs = True
+                    self.get_logger().info(f'La vuelta mide {length:.1f} m en el mapa: voy por tramos')
+            if not self.return_by_legs:
+                return start
+            zones = self.current_box_zones()
+            leg = return_leg(self.grid, self.return_steps, pose[0], pose[1], self.p['return_leg_m'],
+                             self.p['return_snap_m'], lambda x, y: self.is_blocked(x, y) or near_box(x, y, zones))
+        except ValueError as e:
+            self.get_logger().warning(f'No pude armar la vuelta por tramos: {e}. Voy directo')
+            self.return_steps = {}
+            return start
+        if leg is None:
+            return start
+        return (leg, '', True)
 
     def check_return(self):
         now = self.seconds_since_t0()
@@ -602,6 +671,36 @@ class Mision(Node):
                 self.get_logger().info(f'Voy a mirar la candidata id={c.id} desde ({x:.2f},{y:.2f})')
                 self.idle_since = None
                 return True
+        return False
+
+    def look_at_inspection(self):
+        """Ya en el lugar de la inspección: True mientras el robot se queda mirando.
+
+        Termina cuando la candidata se reporta, cuando desaparece (fusión la juntó con otra o
+        la descartó) o a los inspection_wait_s. Si sigue dudosa, no cuenta como inspeccionada:
+        suma un intento y la próxima vez se mira desde otro lugar (unhelpful_inspection).
+        """
+        cand_id, cand_x, cand_y, _ = self.current_inspection
+        outcome = inspection_outcome(self.candidatas, cand_id, self.reported_ids, self.reported_points,
+                                     self.p['min_report_distance_m'], self.seconds_since_t0(),
+                                     self.look_until)
+        if outcome == 'looking':
+            return True
+        if outcome == 'reported':
+            self.get_logger().info(f'La inspección confirmó la candidata id={cand_id}')
+        else:
+            attempts = unhelpful_inspection(self.inspected_points, self.failed_inspections,
+                                            cand_id, cand_x, cand_y)
+            if outcome == 'gone':
+                self.get_logger().info(f'La candidata id={cand_id} desapareció mientras la miraba')
+            elif attempts < self.p['visit_max_attempts']:
+                self.get_logger().info(f'La inspección no confirmó la candidata id={cand_id} (intento '
+                                       f'{attempts} de {self.p["visit_max_attempts"]}): la miro desde otro lugar')
+            else:
+                self.get_logger().info(f'La inspección no confirmó la candidata id={cand_id} (intento '
+                                       f'{attempts} de {self.p["visit_max_attempts"]}): no la miro más')
+        self.current_inspection = None
+        self.look_until = None
         return False
 
     def wait_for_stop(self):

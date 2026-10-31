@@ -215,7 +215,8 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
   Nav2's costmap while it chooses, so a free spot can win. Before, mission checked only the
   chosen spot and counted a try if it was occupied.
 - Not covered yet: with no spot the robot does not turn to face the candidate from where
-  it is. A trip that arrives but brings no new observations still counts as a visit.
+  it is. (A trip that arrived without new observations counted as a visit: fixed on
+  2026-10-31, see below.)
 - Checked (2026-10-29, branch `mision/inspecciones-y-vuelta`, 9aa5032): laberinto_1 600 s:
   300, 2 of 3 boxes (run 40978622059). The pocket box (-1.92,1.47) had no spot 3 times and
   was reported by the final round after the return; the third box was never seen
@@ -247,6 +248,25 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
   still waiting for its visit.
 - To check in the simulator: the robot leaves as soon as it arrives. If fusion
   needs more time to confirm, add a short wait at the spot.
+- Seen (Codex, custom world Ventanas, 2026-10-31): a candidate with 2 observations was
+  inspected; Nav2 arrived, it still had 2, and it counted as inspected. Later it had 5
+  with 0.15 m (fusion's one-spot floor, `single_view_sigma_m`) and was reported only by
+  the final round at 360 s: the report scored, but the run lost the +200 bonus. With
+  `settle_s` 0 the robot left the spot in the same tick it arrived.
+- Decided (2026-10-31): arriving is not enough. Mission stays at the spot until the
+  candidate is reported or `inspection_wait_s` (2.0 s) passes (`look_at_inspection`;
+  `inspection_outcome` in `inspeccion.py`). Reports are checked every tick of the wait,
+  and "no plan points left" does not start the return during it. Still doubtful after
+  the wait: `unhelpful_inspection` takes it out of the inspected ones and counts one
+  attempt, without asking for new observations: the robot is at this spot, so
+  `viewpoint_for` picks another one >= 0.4 m away, which also lifts fusion's one-spot
+  floor (`min_baseline_m` 0.3). Gone (fusion merged or dropped it): taken out, no more
+  wait. `visit_max_attempts` (3) counts both kinds of attempt; a failed trip after an
+  unhelpful one again needs new observations.
+- Cost: only for doubtful candidates (1 in Ventanas): 2 s per view plus the trip.
+- Checked (`mundo_falso.py`, first view hidden, 2026-10-31): 1st view gave nothing, 2 s,
+  2nd view 0.42 m away, reported at 19 s. Same world with `development`: the robot left at
+  once, never went back, and the box was reported by the final round at `/done`.
 
 ## What if mission hits an unexpected error?
 
@@ -468,6 +488,30 @@ report), `exploracion.py` (where to go). Tunables: the `mision` section of
 - Checked with the precise tree (2026-10-29, runs of `mision/objetivos-ocupados`, 300 s):
   both returns passed on the first try; mission measured 0.034 m (maze_1) and 0.045 m
   (maze_3); +100 in both.
+- Problem (Codex, custom world Callejones, 2026-10-31): 5 of 5 at 143 s, then the trip
+  back failed 3 times and the run ended 4.86 m from the start. NavFn (Humble) stops
+  building a path after 4 x the costmap's longer side in cells, half a cell per step
+  (`max_cycles` in `navfn_planner.cpp`): ~14 m on a 6.9 m map, and the way back was
+  ~28 m. It is in Nav2's code, not a parameter, so the same goal fails again. Navigation
+  can change the planner (asked hans-die: Smac 2D); mission's part, either way:
+- Decided (2026-10-31): the trip back in legs (`vuelta.py`). Once, mission counts the
+  steps from the start to every cell where the robot fits on `/map` (breadth-first, along
+  x and y, with `visit_transit_radius_m` and `visit_free_threshold`; the start snaps to
+  the nearest such cell within `return_snap_m`, 0.3 m). It goes by legs when that way
+  back is longer than `return_direct_max_m` (10 m; 0 = only after a failed direct try),
+  or after a direct try fails. Each leg ends `return_leg_m` (5 m) along the way, facing
+  along it, shorter if it would end on a costmap obstacle or near a box. Legs are not
+  measured and do not use up `return_max_tries`. When the start is closer than one leg,
+  the usual direct trip (precise tree) and check follow. At most `return_max_legs` (10);
+  after that, or on any error, straight to the start as before.
+- Why 10 and 5: steps along x and y are never shorter than the real path, so 10 m on
+  `/map` stays under NavFn's ~14 m, and a 5 m leg leaves room for Nav2's detours. If
+  navigation moves to Smac, `return_direct_max_m` 0 keeps the legs only as a fallback
+  (params only).
+- Checked (`mundo_falso.py`: way back 14.8 m, fake planner limit 8 m, 2026-10-31): 2 legs
+  and the direct trip: 0.00 m, `/done` at 38 s. With `return_direct_max_m` 0: one failed
+  direct try, the same legs, 0.00 m. Same world with `development`: 3 failed tries,
+  `/done` 3.44 m away. Steps: 0.15 s once on a 6 x 6 m map; < 1 ms per leg.
 
 ## How does mission skip goals on obstacles that are not in `/map`?
 
@@ -502,9 +546,8 @@ that are not in `/map`?"); start on localization's flag (see "Where is the start
 pose?").
 
 Pending, in this order:
-1. Long trips back: NavFn caps paths at ~2x the map's longest side (~12 m on maze_1), so
-   the trip back can fail from far away. Mission fallback: go back through visited
-   points. (The A* failures to extract existing paths were fixed in #33: Dijkstra.)
+1. Long trips back: done on 2026-10-31, in legs (see "How does mission check the
+   return?"). (The A* failures to extract existing paths were fixed in #33: Dijkstra.)
 2. Tests: unmapped obstacles other than the blue boxes (a decoy blocking a corridor, one
    near the start): the simulator cannot add them yet (asked Emiliano-Aguilera). Shifted
    and turned starts: done (`largada`, see "Where is the start pose?" and hans-die's #48).
@@ -532,5 +575,10 @@ named parameter in `params/`.
   any goal, waits, answers succeeded (or aborted with `-p fallar:=true`) and
   accepts cancels. Fake `/map`, plan, candidates and TF with `ros2 topic pub` and
   `ros2 run tf2_ros static_transform_publisher`.
+- `notes/AlsinaBautista/mundo_falso.py` (2026-10-31): fake map (an S, way back ~15 m),
+  TF, plan, fusion and Nav2 in one node. Nav2 moves the robot to each goal and fails
+  paths longer than `limit_m` (8 m, like NavFn); fusion gives nothing at the first spot
+  where the robot stands near the box. Prints a RESULT line at `/done`. Run it, then
+  mission with `-p cantidad_victimas:=1` (commands in its docstring).
 - Unit tests (no ROS needed) in `src/equipo_jar/test/`: `test_confirmacion.py`,
-  `test_exploracion.py`, `test_mapa.py` and `test_inspeccion.py`.
+  `test_exploracion.py`, `test_mapa.py`, `test_inspeccion.py` and `test_vuelta.py`.

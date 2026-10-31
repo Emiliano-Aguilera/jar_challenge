@@ -22,5 +22,7 @@ propose it as an interface change.
   only has `src/`, so `nav_falso.py` goes in with
   `docker cp notes/AlsinaBautista/nav_falso.py jar:/tmp/nav_falso.py`.
   When asking him to test, give the exact command for every terminal.
+- Fake world for mission alone (map, TF, plan, fusion, Nav2): `notes/AlsinaBautista/mundo_falso.py`
+  (commands in its docstring; `docker cp` it into the container like `nav_falso.py`).
 - Unit tests in Docker:
-  `docker run --rm -v "$PWD/src/equipo_jar":/prueba -w /prueba equipo-jar python3 -m pytest test/test_confirmacion.py test/test_exploracion.py test/test_mapa.py test/test_inspeccion.py -v`
+  `docker run --rm -v "$PWD/src/equipo_jar":/prueba -w /prueba equipo-jar python3 -m pytest test/test_confirmacion.py test/test_exploracion.py test/test_mapa.py test/test_inspeccion.py test/test_vuelta.py -v`
