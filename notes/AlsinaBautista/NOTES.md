@@ -608,3 +608,18 @@ named parameter in `params/`.
   `/done`. Run it, then mission with `-p cantidad_victimas:=1` (commands in its docstring).
 - Unit tests (no ROS needed) in `src/equipo_jar/test/`: `test_confirmacion.py`,
   `test_exploracion.py`, `test_mapa.py`, `test_inspeccion.py` and `test_vuelta.py`.
+
+## Extra search foundations (2026-10-31)
+
+- `presupuesto.py` estimates a trip with a conservative speed, slowdown and overhead.
+  Extra exploration must fit both the exploration cutoff and the destination's trip
+  home plus reserve before the stopping cutoff. Unknown routes deny an extra trip;
+  they do not become zero distance. Invalid return settings request return.
+- `historial_vistas.py` keeps immutable actual-pose observations separate from
+  requested-goal outcomes. Sampling uses elapsed time, translation or heading change,
+  ignores old/equal timestamps and caps history size. Failed destinations are not views.
+- Geometry/budget tests are in `pruebas/test_presupuesto_mision.py` and
+  `pruebas/test_historial_vistas.py`; `test/test_repaso.py` discovers them from colcon.
+- These helpers are not wired into mission yet. The next step is Marco's supplementary
+  viewpoint provider, followed by mission's time/history/action integration and recorded
+  simulation comparisons. Reporting rules and current return behavior remain unchanged.
