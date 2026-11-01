@@ -741,10 +741,11 @@ named parameter in `params/`.
 
 - Requested navigation-only tuning: set `giro_max_rads` and `margen_giro_smoother`
   to 1.0, matching the organizers' driver cap (physical_rosmaster #72).
-- The organizers fixed the encoder scale in #70. Disable our compensations with
-  `fuente_rumbo: ruedas`, `escala_avance: 1.0` and `actualizaciones_giro: 0`.
-  Keep the existing TF tree: `odom_fused -> odom` is now the identity. Startup
-  localization updates, the watcher and fine-tuning remain active.
-- Parameter validation and 23 existing odometry/turn tests passed. A probe using
-  the actual YAML and launch speed helper confirmed the 1 rad/s limits and
-  unchanged odometry despite conflicting IMU samples. No simulation run yet.
+- The organizers fixed the encoder scale in #70: set `escala_avance: 1.0` to
+  remove local distance scaling. Their email warns that rotation still has
+  substantial error. Keep `fuente_rumbo: giroscopo` and `actualizaciones_giro: 10`
+  until the new bag supports changing heading correction. The initial adjustment
+  disabled these too broadly; reviewing the full email corrected that decision.
+- Keep the existing TF tree, startup localization updates, watcher and fine-tuning.
+  Parameter validation and the 23 existing odometry/turn tests are the local
+  checks; the new bag and simulation still need validation.

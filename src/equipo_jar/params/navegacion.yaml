@@ -18,8 +18,8 @@ limites:
 amcl:
   ros__parameters:
     global_frame_id: map
-    # Keep the existing TF tree with odometria_imu in pass-through mode (identity).
-    # The organizers fixed the encoder scale (physical_rosmaster #70): use /odom unchanged.
+    # Keep the IMU heading: the organizers warn that rotation still has substantial error.
+    # Their encoder fix (physical_rosmaster #70) removes the need for distance scaling.
     odom_frame_id: odom_fused
     base_frame_id: base_footprint
     scan_topic: /scan                 # amcl se suscribe con SensorDataQoS (best effort)
@@ -65,7 +65,7 @@ amcl:
 odometria_imu:
   ros__parameters:
     frame_fusionado: odom_fused       # = amcl odom_frame_id
-    fuente_rumbo: ruedas              # giroscopo, orientacion, or ruedas (off: odom_fused = odom)
+    fuente_rumbo: giroscopo           # giroscopo, orientacion, or ruedas (off: odom_fused = odom)
     signo_giroscopo: 0                # 0: learned from the wheels (the real gyro is inverted)
     imu_vieja_s: 0.5                  # s without IMU before a step uses the wheels' heading
     signo_wz_minimo_rads: 0.2         # the sign is learned only while the wheels turn this fast
@@ -121,9 +121,9 @@ localizacion:
     desvio_xy_afinada: 0.02           # spread sent to AMCL with the fine-tuned pose
     desvio_yaw_afinada: 0.02
     actualizaciones_quieto: 10        # 0 = none: ready as soon as AMCL takes the start pose
-    # Extra heading updates after turns: off with the organizers' corrected odometry.
-    # Startup updates and the localization watcher remain active.
-    actualizaciones_giro: 0
+    # Keep the existing heading updates: the encoder fix does not eliminate rotation error.
+    # Recalibrate with the new bag before reducing these updates. 0 = off.
+    actualizaciones_giro: 10
     giro_minimo_rad: 0.3              # signed rotation of one turn that needs a fix
     girando_rads: 0.3                 # above this the robot is turning, not just correcting
     max_correccion_s: 4.0             # stop waiting this long after the turn ends
