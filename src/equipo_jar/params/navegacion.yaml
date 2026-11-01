@@ -6,19 +6,20 @@
 # Speed limits: set them only here. navegacion.launch.py copies them into MPPI (vx_max,
 # vy_max, vx_min, wz_max) and the velocity smoother (max/min_velocity). If the robot has
 # its own lower limit (factory), put that limit here: MPPI plans with these numbers, and
-# a robot slower than planned turns late and stops late. Hard limit of the X3: 1.0 m/s, 5 rad/s.
+# a robot slower than planned turns late and stops late. JAR driver limits: 0.5 m/s per axis,
+# 1.0 rad/s (physical_rosmaster #72).
 limites:
   ros__parameters:
     lineal_max_ms: 0.5                # forward and sideways
     reversa_max_ms: 0.35
-    giro_max_rads: 1.9
-    margen_giro_smoother: 1.05        # smoother turn limit = giro_max_rads x this
+    giro_max_rads: 1.0
+    margen_giro_smoother: 1.0         # smoother turn limit = giro_max_rads x this
 
 amcl:
   ros__parameters:
     global_frame_id: map
-    # Wheels' steps turned with the IMU heading (odometria_imu): the real /odom counts turns
-    # ~25 % too much. Tree: map -> odom_fused -> odom -> base_footprint.
+    # Keep the existing TF tree with odometria_imu in pass-through mode (identity).
+    # The organizers fixed the encoder scale (physical_rosmaster #70): use /odom unchanged.
     odom_frame_id: odom_fused
     base_frame_id: base_footprint
     scan_topic: /scan                 # amcl se suscribe con SensorDataQoS (best effort)
@@ -64,16 +65,15 @@ amcl:
 odometria_imu:
   ros__parameters:
     frame_fusionado: odom_fused       # = amcl odom_frame_id
-    fuente_rumbo: giroscopo           # giroscopo, orientacion, or ruedas (off: odom_fused = odom)
+    fuente_rumbo: ruedas              # giroscopo, orientacion, or ruedas (off: odom_fused = odom)
     signo_giroscopo: 0                # 0: learned from the wheels (the real gyro is inverted)
     imu_vieja_s: 0.5                  # s without IMU before a step uses the wheels' heading
     signo_wz_minimo_rads: 0.2         # the sign is learned only while the wheels turn this fast
     signo_giro_minimo_rad: 0.5        # wheel rotation needed to decide the sign
     signo_correlacion_minima: 0.7     # |correlation| gyro vs wheels needed (bag: 0.95)
-    # Distance: the wheels' steps times a scale. 0 = learned as IMU turn / wheels turn (real
-    # robot 0.80: /odom counts turns and distance ~25 % too much; sim 1.0). 1.0 turns it off.
-    # Week-10 bag: AMCL position error median / p90 4.9 / 10.2 cm -> 3.6 / 6.4 cm (learned 0.798).
-    escala_avance: 0.0
+    # Distance: the wheels' steps times a scale. 0 = learned as IMU turn / wheels turn.
+    # Before the encoder fix, the week-10 bag needed ~0.80; 1.0 disables this workaround.
+    escala_avance: 1.0               # corrected driver: no local distance scaling
     escala_giro_minimo_rad: 1.0       # wheel turning before the learned scale is used
     escala_minima: 0.7                # learned scale kept within these
     escala_maxima: 1.1
@@ -121,10 +121,9 @@ localizacion:
     desvio_xy_afinada: 0.02           # spread sent to AMCL with the fine-tuned pose
     desvio_yaw_afinada: 0.02
     actualizaciones_quieto: 10        # 0 = none: ready as soon as AMCL takes the start pose
-    # Heading fix after turns (real robot: /odom overcounts turns ~25 %). 0 = off.
-    # Week-10 bag replay, heading when the flag turns true again: 10.9° without the fix,
-    # 5.4° with 5 updates, 1.9° with 10 (notes/hans-die/NOTES.md).
-    actualizaciones_giro: 10
+    # Extra heading updates after turns: off with the organizers' corrected odometry.
+    # Startup updates and the localization watcher remain active.
+    actualizaciones_giro: 0
     giro_minimo_rad: 0.3              # signed rotation of one turn that needs a fix
     girando_rads: 0.3                 # above this the robot is turning, not just correcting
     max_correccion_s: 4.0             # stop waiting this long after the turn ends
@@ -362,7 +361,7 @@ velocity_smoother:
     max_accel: [1.5, 1.5, 3.2]
     # Frenar rápido: al llegar, el controller manda cero y el smoother baja en rampa. Con -3.2
     # el giro final (~0.85 rad/s) tardaba 0.27 s en parar, y la misión manda /done 0.17-0.24 s
-    # después: quedaba un /cmd_vel no nulo tras /done. Con -20 hasta wz_max (1.9) para en
+    # después: quedaba un /cmd_vel no nulo tras /done. Con -20 hasta el viejo máximo (1.9) para en
     # < 0.1 s. Lineal -2.5 (0.25 g): de la velocidad típica al llegar (< 0.15) en < 0.06 s.
     max_decel: [-2.5, -2.5, -20.0]
     deadband_velocity: [0.0, 0.0, 0.0]

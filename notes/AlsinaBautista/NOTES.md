@@ -736,3 +736,15 @@ named parameter in `params/`.
 - Regression cases cover one provider call across route changes, blocked endpoint,
   disconnected home, optical replanning, consecutive navigation changes and disabling
   during refresh. Default activation remains false; push stays with the user.
+
+## Navigation parameters for the corrected platform (2026-11-01)
+
+- Requested navigation-only tuning: set `giro_max_rads` and `margen_giro_smoother`
+  to 1.0, matching the organizers' driver cap (physical_rosmaster #72).
+- The organizers fixed the encoder scale in #70. Disable our compensations with
+  `fuente_rumbo: ruedas`, `escala_avance: 1.0` and `actualizaciones_giro: 0`.
+  Keep the existing TF tree: `odom_fused -> odom` is now the identity. Startup
+  localization updates, the watcher and fine-tuning remain active.
+- Parameter validation and 23 existing odometry/turn tests passed. A probe using
+  the actual YAML and launch speed helper confirmed the 1 rad/s limits and
+  unchanged odometry despite conflicting IMU samples. No simulation run yet.
