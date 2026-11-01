@@ -620,6 +620,11 @@ named parameter in `params/`.
   ignores old/equal timestamps and caps history size. Failed destinations are not views.
 - Geometry/budget tests are in `pruebas/test_presupuesto_mision.py` and
   `pruebas/test_historial_vistas.py`; `test/test_repaso.py` discovers them from colcon.
-- These helpers are not wired into mission yet. The next step is Marco's supplementary
-  viewpoint provider, followed by mission's time/history/action integration and recorded
-  simulation comparisons. Reporting rules and current return behavior remain unchanged.
+- Mission now samples actual map-frame TF into `search_views` while exploring, when
+  `extra_search_enabled` is true (false by default). Sampling requires a fresh, valid TF
+  and the latest localization-ready flag; it does not change the existing start latch.
+  A map change clears history. Invalid history settings never block reporting/exploration.
+- `pruebas/test_historial_mision.py` exercises the real node with external clock/TF fakes.
+  Extra viewpoint selection, route-budget integration and action orchestration remain
+  pending. The flag currently enables history collection only; reporting rules and
+  current return behavior remain unchanged.

@@ -26,7 +26,8 @@ from equipo_jar.confirmacion import select_to_report
 from equipo_jar.exploracion import yaw_from_quaternion, first_pending, angle_difference, goal_position, box_zones, near_box, return_verdict, goal_blocked, start_ready
 from equipo_jar.inspeccion import (pick_doubtful, viewpoint_for, forget_failed_inspection,
                                    unhelpful_inspection, inspection_outcome)
-from equipo_jar.mapa import Grid
+from equipo_jar.mapa import Grid, Pose, planar_yaw
+from equipo_jar.historial_vistas import ObservedView, append_view
 from equipo_jar.vuelta import steps_to_start, way_back_m, return_leg
 
 from tf2_ros import Buffer, TransformListener, TransformException
@@ -64,7 +65,13 @@ class Mision(Node):
                                             'final_look_s': 1.0,
                                             'return_direct_max_m': 10.0, 'return_leg_m': 5.0,
                                             'return_max_legs': 10, 'return_max_failed_legs': 2,
-                                            'return_snap_m': 0.3})  # parámetros ajustables
+                                            'return_snap_m': 0.3,
+                                            'extra_search_enabled': False,
+                                            'extra_history_max': 1200,
+                                            'extra_history_interval_s': 1.0,
+                                            'extra_history_shift_m': 0.10,
+                                            'extra_history_turn_rad': 0.30,
+                                            'extra_pose_max_age_s': 1.0})
 
         self.mapa = None
         self.grid = None
@@ -72,6 +79,9 @@ class Mision(Node):
         self.candidatas = None
 
         self.costmap = None
+        self.search_views = ()
+        self.search_map_key = None
+        self.search_localization_ready = False
 
         self.t0 = None
         self.create_timer(0.1, self.step)
@@ -151,8 +161,15 @@ class Mision(Node):
         self.mapa = mapa
         try:
             self.grid = Grid.from_occupancy_grid(mapa)
+            key = (self.grid.width, self.grid.height, self.grid.resolution,
+                   self.grid.origin, self.grid.data)
+            if key != self.search_map_key:
+                self.search_views = ()
+                self.search_map_key = key
         except ValueError as e:
             self.grid = None
+            self.search_views = ()
+            self.search_map_key = None
             self.get_logger().error(f'No pude armar la grilla del mapa: {e}. Sin inspecciones.')
 
     def on_costmap(self, msg):
@@ -162,8 +179,36 @@ class Mision(Node):
         return goal_blocked(self.costmap, x, y, self.p['costmap_blocked_value'])
 
     def on_localization_ready(self, msg):
+        self.search_localization_ready = bool(msg.data)
         if msg.data:
             self.localization_ready = True
+
+    def update_search_history(self):
+        if (not self.p['extra_search_enabled'] or self.state != 'exploring'
+                or self.grid is None or self.t0 is None
+                or not self.search_localization_ready):
+            return
+        try:
+            limit = self.p['extra_pose_max_age_s']
+            if isinstance(limit, bool) or not math.isfinite(limit) or limit <= 0:
+                return
+            transform = self.tf_buffer.lookup_transform('map', 'base_footprint', Time())
+            if transform.header.frame_id != 'map':
+                return
+            stamp = Time.from_msg(transform.header.stamp)
+            age = (self.get_clock().now() - stamp).nanoseconds / 1e9
+            if stamp.nanoseconds <= 0 or age < 0 or age > limit:
+                return
+            position = transform.transform.translation
+            yaw = planar_yaw(transform.transform.rotation)
+            view = ObservedView(Pose(position.x, position.y, yaw), self.seconds_since_t0())
+            self.search_views = append_view(
+                self.search_views, view, max_items=self.p['extra_history_max'],
+                min_interval_s=self.p['extra_history_interval_s'],
+                min_shift_m=self.p['extra_history_shift_m'],
+                min_turn_rad=self.p['extra_history_turn_rad'])
+        except (TransformException, TypeError, ValueError, OverflowError) as e:
+            self.get_logger().warning(f'View history unavailable: {e}', throttle_duration_sec=5.0)
 
     def seconds_since_t0(self):
         if self.t0 is None:
@@ -379,6 +424,8 @@ class Mision(Node):
         if not self.localization_ready and not self.start_timeout_logged:
             self.get_logger().warning('Localización no avisó que está lista: arranco igual')
             self.start_timeout_logged = True
+        if self.p['extra_search_enabled']:
+            self.update_search_history()
         # Después del arranque: sin localización lista, una candidata podría quedar mal ubicada.
         self.check_reports(self.p['min_observations'], self.p['max_deviation_m'])
         self.check_stuck()
