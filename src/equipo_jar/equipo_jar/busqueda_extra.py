@@ -304,6 +304,17 @@ class ExtraSearch:
             if self.navigation_key is not None and job.navigation_key[0] == self.navigation_key[0]:
                 changed = sum(a != b for a, b in zip(job.navigation_key[1], self.navigation_key[1]))
         if reason is not None:
+            if (reason == 'navigation_changed' and job.kind == 'plan'
+                    and calculation is not None and error is None
+                    and calculation.plan is not None and calculation.plan.views
+                    and job.optical_key == self.optical_key):
+                self.views = calculation.plan.views
+                self.field = None
+                self.field_key = None
+                self.diagnostic('retain_views', job=job.number, kind=job.kind,
+                                reason=reason, changed_cells=changed, views=len(self.views),
+                                route='refresh_required')
+                return
             self.last_discard = reason
             self.diagnostic('discard', job=job.number, kind=job.kind, reason=reason, changed_cells=changed)
             return
