@@ -1,4 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
+from time import perf_counter
 import math
 from threading import Event
 
@@ -17,6 +19,29 @@ from equipo_jar.rutas_presupuesto import build_route_field, estimate_route
 
 def geometry(grid):
     return grid.width, grid.height, grid.resolution, grid.origin
+
+
+@dataclass(frozen=True)
+class SearchJob:
+    future: object
+    epoch: int
+    kind: str
+    navigation_key: tuple
+    optical_key: tuple
+    number: int
+    submitted_s: float
+
+
+@dataclass(frozen=True)
+class Calculation:
+    field: object
+    plan: object
+    route_s: float
+    planner_s: float
+    compute_s: float
+    queue_s: float
+    stage: str
+    error: Exception | None
 
 
 class ExtraSearch:
@@ -49,17 +74,44 @@ class ExtraSearch:
         self.valid = False
         self.route_attempt_at = None
         self.last_kind = None
+        self.job_number = 0
+        self.last_wait = None
+        self.last_discard = None
 
-    def invalidate(self):
+    def diagnostic(self, event, **values):
+        if (not self.node.p['extra_search_enabled'] and not self.enabled
+                and self.job is None and 'job' not in values):
+            return
+        fields = ' '.join(f'{key}={value}' for key, value in values.items())
+        self.node.get_logger().info(f'Extra search event={event} generation={self.epoch} {fields}')
+
+    def pending(self):
+        if self.job is None:
+            return dict(pending_job='none', pending_kind='none', pending_status='none')
+        future = self.job.future
+        status = ('cancelled' if future.cancelled() else 'done' if future.done()
+                  else 'running' if future.running() else 'queued')
+        return dict(pending_job=self.job.number, pending_kind=self.job.kind, pending_status=status)
+
+    def waiting(self, kind, reason):
+        if self.phase != 'extra':
+            return
+        key = (kind, reason, self.job.number if self.job is not None else None)
+        if key != self.last_wait:
+            self.diagnostic('wait', kind=kind, reason=reason, **self.pending())
+            self.last_wait = key
+
+    def invalidate(self, reason='state_change'):
+        self.diagnostic('invalidate', reason=reason, **self.pending())
         self.epoch += 1
         self.cancel.set()
         if self.job is not None:
-            self.job[0].cancel()
+            self.job.future.cancel()
         self.field = None
         self.views = None
 
     def reset_map(self):
-        self.invalidate()
+        self.invalidate('map_changed')
         self.optics = None
         self.live = None
         self.live_at = None
@@ -123,22 +175,45 @@ class ExtraSearch:
         return route_seconds(distance, speed_mps=p['return_estimate_speed_mps'],
                              factor=p['return_estimate_factor'], overhead_s=p['return_estimate_overhead_s'])
 
-    def ready(self):
+    def readiness_reason(self):
         now = self.node.seconds_since_t0()
         limit = self.node.p['extra_costmap_max_age_s']
-        return (isinstance(limit, (int, float)) and not isinstance(limit, bool)
-                and math.isfinite(limit) and limit > 0 and now is not None
-                and self.live is not None and self.live_at is not None
-                and 0 <= now - self.live_at <= limit
-                and self.node.grid is not None and self.node.start_locked
-                and self.node.start_pose is not None and self.node.fresh_search_pose() is not None)
+        if (not isinstance(limit, (int, float)) or isinstance(limit, bool)
+                or not math.isfinite(limit) or limit <= 0):
+            return 'costmap_age_invalid'
+        if now is None:
+            return 'clock_unavailable'
+        if self.live is None or self.live_at is None:
+            return 'costmap_missing'
+        if not 0 <= now - self.live_at <= limit:
+            return 'costmap_stale'
+        if self.node.grid is None:
+            return 'map_missing'
+        if not self.node.start_locked:
+            return 'start_unlocked'
+        if self.node.start_pose is None:
+            return 'start_missing'
+        if not self.node.search_localization_ready:
+            return 'localization_not_ready'
+        if self.node.fresh_search_pose() is None:
+            return 'pose_unavailable'
+        return None
+
+    def ready(self):
+        return self.readiness_reason() is None
 
     def submit(self, kind):
-        if self.job is not None or not self.ready():
+        if self.job is not None:
+            self.waiting(kind, 'job_busy')
+            return
+        reason = self.readiness_reason()
+        if reason is not None:
+            self.waiting(kind, reason)
             return
         node = self.node
         if (kind == self.last_kind and self.route_attempt_at is not None
                 and node.seconds_since_t0() - self.route_attempt_at < node.p['extra_costmap_max_age_s'] / 2):
+            self.waiting(kind, 'retry_interval')
             return
         try:
             settings = self.settings()
@@ -150,6 +225,7 @@ class ExtraSearch:
                     'base_footprint', node.p['extra_camera_frame'], Time()).transform)
             zones = tuple(node.current_box_zones())
         except (TypeError, ValueError, OverflowError, TransformException) as error:
+            self.waiting(kind, f'input_error_{type(error).__name__}')
             node.get_logger().warning(f'Búsqueda extra no disponible: {error}', throttle_duration_sec=5.0)
             return
         live, optics, raw = self.live, self.optics, node.grid
@@ -162,18 +238,96 @@ class ExtraSearch:
                       same_point_distance_m=node.p['same_point_distance_m'],
                       same_point_angle_rad=node.p['same_point_angle_rad'])
 
+        submitted = perf_counter()
+
         def calculate():
-            field = build_route_field(live, robot, start, at_s, cancel=cancel)
-            plan = None
-            if kind == 'plan' and field is not None:
-                plan = provider(raw, live, robot, start, observed, attempted, camera, settings, **kwargs)
-            return field, plan
+            started = perf_counter()
+            field = plan = error = None
+            route_s = planner_s = 0.0
+            stage = 'route'
+            try:
+                field = build_route_field(live, robot, start, at_s, cancel=cancel)
+                route_s = perf_counter() - started
+                if kind == 'plan' and field is not None:
+                    stage = 'planner'
+                    plan = provider(raw, live, robot, start, observed, attempted, camera, settings, **kwargs)
+            except Exception as caught:
+                error = caught
+            finished = perf_counter()
+            if stage == 'route':
+                route_s = finished - started
+            else:
+                planner_s = finished - started - route_s
+            return Calculation(field, plan, route_s, planner_s, finished - started,
+                               started - submitted, stage, error)
 
         if self.executor is None:
             self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix='mission-extra')
-        self.job = (self.executor.submit(calculate), epoch, kind, self.navigation_key, self.optical_key)
+        self.job_number += 1
+        self.job = SearchJob(self.executor.submit(calculate), epoch, kind, self.navigation_key,
+                             self.optical_key, self.job_number, node.seconds_since_t0())
         self.route_attempt_at = node.seconds_since_t0()
         self.last_kind = kind
+        self.last_wait = None
+        wait = 0.0 if self.wait_since is None else node.seconds_since_t0() - self.wait_since
+        self.diagnostic('submit', job=self.job.number, kind=kind, phase=self.phase,
+                        views=len(observed), attempts=len(attempted),
+                        input_age_s=f'{node.seconds_since_t0() - at_s:.3f}', wait_s=f'{wait:.3f}')
+
+    def poll_job(self, *, accept=True):
+        job = self.job
+        if job is None or not job.future.done():
+            return
+        self.job = None
+        error = None
+        calculation = None
+        try:
+            calculation = job.future.result()
+            error = calculation.error
+        except Exception as caught:
+            error = caught
+        timing = ({name: f'{getattr(calculation, name[:-3] + "_s") * 1000:.3f}'
+                   for name in ('route_ms', 'planner_ms', 'compute_ms', 'queue_ms')}
+                  if calculation is not None else {})
+        self.diagnostic('result', job=job.number, kind=job.kind, job_generation=job.epoch,
+                        stage=calculation.stage if calculation is not None else 'unstarted',
+                        outcome=type(error).__name__ if error is not None else 'ok',
+                        elapsed_s=f'{self.node.seconds_since_t0() - job.submitted_s:.3f}', **timing)
+        reason = None
+        changed = 0
+        if not accept or self.node.state != 'exploring' or not self.node.p['extra_search_enabled']:
+            reason = 'inactive'
+        elif job.epoch != self.epoch:
+            reason = 'generation_changed'
+        elif job.navigation_key != self.navigation_key:
+            reason = 'navigation_changed'
+            if self.navigation_key is not None and job.navigation_key[0] == self.navigation_key[0]:
+                changed = sum(a != b for a, b in zip(job.navigation_key[1], self.navigation_key[1]))
+        if reason is not None:
+            self.last_discard = reason
+            self.diagnostic('discard', job=job.number, kind=job.kind, reason=reason, changed_cells=changed)
+            return
+        if error is not None:
+            self.node.get_logger().warning(f'Falló la búsqueda extra: {error}')
+            if self.phase == 'extra':
+                self.done_reason = 'falló el cálculo de vistas extra'
+            return
+        self.field = calculation.field
+        self.field_key = job.navigation_key
+        if job.kind == 'plan':
+            if job.optical_key != self.optical_key:
+                self.last_discard = 'optical_changed'
+                self.diagnostic('discard', job=job.number, kind=job.kind, reason='optical_changed')
+                return
+            plan = calculation.plan
+            self.views = () if plan is None else plan.views
+            pending = None if plan is None else plan.pending_count
+            self.node.get_logger().info(f'Plan extra: {len(self.views)} vistas, {pending} muestras pendientes')
+            if not self.views:
+                self.done_reason = 'sin vistas extra alcanzables'
+        self.diagnostic('accept', job=job.number, kind=job.kind,
+                        route='available' if self.field is not None else 'missing',
+                        field_age_s=f'{self.node.seconds_since_t0() - self.field.at_s:.3f}' if self.field is not None else 'none')
 
     def tick(self):
         node = self.node
@@ -181,11 +335,11 @@ class ExtraSearch:
         key = tuple((k, v) for k, v in sorted(node.p.items())
                     if k.startswith(('extra_', 'return_estimate_', 'same_point_')) or k == 'return_reserve_s')
         if key != self.config:
-            self.invalidate()
+            self.invalidate('config_changed')
             self.config = key
         if not enabled:
             if self.enabled:
-                self.invalidate()
+                self.invalidate('disabled')
                 self.live = self.optics = None
                 self.live_at = None
                 node.search_views = ()
@@ -196,24 +350,7 @@ class ExtraSearch:
         self.enabled = True
         if self.live is None and node.costmap is not None:
             self.on_costmap(node.costmap, node.costmap_at)
-        if self.job is not None and self.job[0].done():
-            future, epoch, kind, navigation_key, optical_key = self.job
-            self.job = None
-            if epoch == self.epoch and navigation_key == self.navigation_key:
-                try:
-                    field, plan = future.result()
-                    self.field = field
-                    self.field_key = navigation_key
-                    if kind == 'plan' and optical_key == self.optical_key:
-                        self.views = () if plan is None else plan.views
-                        pending = None if plan is None else plan.pending_count
-                        node.get_logger().info(f'Plan extra: {len(self.views)} vistas, {pending} muestras pendientes')
-                        if not self.views:
-                            self.done_reason = 'sin vistas extra alcanzables'
-                except Exception as error:
-                    node.get_logger().warning(f'Falló la búsqueda extra: {error}')
-                    if self.phase == 'extra':
-                        self.done_reason = 'falló el cálculo de vistas extra'
+        self.poll_job()
         self.valid = False
         try:
             self.settings()
@@ -225,6 +362,9 @@ class ExtraSearch:
         now = node.seconds_since_t0()
         if self.phase == 'extra' and self.wait_since is not None:
             if now - self.wait_since >= node.p['extra_plan_timeout_s']:
+                self.diagnostic('timeout', wait_s=f'{now - self.wait_since:.3f}',
+                                readiness=self.readiness_reason() or 'ready',
+                                last_discard=self.last_discard or 'none', **self.pending())
                 self.done_reason = 'se agotó la espera del plan extra'
         if (self.phase == 'primary' or self.active or node.current_inspection is not None) and self.job is None:
             interval = node.p['extra_costmap_max_age_s'] / 2
@@ -241,6 +381,9 @@ class ExtraSearch:
                     self.node.start_pose = (pose.x, pose.y, pose.yaw)
                     self.node.start_locked = True
             self.phase = 'extra'
+            self.last_wait = None
+            self.last_discard = None
+            self.diagnostic('enter', readiness=self.readiness_reason() or 'ready', **self.pending())
             self.node.get_logger().info(f'Inicio de búsqueda extra, generación {self.epoch}')
             self.wait_since = self.node.seconds_since_t0()
             self.views = None
@@ -339,7 +482,7 @@ class ExtraSearch:
     def sent(self, pose):
         if self.node.p['extra_search_enabled'] and self.node.state == 'exploring':
             if self.phase == 'extra' and not self.active:
-                self.invalidate()
+                self.invalidate('inspection')
                 self.wait_since = None
             self.requested = Pose(pose.pose.position.x, pose.pose.position.y,
                                   yaw_from_quaternion(pose.pose.orientation))
@@ -366,6 +509,7 @@ class ExtraSearch:
             self.views = None
 
     def close(self):
-        self.invalidate()
+        self.invalidate('shutdown')
+        self.poll_job(accept=False)
         if self.executor is not None:
             self.executor.shutdown(wait=False, cancel_futures=True)
