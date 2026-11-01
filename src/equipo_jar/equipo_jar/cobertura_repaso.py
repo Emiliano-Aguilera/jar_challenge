@@ -127,6 +127,10 @@ def _visible(grid, pose, targets, camera, settings, cancel):
     c, s = math.cos(pose.yaw), math.sin(pose.yaw)
     x = pose.x + c * camera.x - s * camera.y
     y = pose.y + s * camera.x + c * camera.y
+    base = grid.cell(pose.x, pose.y)
+    if (base is None or not grid.free(base, settings.free_threshold)
+            or not grid.visible((pose.x, pose.y), (x, y), settings.free_threshold)):
+        return []
     yaw = pose.yaw + camera.yaw
     radius2, half = settings.view_range ** 2, math.radians(settings.fov_degrees / 2)
     visible = []
@@ -144,8 +148,10 @@ def _visible(grid, pose, targets, camera, settings, cancel):
 
 def pending_samples(map_grid: Grid, live_grid: Grid,
                     observed: tuple[ObservedView, ...], camera: Camera,
-                    settings: Settings, *, cancel=None) -> tuple[tuple[float, float], ...]:
-    visual = visibility_grid(map_grid, live_grid, cancel=cancel)
+                    settings: Settings, *, cancel=None,
+                    occlusion_grid=None) -> tuple[tuple[float, float], ...]:
+    visual = visibility_grid(map_grid, live_grid if occlusion_grid is None else occlusion_grid,
+                             cancel=cancel)
     free = set()
     for j in range(map_grid.height):
         check_cancelled(cancel)
@@ -173,6 +179,7 @@ def propose_extra_views(
     camera: Camera, settings: Settings, *, limit: int, failed_shift_m: float,
     excluded: tuple[tuple[float, float, float], ...] = (), cancel=None,
     same_point_distance_m: float = 0.02, same_point_angle_rad: float = 0.10,
+    occlusion_grid=None,
 ) -> ExtraPlan:
     """Rank alternative goals; mission executes one, then requests a new snapshot.
 
@@ -205,10 +212,12 @@ def propose_extra_views(
             raise ValueError('unknown navigation outcome')
         if attempt.outcome != 'arrived':
             failed.append(attempt.pose)
-    pending = pending_samples(map_grid, live_grid, observed, camera, settings, cancel=cancel)
+    pending = pending_samples(map_grid, live_grid, observed, camera, settings, cancel=cancel,
+                              occlusion_grid=occlusion_grid)
     if not pending or limit == 0:
         return ExtraPlan((), len(pending))
-    visual = visibility_grid(map_grid, live_grid, cancel=cancel)
+    visual = visibility_grid(map_grid, live_grid if occlusion_grid is None else occlusion_grid,
+                             cancel=cancel)
 
     # Live costs already encode navigation inflation. Project only static transit
     # safety onto them, then use radius zero on that combined navigation mask.
