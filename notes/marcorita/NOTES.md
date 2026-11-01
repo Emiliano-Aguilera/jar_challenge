@@ -367,3 +367,16 @@ can we reduce travel cost without losing useful observations?
 - Evidence: `build/verificacion/cobertura/revision-mision-d375427/result.json`.
   Fetched origin and tested exported files. No merge, commit or push locally;
   pending coverage work and local parameters remain intact.
+
+## Extra search provider (2026-11-01)
+
+- An unmapped cylinder can hide targets behind a doorway/window after the
+  initial static plan has predicted coverage. No candidate means no inspection.
+- Keep the initial route intact. Add a pure supplementary provider and let
+  mission own history, deadlines and action lifecycle (Bautista draft #58).
+- Whole-cell projection preserves small obstacles between grid centers. Live
+  100 adds optical opacity; 99 blocks navigation but is not a physical wall.
+- Preserve pending shadows, require connectivity to robot/start, reject failed
+  neighborhoods across headings and rank positive-gain alternatives. Fine
+  recovery shares the bounded position budget. Never credit requested failures.
+- Validation/evidence and the remaining integration limits: EXTRA_SEARCH.md.

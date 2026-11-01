@@ -1,6 +1,27 @@
 # Coverage work status
 
-## Current task: visibility boundaries (2026-10-30)
+## Current task: supplementary views (2026-11-01)
+
+- Branch cobertura/repaso-oclusiones, base development a785697. Marco
+  authorized the provider/tests and subsequently a commit/push/draft PR for
+  Bautista to use. No merge or manual server run is authorized.
+  Mission, params, initial planner, map helpers, tools and workflows untouched.
+- Added cobertura_repaso for pending shadows and safe, connected alternatives.
+  Inflation is not optical opacity; failed requested goals grant no view credit.
+  Execute one proposal and replan. See EXTRA_SEARCH.md for the owner contract.
+- 58 geometry checks pass, including independent polygon clipping for grid
+  projection. Actual PR #58 history records give the same result as fixtures.
+- Six timing cases with three fresh-grid repetitions: 0.585..1.216 s locally,
+  including 1200 distinct poses and shifted/rotated/different-resolution grids.
+  Synthetic shadow recovery is demonstrated, not navigation or a victim report.
+- Full verifier reports 246 tests and dependencies/build/static/params green,
+  17 audited nodes / zero problems and zero pre-map motion/reports/violations.
+  Final explicit subprocess receipt confirms exit code 0 and the same runtime
+  source hash. Closure log: repaso/verificador-cierre.log. The first driver's
+  ambiguous status is preserved as preliminary evidence, superseded by the
+  final receipt. Human handoff: ../output/REPASO_PARA_BAUTISTA.md.
+
+## Previous task: visibility boundaries (2026-10-30)
 
 - Local branch cobertura/rayos-bordes in jar_challenge-rayos, base 53ecc6b.
   Marco authorized local correction and verification, then explicitly asked
