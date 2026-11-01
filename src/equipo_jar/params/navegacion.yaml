@@ -15,6 +15,14 @@ limites:
     giro_max_rads: 1.0
     margen_giro_smoother: 1.0         # smoother turn limit = giro_max_rads x this
 
+parada:
+  ros__parameters:
+    command_max_age_s: 0.3
+    odom_max_age_s: 0.5
+    still_time_s: 0.5
+    still_linear_mps: 0.01
+    still_angular_rads: 0.02
+
 amcl:
   ros__parameters:
     global_frame_id: map

@@ -69,8 +69,7 @@ def generate_launch_description():
     # escribe para /**), también a los costmaps que corren dentro del controller y
     # del planner. Los nodos que no usan `footprint` lo ignoran.
     comunes = [params, {'use_sim_time': use_sim_time, 'footprint': footprint()}]
-    # Un solo publicador de /cmd_vel: el smoother. Controller y behaviors le pasan
-    # sus velocidades por cmd_vel_nav. Después de /done alcanza con que paren ellos.
+    # Only parada publishes /cmd_vel; Nav2 cannot bypass its terminal inhibit.
     al_smoother = [('cmd_vel', 'cmd_vel_nav')]
 
     def nodo(paquete, ejecutable, nombre, remapeos=(), extra=None):
@@ -85,7 +84,8 @@ def generate_launch_description():
         nodo('nav2_behaviors', 'behavior_server', 'behavior_server', al_smoother),
         nodo('nav2_velocity_smoother', 'velocity_smoother', 'velocity_smoother', [
             ('cmd_vel', 'cmd_vel_nav'),
-            ('cmd_vel_smoothed', '/cmd_vel')], extra=limites_smoother),
+            ('cmd_vel_smoothed', '/jar/cmd_vel_smoothed')], extra=limites_smoother),
+        nodo('equipo_jar', 'parada', 'parada'),
         # navegar.xml: Humble's default tree, with the goal checker named (there are two).
         nodo('nav2_bt_navigator', 'bt_navigator', 'bt_navigator', extra={
             'default_nav_to_pose_bt_xml': os.path.join(

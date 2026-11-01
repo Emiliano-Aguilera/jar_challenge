@@ -54,6 +54,7 @@ class Mision(Node):
                                             'visit_clearance_m': 0.25, 'visit_angles': 12, 
                                             'visit_min_shift_m': 0.4, 'visit_box_margin_m': 0.25, 
                                             'localization_wait_max_s': 10.0, 'goal_timeout_s': 90.0, 'stuck_time_s': 20.0,
+                                            'goal_accept_timeout_s': 5.0, 'stop_confirm_max_age_s': 0.5,
                                             'stuck_distance_m': 0.05, 'stuck_angle_rad': 0.2, 'stop_wait_s': 1.0,
                                             'done_limit_s': 590.0, 'turn_in_place_m': 0.20, 
                                             'visit_max_attempts': 3, 'box_min_observations': 2,
@@ -163,6 +164,7 @@ class Mision(Node):
 
         self.stop_canceling = False
         self.stop_since = None
+        self.stop_confirmed_at = None
 
         self.last_skipped = None
 
@@ -176,6 +178,8 @@ class Mision(Node):
         self.navegacion = ActionClient(self, NavigateToPose, 'navigate_to_pose')
         self.pub_victimas = self.create_publisher(PointStamped, '/victimas', 10)
         self.pub_done = self.create_publisher(Empty, '/done', 10)
+        self.pub_stop = self.create_publisher(Bool, '/jar/parar', QOS_ESTADO)
+        self.create_subscription(Bool, '/jar/parada_confirmada', self.on_stop_confirmed, QOS_ESTADO)
         self.get_logger().info(
             f'Hay que encontrar {self.cantidad_victimas} víctimas. Esperando el mapa en /map...')
         self.create_subscription(OccupancyGrid, '/global_costmap/costmap', self.on_costmap, QOS_MAPA)
@@ -295,6 +299,8 @@ class Mision(Node):
             self.get_logger().info(f'Reporte {i}. id={c.id} x={c.centro.x :.2f} y={c.centro.y:.2f}')
 
     def go_to(self, pose, tree=''):
+        if self.state in ('stopping', 'finishing', 'finished'):
+            return False
         if not self.navegacion.server_is_ready():
             self.get_logger().warn('!!! El servidor de navegacion no esta listo !!!', throttle_duration_sec=5.0)
             return False
@@ -306,13 +312,18 @@ class Mision(Node):
         self.nav_state = "sending"
         self.recoveries = 0
         self.extra.sent(pose)
-        future = self.navegacion.send_goal_async(goal, feedback_callback=self.on_feedback)
-        future.add_done_callback(self.on_goal_response)
         now = self.seconds_since_t0()
         self.goal_start_time = now
         self.last_motion_time = now
         self.last_motion_pose = self.odom_pose()
         self.stuck_canceling = False
+        try:
+            future = self.navegacion.send_goal_async(goal, feedback_callback=self.on_feedback)
+            future.add_done_callback(self.on_goal_response)
+        except Exception as e:
+            self.get_logger().error(f'Navigation goal send failed: {e}; stopping')
+            self.change_state('stopping')
+            return False
         if not self.start_locked:
             self.start_locked = True
             if self.start_pose is not None:
@@ -429,13 +440,14 @@ class Mision(Node):
 
     def handle_on_goal_response(self, future):
         goal_handle = future.result()
+        if self.state in ('stopping', 'finishing', 'finished'):
+            if goal_handle.accepted:
+                goal_handle.cancel_goal_async()
+            return
         if not goal_handle.accepted:
             self.extra.result('rejected')
             self.nav_state = 'failed'
             self.get_logger().warn('Fallo el objetivo')
-            return
-        if self.state == 'finishing' or self.state == 'finished':
-            goal_handle.cancel_goal_async()
             return
         self.extra.accepted()
         self.current_goal = goal_handle
@@ -447,6 +459,8 @@ class Mision(Node):
             self.handle_on_goal_response(future)
         except Exception:
             self.nav_state = 'failed'
+            if self.state not in ('stopping', 'finishing', 'finished'):
+                self.change_state('stopping')
             self.get_logger().error(f'Error en on_goal_response:\n{traceback.format_exc()}', throttle_duration_sec=5.0)
 
     def handle_on_goal_result(self, future):
@@ -484,6 +498,10 @@ class Mision(Node):
     def change_state(self, new_state):
         self.get_logger().info(f'Estado: <{self.state}> -> <{new_state}>')
         self.state = new_state
+        if new_state == 'stopping':
+            self.stop_since = self.seconds_since_t0()
+            self.stop_confirmed_at = None
+            self.pub_stop.publish(Bool(data=True))
         if new_state != 'exploring':
             self.extra.invalidate()
 
@@ -497,12 +515,24 @@ class Mision(Node):
         if self.state == 'finished':
             return
         if self.state == 'finishing':
+            if not self.stop_is_confirmed():
+                self.change_state('stopping')
+                return
             self.pub_done.publish(Empty())
             self.change_state('finished')
             return
         if self.state == 'stopping':
             self.wait_for_stop()
             return
+        if self.nav_state == 'sending':
+            limit = self.p['goal_accept_timeout_s']
+            valid = (isinstance(limit, (int, float)) and not isinstance(limit, bool)
+                     and math.isfinite(limit) and 0 < limit < 60)
+            if (not valid or self.goal_start_time is None
+                    or self.seconds_since_t0() - self.goal_start_time >= limit):
+                self.get_logger().error('Navigation acceptance timed out or has invalid timing; stopping')
+                self.change_state('stopping')
+                return
         if not self.start_locked:
             pose = self.current_pose()
             if pose is not None:
@@ -901,17 +931,28 @@ class Mision(Node):
         self.look_until = None
         return False
 
+    def on_stop_confirmed(self, msg):
+        self.stop_confirmed_at = (self.seconds_since_t0()
+                                  if msg.data and self.state in ('stopping', 'finishing') else None)
+
+    def stop_is_confirmed(self):
+        return (self.stop_confirmed_at is not None
+                and 0 <= self.seconds_since_t0() - self.stop_confirmed_at
+                <= self.p['stop_confirm_max_age_s'])
+
     def wait_for_stop(self):
         now = self.seconds_since_t0()
+        self.pub_stop.publish(Bool(data=True))
         if self.nav_state == 'moving' and not self.stop_canceling:
-            self.current_goal.cancel_goal_async()
             self.stop_canceling = True
-            self.get_logger().info('Paro: cancelo el viaje')
-        if self.nav_state == 'sending' or self.nav_state == 'moving':
-            if now < self.p['done_limit_s']:
-                return
-            self.get_logger().warning('Nav2 no contesta: termino igual')
-            self.terminar()
+            try:
+                self.current_goal.cancel_goal_async()
+                self.get_logger().info('Paro: cancelo el viaje')
+            except Exception as e:
+                self.get_logger().warning(f'Navigation cancellation unavailable: {e}')
+        if not self.stop_is_confirmed():
+            if now >= self.p['done_limit_s']:
+                self.get_logger().warning('Waiting for confirmed stop; /done withheld', throttle_duration_sec=5.0)
             return
         if self.stop_since is None:
             self.stop_since = now

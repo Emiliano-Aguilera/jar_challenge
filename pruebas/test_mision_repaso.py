@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from action_msgs.msg import GoalStatus
 from geometry_msgs.msg import TransformStamped
 from nav_msgs.msg import Path
+from std_msgs.msg import Bool
 import pytest
 
 from equipo_jar.cobertura_repaso import ExtraPlan, ExtraView
@@ -405,6 +406,9 @@ def test_stop_deadline_still_preempts_extra_navigation(search):
     assert len(navigation.sent) == 1
     advance(search, 20.0)
     node.step_logic()
+    assert node.state == 'stopping'
+    node.on_stop_confirmed(Bool(data=True))
+    node.step_logic()
     node.step_logic()
     assert node.state == 'finished'
     assert len(navigation.sent) == 1
@@ -450,7 +454,9 @@ def test_delayed_extra_acceptance_waits_for_cancellation_before_return(search):
     navigation.send_goal_async = delay_first
     goal = reach_extra_goal(search)
     assert node.nav_state == 'sending'
-    advance(search, 480.0)
+    # Reach the return deadline while acceptance is still within its 5 s budget.
+    node.p['return_time_s'] = node.seconds_since_t0() + 1.0
+    advance(search, 1.1)
     node.step_logic()
     assert node.state == 'returning'
     assert len(navigation.sent) == 1

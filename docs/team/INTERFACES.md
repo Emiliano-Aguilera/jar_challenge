@@ -17,6 +17,8 @@ is in the rules (§7.1), in [`docs/QOS.md`](../QOS.md) and in the root
 | Fusion | Mission | Victim candidates | `/jar/candidatas` | `equipo_jar_msgs/Candidatas` (ours) |
 | Mission | Judge | Reports and end | `/victimas`, `/done` | official |
 | Navigation | Robot | Velocity | `/cmd_vel` | official |
+| Mission | Navigation | Permanent terminal velocity inhibit | `/jar/parar` | `std_msgs/Bool` |
+| Navigation | Mission | Output inhibited and fresh odometry stationary | `/jar/parada_confirmada` | `std_msgs/Bool` |
 | Navigation | Mission | Obstacles seen by the LiDAR (boxes, decoys) on top of `/map` | `/global_costmap/costmap` | `nav_msgs/OccupancyGrid` |
 
 Anything else a module needs from another is added when it's needed, through
@@ -91,6 +93,21 @@ orientation. Mission can cancel it.
   a 0.25 m circle.
 
 ## Navigation → Mission
+
+**Terminal stop.** `parada` is navigation's sole `/cmd_vel` publisher; the Nav2
+velocity smoother feeds it through `/jar/cmd_vel_smoothed` (reliable `Twist`).
+Mission latches `/jar/parar: true` when entering `stopping`. This cannot be undone:
+the guard immediately sends zero and keeps sending zero at 20 Hz, regardless of
+Nav2 cancellation or late goal acceptance. It also latches on `/done`.
+
+Both stop topics are reliable + transient local, depth 1. The guard publishes
+`/jar/parada_confirmada` at 20 Hz, true only while inhibited and fresh odometry
+has remained stationary for `still_time_s` (0.5 s). Stale, repeated, invalid or
+moving samples revoke confirmation. Mission requires a fresh acknowledgement
+before finishing and again before `/done`; no acknowledgement means no `/done`.
+The 590 s deadline only warns, and never bypasses this check. Goal acceptance
+times out after `goal_accept_timeout_s` (5 s): mission requests this terminal stop
+and cancels any late accepted handle rather than sending another unknown goal.
 
 **`/global_costmap/costmap`** (`nav_msgs/OccupancyGrid`, frame `map`, reliable
 + transient local, full grid at 1 Hz): `/map` plus what the LiDAR marks

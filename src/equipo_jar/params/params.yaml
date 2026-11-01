@@ -206,6 +206,8 @@ mision:
     visit_box_margin_m: 0.25
     localization_wait_max_s: 10.0
     goal_timeout_s: 90.0
+    goal_accept_timeout_s: 5.0
+    stop_confirm_max_age_s: 0.5
     stuck_time_s: 20.0
     stuck_distance_m: 0.05
     stuck_angle_rad: 0.2

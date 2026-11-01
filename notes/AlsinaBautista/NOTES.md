@@ -749,3 +749,34 @@ named parameter in `params/`.
 - Keep the existing TF tree, startup localization updates, watcher and fine-tuning.
   Parameter validation and the 23 existing odometry/turn tests are the local
   checks; the new bag and simulation still need validation.
+
+## Confirmed terminal stop and bounded goal acceptance (2026-11-01)
+
+- Requested fixes supersede the older “How does the run always end?” policy:
+  `done_limit_s` is a warning threshold, never permission to finish while moving.
+- Navigation's `parada` node is now the sole `/cmd_vel` publisher. The smoother
+  feeds `/jar/cmd_vel_smoothed`. A terminal `/jar/parar: true` permanently blocks
+  that stream, immediately publishes zero and keeps publishing zero at 20 Hz.
+  `/done` also latches the same inhibit. False requests cannot reopen it.
+- `/jar/parada_confirmada` is true only with the inhibit latched and fresh,
+  increasing-stamp odometry continuously stationary for 0.5 s. Missing, stale,
+  repeated, non-finite or moving samples cannot confirm a stop. Mission requires
+  a recent acknowledgement and its existing `stop_wait_s` before final reports;
+  it checks acknowledgement freshness again before `/done`. Without confirmation
+  it holds zero output and withholds `/done`, even after 590 s.
+- Goal acceptance has a five-second budget, including return and extra goals.
+  Missing responses and synchronous/asynchronous transport failures request a
+  terminal stop. Late accepted handles are canceled and cannot reopen motion.
+  The run ends safely instead of retrying while an unknown goal may be active.
+- Guard watchdogs use monotonic wall time; odometry also checks sensor stamps
+  against the ROS clock. Guard thresholds and mission deadlines are in params.
+- Controlled regressions cover continuous Nav2 commands after stop, real ROS
+  topic delivery through mission and guard, rejected/unanswered cancellation,
+  stale acknowledgements and late/error acceptance. These are not physical
+  braking or tournament-robot calibration measurements.
+- Final local verification: 792 tests passed (package plus `pruebas`); clean
+  offline build and `tools/verificar.sh --template` passed (256 outer colcon
+  tests, 18 audited nodes, zero interface problems, zero motion/reports before
+  map, zero protocol violations). Template mode skips the registration-code
+  requirement, which the user says organizers withdrew. Tools are unchanged.
+  No simulator/physical run or remote CI is claimed for this correction.
