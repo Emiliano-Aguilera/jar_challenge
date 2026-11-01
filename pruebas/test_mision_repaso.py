@@ -359,7 +359,7 @@ def test_real_provider_dispatches_a_shadow_revealing_view(search):
     assert any(sees(visual, pose, target) for target in pending)
 
 
-def test_failed_extra_route_refreshes_are_throttled(search):
+def test_blocked_home_during_refresh_stops_extra_without_repeating_routes(search):
     node, _, _, executor, navigation = search
     node.step_logic()
     executor.finish()
@@ -378,7 +378,8 @@ def test_failed_extra_route_refreshes_are_throttled(search):
     executor.finish()
     node.step_logic()
     assert not executor.jobs
-    assert not navigation.sent
+    assert node.state == 'returning'
+    assert all(goal.behavior_tree == node.return_tree for goal in navigation.sent)
 
 
 def test_extra_goal_timeout_cancels_once_and_waits_for_result(search):
@@ -509,3 +510,89 @@ def test_worker_exception_returns_without_escaping_the_timer(search):
     node.step_logic()
     assert node.state == 'returning'
     assert all(goal.behavior_tree == node.return_tree for goal in navigation.sent)
+
+
+def test_initially_unlocked_start_and_empty_route_can_start_extra_search(search):
+    node, _, _, executor, navigation = search
+    node.start_locked = False
+    node.start_pose = None
+    node.step_logic()
+    advance(search, 1.1)
+    node.step_logic()
+    assert executor.jobs
+    executor.finish()
+    node.step_logic()
+    assert node.start_locked
+    assert node.start_pose == (1.2, 2.3, 0.0)
+    assert len(navigation.sent) == 1
+    assert navigation.sent[0].behavior_tree == ''
+
+
+@pytest.mark.parametrize('cost', [1, 50, 98])
+def test_equivalent_inflation_update_does_not_discard_a_useful_plan(search, cost):
+    node, _, _, executor, navigation = search
+    node.step_logic()
+    executor.finish()
+    advance(search, 1.1)
+    node.step_logic()
+    changed = map_message()
+    changed.data[0] = cost
+    node.on_costmap(changed)
+    executor.finish()
+    node.step_logic()
+    assert len(navigation.sent) == 1
+    assert navigation.sent[0].behavior_tree == ''
+    field_stamp = node.extra.field.at_s
+    advance(search, 2.6)
+    node.on_costmap(changed)
+    node.step_logic()
+    assert node.extra.field.at_s == field_stamp
+    assert node.extra.estimate(Pose(2.0, 2.4, 0.0)) is None
+
+
+@pytest.mark.parametrize(('key', 'value'), [('extra_history_max', 0),
+                                          ('extra_history_interval_s', float('nan')),
+                                          ('extra_history_shift_m', -1.0),
+                                          ('extra_history_turn_rad', float('inf')),
+                                          ('extra_pose_max_age_s', -1.0)])
+def test_invalid_history_settings_deny_supplementary_dispatch(search, key, value):
+    node, _, _, executor, navigation = search
+    node.p[key] = value
+    node.step_logic()
+    if executor.jobs:
+        executor.finish()
+    advance(search, 1.1)
+    node.step_logic()
+    if executor.jobs:
+        executor.finish()
+    node.step_logic()
+    assert node.state == 'returning'
+    assert all(goal.behavior_tree == node.return_tree for goal in navigation.sent)
+
+
+def test_new_optical_obstacle_invalidates_views_waiting_for_a_route_refresh(search):
+    node, _, _, executor, navigation = search
+    snapshots = []
+    provider = node.extra.provider
+    def record(raw, live, *args, **kwargs):
+        snapshots.append(live.data[8 + 20 * 8])
+        return provider(raw, live, *args, **kwargs)
+    node.extra.provider = record
+    node.step_logic()
+    executor.finish()
+    advance(search, 1.1)
+    node.step_logic()
+    executor.finish()
+    advance(search, 3.0)
+    node.step_logic()
+    changed = map_message()
+    changed.data[8 + 20 * 8] = 100
+    node.on_costmap(changed)
+    executor.finish()
+    advance(search, 1.3)
+    node.on_costmap(changed)
+    node.step_logic()
+    executor.finish()
+    node.step_logic()
+    assert len(navigation.sent) == 1
+    assert snapshots == [0, 100]

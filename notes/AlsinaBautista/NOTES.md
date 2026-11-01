@@ -676,3 +676,11 @@ named parameter in `params/`.
   controlled TF/action/clock/provider boundaries exercise deadline and late-response
   ordering, and a separate case calls Marco's real provider on generated geometry.
 - Only local commits are authorized. Push and development merge remain with the user.
+
+- Fresh-review corrections: an initially empty route freezes a fresh usable start before
+  its first supplementary plan; costmap equivalence compares navigation/optical masks,
+  so harmless inflation changes do not starve planning or refresh old route timestamps;
+  invalid history sizes/sampling/pose-age settings deny extra dispatch while ordinary
+  reporting and return remain available. Regression cases failed before the fixes.
+- A newly changed optical mask also clears proposals already waiting for refreshed route
+  fields; the next dispatch must use a newly computed view, not only a new path estimate.

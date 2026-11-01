@@ -19,10 +19,6 @@ def geometry(grid):
     return grid.width, grid.height, grid.resolution, grid.origin
 
 
-def same_grid(a, b):
-    return a is not None and b is not None and geometry(a) == geometry(b) and a.data == b.data
-
-
 class ExtraSearch:
     def __init__(self, node):
         self.node = node
@@ -34,7 +30,10 @@ class ExtraSearch:
         self.live = None
         self.optics = None
         self.live_at = None
+        self.navigation_key = None
+        self.optical_key = None
         self.field = None
+        self.field_key = None
         self.views = None
         self.attempts = ()
         self.requested = None
@@ -87,17 +86,25 @@ class ExtraSearch:
                                for old, new in zip(self.optics.data, live.data))
             self.optics = Grid(live.width, live.height, live.resolution, remembered, live.origin)
         self.live = live
+        self.navigation_key = (geometry(live), bytes(0 <= value <= 98 for value in live.data))
+        optical_key = (geometry(self.optics), bytes(2 if value == 100 else 1 if value < 0 else 0
+                                                  for value in self.optics.data))
+        if optical_key != self.optical_key:
+            self.views = None
+        self.optical_key = optical_key
         self.live_at = at_s if at_s is not None else self.node.costmap_at
 
     def settings(self):
         p = self.node.p
-        for key in ('extra_max_goals', 'extra_max_failed'):
+        for key in ('extra_max_goals', 'extra_max_failed', 'extra_history_max'):
             if type(p[key]) is not int or p[key] < 1:
                 raise ValueError(key)
-        for key in ('extra_goal_timeout_s', 'extra_plan_timeout_s', 'extra_costmap_max_age_s'):
+        for key in ('extra_goal_timeout_s', 'extra_plan_timeout_s', 'extra_costmap_max_age_s',
+                    'extra_pose_max_age_s'):
             if isinstance(p[key], bool) or not math.isfinite(p[key]) or p[key] <= 0:
                 raise ValueError(key)
-        for key in ('return_reserve_s', 'extra_failed_shift_m'):
+        for key in ('return_reserve_s', 'extra_failed_shift_m', 'extra_history_interval_s',
+                    'extra_history_shift_m', 'extra_history_turn_rad'):
             if isinstance(p[key], bool) or not math.isfinite(p[key]) or p[key] < 0:
                 raise ValueError(key)
         if self.seconds(0.0) is None:
@@ -164,7 +171,7 @@ class ExtraSearch:
 
         if self.executor is None:
             self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix='mission-extra')
-        self.job = (self.executor.submit(calculate), epoch, kind, live, optics)
+        self.job = (self.executor.submit(calculate), epoch, kind, self.navigation_key, self.optical_key)
         self.route_attempt_at = node.seconds_since_t0()
         self.last_kind = kind
 
@@ -190,13 +197,14 @@ class ExtraSearch:
         if self.live is None and node.costmap is not None:
             self.on_costmap(node.costmap, node.costmap_at)
         if self.job is not None and self.job[0].done():
-            future, epoch, kind, live, optics = self.job
+            future, epoch, kind, navigation_key, optical_key = self.job
             self.job = None
-            if epoch == self.epoch and same_grid(live, self.live):
+            if epoch == self.epoch and navigation_key == self.navigation_key:
                 try:
                     field, plan = future.result()
                     self.field = field
-                    if kind == 'plan' and same_grid(optics, self.optics):
+                    self.field_key = navigation_key
+                    if kind == 'plan' and optical_key == self.optical_key:
                         self.views = () if plan is None else plan.views
                         pending = None if plan is None else plan.pending_count
                         node.get_logger().info(f'Plan extra: {len(self.views)} vistas, {pending} muestras pendientes')
@@ -227,6 +235,11 @@ class ExtraSearch:
         if not self.valid:
             return 'parámetros extra inválidos'
         if self.phase != 'extra':
+            if not self.node.start_locked:
+                pose = self.node.fresh_search_pose()
+                if pose is not None:
+                    self.node.start_pose = (pose.x, pose.y, pose.yaw)
+                    self.node.start_locked = True
             self.phase = 'extra'
             self.node.get_logger().info(f'Inicio de búsqueda extra, generación {self.epoch}')
             self.wait_since = self.node.seconds_since_t0()
@@ -236,7 +249,7 @@ class ExtraSearch:
 
     def estimate(self, goal):
         node = self.node
-        if not self.ready() or not same_grid(self.field.grid if self.field else None, self.live):
+        if not self.ready() or self.field is None or self.field_key != self.navigation_key:
             return None
         now = node.seconds_since_t0()
         estimate = estimate_route(self.field, goal, now, max_age_s=node.p['extra_costmap_max_age_s'])
