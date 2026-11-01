@@ -80,6 +80,14 @@ def test_enabled_history_records_actual_pose_instead_of_requested_goal(mission):
     assert node.search_views == (ObservedView(Pose(1.2, 2.3, 0.0), 5.0),)
 
 
+def test_step_collects_actual_views_when_enabled(mission, monkeypatch):
+    node, _, _ = mission
+    enable(node)
+    monkeypatch.setattr(node, 'explore', lambda: None)
+    node.step_logic()
+    assert node.search_views == (ObservedView(Pose(1.2, 2.3, 0.0), 5.0),)
+
+
 @pytest.mark.parametrize('state', ['waiting_for_map', 'returning', 'checking',
                                   'stopping', 'finishing', 'finished'])
 def test_history_is_only_collected_during_exploration(mission, state):

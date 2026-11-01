@@ -628,3 +628,9 @@ named parameter in `params/`.
   Extra viewpoint selection, route-budget integration and action orchestration remain
   pending. The flag currently enables history collection only; reporting rules and
   current return behavior remain unchanged.
+- `rutas_presupuesto.py` builds independent read-only route fields from a live-costmap
+  snapshot, rooted at the robot and the start. It uses the existing return BFS without
+  double inflation or endpoint snapping. A proposed destination must be connected to
+  both endpoints. Estimates retain the snapshot timestamp and expire instead of being
+  refreshed merely because another costmap message arrived. This helper is ready for
+  the asynchronous mission integration; it is not yet called by mission.

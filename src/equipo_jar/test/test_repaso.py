@@ -7,7 +7,7 @@ import pytest
 
 
 @pytest.mark.parametrize('name', ['test_presupuesto_mision.py', 'test_historial_vistas.py',
-                                  'test_historial_mision.py'])
+                                  'test_historial_mision.py', 'test_rutas_presupuesto.py'])
 def test_extra_search_foundation(name):
     root = Path(__file__).resolve().parents[3]
     path = root / 'pruebas' / name
