@@ -684,3 +684,35 @@ named parameter in `params/`.
   reporting and return remain available. Regression cases failed before the fixes.
 - A newly changed optical mask also clears proposals already waiting for refreshed route
   fields; the next dispatch must use a newly computed view, not only a new path estimate.
+
+
+## Supplementary-search diagnostics (2026-11-01)
+
+- Recorded trials reached 700/700 on wide-door Ventanas both disabled and enabled,
+  400/700 on original Ventanas enabled and 500/500 on maze_1 enabled. All returned
+  without collisions or protocol violations, but none executed an extra goal.
+  Original Ventanas entered extra search and exhausted its wait. Indexed recording
+  data showed initial localization not ready and changing navigation masks; the old
+  logs could not identify private worker completion/discard causes.
+- Each worker request now has a monotonically increasing ID and records generation,
+  kind, input age, history/attempt counts and elapsed phase wait when submitted.
+  Result events split wall-clock queue, route, planner and total computation times;
+  elapsed mission time is labeled separately. Exceptions retain their original type
+  and stage and preserve the existing decision path.
+- Result acceptance and generation/navigation/optical rejection are explicit. Navigation
+  rejection includes the changed-cell count when geometry is the same. Wait events
+  identify missing/stale input, localization readiness, pose availability, a busy job
+  or retry spacing, and are emitted only on reason/job changes during extra search.
+  Timeout events include the pending job/kind/status and last discard reason.
+- Worker code still reads immutable snapshots only; all diagnostic logging occurs on
+  the mission callback thread. No new dependencies, nodes, topics or parameters.
+  The five-second total wait, report rules, route safety and return deadlines stay
+  unchanged. Disabled search emits no additional diagnostic events.
+- The controlled regression reproduces a 1.6-second localization delay followed by two
+  physical navigation-mask changes: it logs both rejections, times out, sends no extra
+  goal and uses the existing return action. This verifies observability and safety,
+  not successful victim recovery. Next recorded test is original Ventanas alone.
+- Completed invalidated jobs are also drained for diagnostics after exploration ends
+  or the feature is disabled, using the mission callback thread. Their fields/plans
+  are never applied; they cannot submit work or change the active return goal. This
+  preserves timing/cancellation evidence for the exact worker that timed out.

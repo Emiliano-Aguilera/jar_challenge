@@ -488,6 +488,8 @@ class Mision(Node):
             self.extra.invalidate()
 
     def step_logic(self):
+        if self.state != 'exploring' or not self.p['extra_search_enabled']:
+            self.extra.poll_job(accept=False)
         if self.state == 'waiting_for_map':
             if self.t0 is not None:
                 self.change_state('exploring')
