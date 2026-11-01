@@ -29,6 +29,7 @@ from equipo_jar.inspeccion import (pick_doubtful, viewpoint_for, forget_failed_i
 from equipo_jar.mapa import Grid, Pose, planar_yaw
 from equipo_jar.historial_vistas import ObservedView, append_view
 from equipo_jar.vuelta import steps_to_start, way_back_m, return_leg
+from equipo_jar.busqueda_extra import ExtraSearch
 
 from tf2_ros import Buffer, TransformListener, TransformException
 from rclpy.time import Time
@@ -71,7 +72,31 @@ class Mision(Node):
                                             'extra_history_interval_s': 1.0,
                                             'extra_history_shift_m': 0.10,
                                             'extra_history_turn_rad': 0.30,
-                                            'extra_pose_max_age_s': 1.0})
+                                            'extra_pose_max_age_s': 1.0,
+                                            'return_estimate_speed_mps': 0.20,
+                                            'return_estimate_factor': 1.5,
+                                            'return_estimate_overhead_s': 8.0,
+                                            'return_reserve_s': 45.0,
+                                            'extra_look_s': 2.0,
+                                            'extra_max_goals': 6,
+                                            'extra_max_failed': 2,
+                                            'extra_goal_timeout_s': 30.0,
+                                            'extra_plan_timeout_s': 5.0,
+                                            'extra_costmap_max_age_s': 2.5,
+                                            'extra_failed_shift_m': 0.40,
+                                            'extra_range_m': 2.0,
+                                            'extra_fov_deg': 61.0,
+                                            'extra_heading_count': 8,
+                                            'extra_spacing_m': 0.45,
+                                            'extra_target_spacing_m': 0.15,
+                                            'extra_max_positions': 256,
+                                            'extra_max_targets': 2048,
+                                            'extra_max_views': 80,
+                                            'extra_transit_radius_m': 0.21,
+                                            'extra_view_clearance_m': 0.24,
+                                            'extra_preferred_clearance_m': 0.30,
+                                            'extra_turn_speed_rads': 0.7,
+                                            'extra_camera_frame': 'cam_1_color_optical_frame'})
 
         self.mapa = None
         self.grid = None
@@ -79,6 +104,7 @@ class Mision(Node):
         self.candidatas = None
 
         self.costmap = None
+        self.costmap_at = None
         self.search_views = ()
         self.search_map_key = None
         self.search_localization_ready = False
@@ -141,6 +167,7 @@ class Mision(Node):
         self.last_skipped = None
 
         self.recoveries = 0
+        self.extra = ExtraSearch(self)
 
         self.create_subscription(OccupancyGrid, '/map', self.al_recibir_mapa, QOS_MAPA)
         self.create_subscription(Path, '/jar/plan_cobertura', self.al_recibir_plan, QOS_ESTADO)
@@ -166,16 +193,20 @@ class Mision(Node):
             key = (self.grid.width, self.grid.height, self.grid.resolution,
                    self.grid.origin, self.grid.data)
             if key != self.search_map_key:
+                self.extra.reset_map()
                 self.search_views = ()
                 self.search_map_key = key
         except ValueError as e:
             self.grid = None
+            self.extra.reset_map()
             self.search_views = ()
             self.search_map_key = None
             self.get_logger().error(f'No pude armar la grilla del mapa: {e}. Sin inspecciones.')
 
     def on_costmap(self, msg):
         self.costmap = msg
+        self.costmap_at = self.seconds_since_t0()
+        self.extra.on_costmap(msg, self.costmap_at)
 
     def is_blocked(self, x, y):
         return goal_blocked(self.costmap, x, y, self.p['costmap_blocked_value'])
@@ -185,32 +216,40 @@ class Mision(Node):
         if msg.data:
             self.localization_ready = True
 
-    def update_search_history(self):
-        if (not self.p['extra_search_enabled'] or self.state != 'exploring'
-                or self.grid is None or self.t0 is None
-                or not self.search_localization_ready):
-            return
+    def fresh_search_pose(self):
+        if self.grid is None or self.t0 is None or not self.search_localization_ready:
+            return None
         try:
             limit = self.p['extra_pose_max_age_s']
             if isinstance(limit, bool) or not math.isfinite(limit) or limit <= 0:
-                return
+                return None
             transform = self.tf_buffer.lookup_transform('map', 'base_footprint', Time())
             if transform.header.frame_id != 'map':
-                return
+                return None
             stamp = Time.from_msg(transform.header.stamp)
             age = (self.get_clock().now() - stamp).nanoseconds / 1e9
             if stamp.nanoseconds <= 0 or age < 0 or age > limit:
-                return
+                return None
             position = transform.transform.translation
-            yaw = planar_yaw(transform.transform.rotation)
-            view = ObservedView(Pose(position.x, position.y, yaw), self.seconds_since_t0())
+            return Pose(position.x, position.y, planar_yaw(transform.transform.rotation))
+        except (TransformException, TypeError, ValueError, OverflowError):
+            return None
+
+    def update_search_history(self):
+        if not self.p['extra_search_enabled'] or self.state != 'exploring':
+            return
+        pose = self.fresh_search_pose()
+        if pose is None:
+            return
+        try:
             self.search_views = append_view(
-                self.search_views, view, max_items=self.p['extra_history_max'],
+                self.search_views, ObservedView(pose, self.seconds_since_t0()),
+                max_items=self.p['extra_history_max'],
                 min_interval_s=self.p['extra_history_interval_s'],
                 min_shift_m=self.p['extra_history_shift_m'],
                 min_turn_rad=self.p['extra_history_turn_rad'])
-        except (TransformException, TypeError, ValueError, OverflowError) as e:
-            self.get_logger().warning(f'View history unavailable: {e}', throttle_duration_sec=5.0)
+        except (TypeError, ValueError, OverflowError) as error:
+            self.get_logger().warning(f'View history unavailable: {error}', throttle_duration_sec=5.0)
 
     def seconds_since_t0(self):
         if self.t0 is None:
@@ -266,6 +305,7 @@ class Mision(Node):
         self.inspection_canceling = False
         self.nav_state = "sending"
         self.recoveries = 0
+        self.extra.sent(pose)
         future = self.navegacion.send_goal_async(goal, feedback_callback=self.on_feedback)
         future.add_done_callback(self.on_goal_response)
         now = self.seconds_since_t0()
@@ -339,7 +379,10 @@ class Mision(Node):
                 self.last_motion_time = now
 
         reason = None
-        if now - self.goal_start_time > self.p['goal_timeout_s']:
+        timeout = self.p['goal_timeout_s']
+        if self.extra.active:
+            timeout = min(timeout, self.p['extra_goal_timeout_s'])
+        if now - self.goal_start_time > timeout:
             reason = 'viaje demasiado largo'
         elif now - self.last_motion_time > self.p['stuck_time_s']:
             reason = 'robot quieto'
@@ -387,12 +430,14 @@ class Mision(Node):
     def handle_on_goal_response(self, future):
         goal_handle = future.result()
         if not goal_handle.accepted:
+            self.extra.result('rejected')
             self.nav_state = 'failed'
             self.get_logger().warn('Fallo el objetivo')
             return
         if self.state == 'finishing' or self.state == 'finished':
             goal_handle.cancel_goal_async()
             return
+        self.extra.accepted()
         self.current_goal = goal_handle
         self.nav_state = 'moving'
         goal_handle.get_result_async().add_done_callback(self.on_goal_result)
@@ -407,6 +452,9 @@ class Mision(Node):
     def handle_on_goal_result(self, future):
         self.inspection_canceling = False
         status = future.result().status
+        outcome = ('arrived' if status == GoalStatus.STATUS_SUCCEEDED else
+                   'cancelled' if status == GoalStatus.STATUS_CANCELED else 'failed')
+        self.extra.result(outcome)
         if status == GoalStatus.STATUS_SUCCEEDED:
             self.nav_state = 'arrived'
             self.get_logger().info(f'Status succeded (recuperaciones: {self.recoveries})')
@@ -436,6 +484,8 @@ class Mision(Node):
     def change_state(self, new_state):
         self.get_logger().info(f'Estado: <{self.state}> -> <{new_state}>')
         self.state = new_state
+        if new_state != 'exploring':
+            self.extra.invalidate()
 
     def step_logic(self):
         if self.state == 'waiting_for_map':
@@ -467,6 +517,8 @@ class Mision(Node):
         if not self.localization_ready and not self.start_timeout_logged:
             self.get_logger().warning('Localización no avisó que está lista: arranco igual')
             self.start_timeout_logged = True
+        if self.state == 'exploring':
+            self.extra.tick()
         if self.p['extra_search_enabled']:
             self.update_search_history()
         # Después del arranque: sin localización lista, una candidata podría quedar mal ubicada.
@@ -540,6 +592,9 @@ class Mision(Node):
             return
         if self.inspect_doubtful():
             return
+        if self.extra.phase == 'extra':
+            self.extra.explore()
+            return
         if self.plan is None:
             self.spin_if_idle()
             return
@@ -598,7 +653,12 @@ class Mision(Node):
             return 'todas reportadas'
         elif self.seconds_since_t0() >= self.p['return_time_s']:
             return 'se termina el tiempo'
-        elif (self.plan is not None and self.nav_state != 'sending' and self.nav_state != 'moving'
+        extra_reason = self.extra.reason()
+        if extra_reason is not None:
+            return extra_reason
+        if self.extra.phase == 'extra':
+            return None
+        if (self.plan is not None and self.nav_state != 'sending' and self.nav_state != 'moving'
                 # Una inspección en curso (viaje o espera) todavía puede confirmar una caja,
                 # también si su llegada todavía no se procesó en explore().
                 and self.current_inspection is None
@@ -610,6 +670,8 @@ class Mision(Node):
             if self.nothing_left_since is None:
                 self.nothing_left_since = now
             if now - self.nothing_left_since >= self.p['final_look_s']:
+                if self.p['extra_search_enabled']:
+                    return self.extra.enter()
                 return 'no quedan puntos ni dudosas'
             return None
         self.nothing_left_since = None
@@ -629,7 +691,7 @@ class Mision(Node):
         if self.nav_state == 'sending':
             return
         if self.nav_state == 'moving' and not self.return_sent:
-            if not self.canceling and not self.inspection_canceling:
+            if not self.canceling and not self.inspection_canceling and not self.stuck_canceling:
                 self.current_goal.cancel_goal_async()
                 self.canceling = True
                 self.get_logger().info("Cancelando objetivo...")
@@ -799,6 +861,8 @@ class Mision(Node):
             return False
         else:
             x, y, yaw = view
+            if self.extra.phase == 'extra' and not self.extra.affordable(Pose(x, y, yaw)):
+                return False
             if self.go_to(self.make_pose(x, y, yaw)):
                 self.inspected_points.append((c.centro.x, c.centro.y))
                 self.current_inspection = (c.id, c.centro.x, c.centro.y, c.observaciones)
@@ -866,6 +930,11 @@ class Mision(Node):
     def terminar(self):
         self.check_reports(self.p['min_observations_final'], self.p['max_deviation_final_m'])
         self.change_state('finishing')
+
+
+    def destroy_node(self):
+        self.extra.close()
+        return super().destroy_node()
 
 
 def main(args=None):

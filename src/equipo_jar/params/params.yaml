@@ -163,6 +163,30 @@ mision:
     extra_history_shift_m: 0.10
     extra_history_turn_rad: 0.30
     extra_pose_max_age_s: 1.0
+    return_estimate_speed_mps: 0.20
+    return_estimate_factor: 1.5
+    return_estimate_overhead_s: 8.0
+    return_reserve_s: 45.0
+    extra_look_s: 2.0
+    extra_max_goals: 6
+    extra_max_failed: 2
+    extra_goal_timeout_s: 30.0
+    extra_plan_timeout_s: 5.0
+    extra_costmap_max_age_s: 2.5
+    extra_failed_shift_m: 0.40
+    extra_range_m: 2.0
+    extra_fov_deg: 61.0
+    extra_heading_count: 8
+    extra_spacing_m: 0.45
+    extra_target_spacing_m: 0.15
+    extra_max_positions: 256
+    extra_max_targets: 2048
+    extra_max_views: 80
+    extra_transit_radius_m: 0.21
+    extra_view_clearance_m: 0.24
+    extra_preferred_clearance_m: 0.30
+    extra_turn_speed_rads: 0.7
+    extra_camera_frame: cam_1_color_optical_frame
     min_observations: 5
     max_deviation_m: 0.10
     min_report_distance_m: 0.40

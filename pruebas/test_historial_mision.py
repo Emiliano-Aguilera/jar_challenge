@@ -202,7 +202,7 @@ def test_invalid_map_drops_history(mission):
 
 
 @pytest.mark.parametrize('enabled', [False, True])
-def test_history_does_not_change_primary_plan_exhaustion(mission, monkeypatch, enabled):
+def test_plan_exhaustion_starts_extra_phase_only_when_enabled(mission, monkeypatch, enabled):
     node, clock, transform = mission
     if enabled:
         enable(node)
@@ -215,8 +215,9 @@ def test_history_does_not_change_primary_plan_exhaustion(mission, monkeypatch, e
     clock.seconds = 12.0
     transform.header.stamp = instant(12.0).to_msg()
     node.step_logic()
-    assert events == ['explore', 'return']
-    assert node.state == 'returning'
+    assert events == (['explore', 'explore'] if enabled else ['explore', 'return'])
+    assert node.state == ('exploring' if enabled else 'returning')
+    assert node.extra.phase == ('extra' if enabled else 'primary')
 
 
 @pytest.mark.parametrize(('key', 'value'), [('extra_history_max', 0),

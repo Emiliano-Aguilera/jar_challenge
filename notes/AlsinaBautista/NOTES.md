@@ -625,15 +625,14 @@ named parameter in `params/`.
   and the latest localization-ready flag; it does not change the existing start latch.
   A map change clears history. Invalid history settings never block reporting/exploration.
 - `pruebas/test_historial_mision.py` exercises the real node with external clock/TF fakes.
-  Extra viewpoint selection, route-budget integration and action orchestration remain
-  pending. The flag currently enables history collection only; reporting rules and
-  current return behavior remain unchanged.
+  Full supplementary orchestration is implemented in the integration section below;
+  the feature remains disabled by default pending recorded simulation acceptance.
 - `rutas_presupuesto.py` builds independent read-only route fields from a live-costmap
   snapshot, rooted at the robot and the start. It uses the existing return BFS without
   double inflation or endpoint snapping. A proposed destination must be connected to
   both endpoints. Estimates retain the snapshot timestamp and expire instead of being
   refreshed merely because another costmap message arrived. This helper is ready for
-  the asynchronous mission integration; it is not yet called by mission.
+  the asynchronous mission integration described below.
 
 ## End an inspection after its report (2026-11-01)
 
@@ -649,3 +648,31 @@ named parameter in `params/`.
   controlled action futures. This change is independent of extra_search_enabled.
   The user wants recorded simulation comparisons after Marco's provider is integrated;
   no new simulations were dispatched for this isolated change.
+
+
+## Integrated supplementary search (2026-11-01)
+
+- Marco's PR59 provider is imported locally, with its original authorship. Mission uses
+  `busqueda_extra.ExtraSearch` for one bounded worker, immutable snapshots, generation
+  ownership, route freshness, extra attempts and dwell. No new node/topic/dependency.
+- After primary coverage and doubtful inspections end, missing reports can trigger new
+  safe views even without a candidate. Each view needs navigable outbound and destination
+  return budgets. Only one view is executed before replanning; inspections keep priority.
+- Extra goals use the existing safety/cancellation/action and return paths. Limits are
+  six accepted extra views, two consecutive failures, 30 seconds per extra trip, five
+  seconds waiting for planning, and the original 480/570/590 second cutoffs. Accepted
+  arrival resets consecutive failures and gives actual TF observations a two-second dwell.
+- Navigation always uses the fresh costmap. Optical occlusion uses one bounded native-grid
+  mask retaining lethal cells until map/grid geometry changes. Clearing a static cylinder
+  cannot retroactively erase its shadow. False lethal marks can conservatively suppress
+  useful views; this is a deliberate acceptance tradeoff for stationary obstacles.
+- History in occupied/unknown/outside base cells, or with a base-to-camera ray crossing
+  an obstacle, grants no visibility. Intentional cancellation after a report is excluded
+  from inaccessible-view accounting. Requested goals never create actual observations.
+- The feature stays false in code and YAML. Enabling it is a calibration/acceptance
+  decision after wide-door, narrow-door and previously successful easy-map recordings.
+  No score improvement, physical access guarantee or real-robot ETA guarantee is claimed.
+- Automated real-node fake-world tests replace a second hand-driven fake-world mode:
+  controlled TF/action/clock/provider boundaries exercise deadline and late-response
+  ordering, and a separate case calls Marco's real provider on generated geometry.
+- Only local commits are authorized. Push and development merge remain with the user.
