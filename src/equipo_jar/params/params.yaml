@@ -157,7 +157,7 @@ fusion:
 
 mision:
   ros__parameters: 
-    extra_search_enabled: false
+    extra_search_enabled: true
     extra_history_max: 1200
     extra_history_interval_s: 1.0
     extra_history_shift_m: 0.10
