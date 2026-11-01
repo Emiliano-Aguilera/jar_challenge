@@ -608,3 +608,131 @@ named parameter in `params/`.
   `/done`. Run it, then mission with `-p cantidad_victimas:=1` (commands in its docstring).
 - Unit tests (no ROS needed) in `src/equipo_jar/test/`: `test_confirmacion.py`,
   `test_exploracion.py`, `test_mapa.py`, `test_inspeccion.py` and `test_vuelta.py`.
+
+## Extra search foundations (2026-10-31)
+
+- `presupuesto.py` estimates a trip with a conservative speed, slowdown and overhead.
+  Extra exploration must fit both the exploration cutoff and the destination's trip
+  home plus reserve before the stopping cutoff. Unknown routes deny an extra trip;
+  they do not become zero distance. Invalid return settings request return.
+- `historial_vistas.py` keeps immutable actual-pose observations separate from
+  requested-goal outcomes. Sampling uses elapsed time, translation or heading change,
+  ignores old/equal timestamps and caps history size. Failed destinations are not views.
+- Geometry/budget tests are in `pruebas/test_presupuesto_mision.py` and
+  `pruebas/test_historial_vistas.py`; `test/test_repaso.py` discovers them from colcon.
+- Mission now samples actual map-frame TF into `search_views` while exploring, when
+  `extra_search_enabled` is true (false by default). Sampling requires a fresh, valid TF
+  and the latest localization-ready flag; it does not change the existing start latch.
+  A map change clears history. Invalid history settings never block reporting/exploration.
+- `pruebas/test_historial_mision.py` exercises the real node with external clock/TF fakes.
+  Full supplementary orchestration is implemented in the integration section below;
+  the feature remains disabled by default pending recorded simulation acceptance.
+- `rutas_presupuesto.py` builds independent read-only route fields from a live-costmap
+  snapshot, rooted at the robot and the start. It uses the existing return BFS without
+  double inflation or endpoint snapping. A proposed destination must be connected to
+  both endpoints. Estimates retain the snapshot timestamp and expire instead of being
+  refreshed merely because another costmap message arrived. This helper is ready for
+  the asynchronous mission integration described below.
+
+## End an inspection after its report (2026-11-01)
+
+- During exploration, a moving inspection is cancelled once its candidate is reported,
+  by stable ID or the existing report-distance rule after candidate merging. A report
+  for a different victim does not cancel the trip. The next goal waits for the actual
+  navigation result, not only the cancellation acknowledgement.
+- Reported inspections clear without another confirmation wait or failed-view accounting.
+  Rejected/failed cancellation leaves the real action active and preserves its watchdog;
+  late cancellation responses cannot change the next goal. The existing goal timeout and
+  final stop still apply if Nav2 never provides a result.
+- `pruebas/test_cancelar_inspeccion_reportada.py` exercises the real mission node and
+  controlled action futures. This change is independent of extra_search_enabled.
+  The user wants recorded simulation comparisons after Marco's provider is integrated;
+  no new simulations were dispatched for this isolated change.
+
+
+## Integrated supplementary search (2026-11-01)
+
+- Marco's PR59 provider is imported locally, with its original authorship. Mission uses
+  `busqueda_extra.ExtraSearch` for one bounded worker, immutable snapshots, generation
+  ownership, route freshness, extra attempts and dwell. No new node/topic/dependency.
+- After primary coverage and doubtful inspections end, missing reports can trigger new
+  safe views even without a candidate. Each view needs navigable outbound and destination
+  return budgets. Only one view is executed before replanning; inspections keep priority.
+- Extra goals use the existing safety/cancellation/action and return paths. Limits are
+  six accepted extra views, two consecutive failures, 30 seconds per extra trip, five
+  seconds waiting for planning, and the original 480/570/590 second cutoffs. Accepted
+  arrival resets consecutive failures and gives actual TF observations a two-second dwell.
+- Navigation always uses the fresh costmap. Optical occlusion uses one bounded native-grid
+  mask retaining lethal cells until map/grid geometry changes. Clearing a static cylinder
+  cannot retroactively erase its shadow. False lethal marks can conservatively suppress
+  useful views; this is a deliberate acceptance tradeoff for stationary obstacles.
+- History in occupied/unknown/outside base cells, or with a base-to-camera ray crossing
+  an obstacle, grants no visibility. Intentional cancellation after a report is excluded
+  from inaccessible-view accounting. Requested goals never create actual observations.
+- The feature stays false in code and YAML. Enabling it is a calibration/acceptance
+  decision after wide-door, narrow-door and previously successful easy-map recordings.
+  No score improvement, physical access guarantee or real-robot ETA guarantee is claimed.
+- Automated real-node fake-world tests replace a second hand-driven fake-world mode:
+  controlled TF/action/clock/provider boundaries exercise deadline and late-response
+  ordering, and a separate case calls Marco's real provider on generated geometry.
+- Only local commits are authorized. Push and development merge remain with the user.
+
+- Fresh-review corrections: an initially empty route freezes a fresh usable start before
+  its first supplementary plan; costmap equivalence compares navigation/optical masks,
+  so harmless inflation changes do not starve planning or refresh old route timestamps;
+  invalid history sizes/sampling/pose-age settings deny extra dispatch while ordinary
+  reporting and return remain available. Regression cases failed before the fixes.
+- A newly changed optical mask also clears proposals already waiting for refreshed route
+  fields; the next dispatch must use a newly computed view, not only a new path estimate.
+
+
+## Supplementary-search diagnostics (2026-11-01)
+
+- Recorded trials reached 700/700 on wide-door Ventanas both disabled and enabled,
+  400/700 on original Ventanas enabled and 500/500 on maze_1 enabled. All returned
+  without collisions or protocol violations, but none executed an extra goal.
+  Original Ventanas entered extra search and exhausted its wait. Indexed recording
+  data showed initial localization not ready and changing navigation masks; the old
+  logs could not identify private worker completion/discard causes.
+- Each worker request now has a monotonically increasing ID and records generation,
+  kind, input age, history/attempt counts and elapsed phase wait when submitted.
+  Result events split wall-clock queue, route, planner and total computation times;
+  elapsed mission time is labeled separately. Exceptions retain their original type
+  and stage and preserve the existing decision path.
+- Result acceptance and generation/navigation/optical rejection are explicit. Navigation
+  rejection includes the changed-cell count when geometry is the same. Wait events
+  identify missing/stale input, localization readiness, pose availability, a busy job
+  or retry spacing, and are emitted only on reason/job changes during extra search.
+  Timeout events include the pending job/kind/status and last discard reason.
+- Worker code still reads immutable snapshots only; all diagnostic logging occurs on
+  the mission callback thread. No new dependencies, nodes, topics or parameters.
+  The five-second total wait, report rules, route safety and return deadlines stay
+  unchanged. Disabled search emits no additional diagnostic events.
+- The controlled regression reproduces a 1.6-second localization delay followed by two
+  physical navigation-mask changes: it logs both rejections, times out, sends no extra
+  goal and uses the existing return action. This verifies observability and safety,
+  not successful victim recovery. Next recorded test is original Ventanas alone.
+- Completed invalidated jobs are also drained for diagnostics after exploration ends
+  or the feature is disabled, using the mission callback thread. Their fields/plans
+  are never applied; they cannot submit work or change the active return goal. This
+  preserves timing/cancellation evidence for the exact worker that timed out.
+
+
+## Retain views while refreshing navigation routes (2026-11-01)
+
+- The diagnostic retry executed one extra view but still missed V2. Successful full
+  plans took about 1.1 s; four were discarded for navigation-mask changes affecting
+  9–26 cells. Its RTF was 0.976, with zero collisions/protocol violations and a safe
+  return. The evidence supports fixing repeated invalidation rather than extending
+  the timeout without addressing its cause.
+- A successful, nonempty supplementary plan can now retain its alternatives when only
+  navigation changed and its generation, activity and optical mask are still valid.
+  Its old route field/key are cleared. Dispatch must wait for the existing asynchronous
+  route refresh on the current costmap, then recheck fresh pose, endpoint, safety zones,
+  connectivity and both outbound/destination-return time inequalities.
+- Optical changes still clear/recompute views. Empty/failed/obsolete plans are not
+  promoted into usable views. Repeated route changes retry only route fields while
+  preserving the original total five-second wait, no-goal deadlines and cancellation.
+- Regression cases cover one provider call across route changes, blocked endpoint,
+  disconnected home, optical replanning, consecutive navigation changes and disabling
+  during refresh. Default activation remains false; push stays with the user.

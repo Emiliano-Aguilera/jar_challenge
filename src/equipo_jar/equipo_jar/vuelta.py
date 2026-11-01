@@ -14,6 +14,7 @@ radius 0, since the inflation already holds the robot), and on /map otherwise.
 """
 from collections import deque
 import math
+from equipo_jar.mapa import check_cancelled
 
 # The leg's heading looks this far ahead along the way back, so the next leg starts
 # without a turn.
@@ -53,20 +54,21 @@ def nearest_cell(cells, cell, max_cells):
     return best
 
 
-def steps_to_start(grid, x, y, radius, threshold, snap_m):
+def steps_to_start(grid, x, y, radius, threshold, snap_m, *, cancel=None):
     """{cell: steps of the shortest way from the start} for every cell connected to it.
 
     The start is the cell of (x, y), or the nearest cell where the robot fits within
     snap_m: the start pose can be closer to a wall than `radius`. {} if there is none.
     `radius` and `threshold` are those of `Grid.safe_cells`.
     """
-    safe = grid.safe_cells(radius, threshold)
+    safe = grid.safe_cells(radius, threshold, cancel)
     start = nearest_cell(safe, grid.cell(x, y), snap_cells(grid, snap_m))
     if start is None:
         return {}
     steps = {start: 0}
     pending = deque([start])
     while pending:
+        check_cancelled(cancel)
         cell = pending.popleft()
         for nxt in neighbours(cell):
             if nxt in safe and nxt not in steps:

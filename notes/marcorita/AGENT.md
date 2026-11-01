@@ -5,7 +5,27 @@ and `docs/team/INTERFACES.md`. Read `notes/marcorita/NOTES.md` for decisions.
 
 ## Local planner
 
-### Current task: ray boundaries (2026-10-30)
+### Current task: supplementary views (2026-11-01)
+
+Marco authorized the pure provider and local tests. Branch
+cobertura/repaso-oclusiones starts at development a785697 in this checkout.
+Marco subsequently authorized commit/push and a draft PR to development for
+Bautista's integration review. Do not merge or run manual simulations. Do not
+edit mission or shared params; Bautista owns draft PR #58. PR #36/#16 stay separate.
+Read EXTRA_SEARCH.md. The initial plan/map helpers are untouched. Protocols
+accept mission's frozen pose/at_s and pose/outcome records without importing
+his not-yet-merged module. Actual #58 (9aae681) records were tested from a
+build-only copy. 58 geometry cases pass. Six CPU cases/three repetitions take
+0.585..1.216 s locally, including 1200 distinct poses and mismatched grids.
+Source SHA256 starts 557dd8b3. Synthetic recovery is not camera/score proof.
+Final full verifier passes: 246 tests, static/interface/map-wait checks and
+explicit subprocess exit code 0, source hash matches the CPU evidence. Receipt
+is under build/verificacion/cobertura/repaso/verificador-resultado.json. Preserve
+the earlier green log/ambiguous driver status as preliminary evidence. The
+closure log and explicit receipt supersede it. Handoff outside the repo:
+../output/REPASO_PARA_BAUTISTA.md. No teammate message was sent.
+
+### Previous task: ray boundaries (2026-10-30)
 
 Marco authorized a local fix of Grid.visible, on a separate task branch, with
 an independent oracle, 18-plan comparison and full verifier. Branch
