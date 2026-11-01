@@ -716,3 +716,23 @@ named parameter in `params/`.
   or the feature is disabled, using the mission callback thread. Their fields/plans
   are never applied; they cannot submit work or change the active return goal. This
   preserves timing/cancellation evidence for the exact worker that timed out.
+
+
+## Retain views while refreshing navigation routes (2026-11-01)
+
+- The diagnostic retry executed one extra view but still missed V2. Successful full
+  plans took about 1.1 s; four were discarded for navigation-mask changes affecting
+  9–26 cells. Its RTF was 0.976, with zero collisions/protocol violations and a safe
+  return. The evidence supports fixing repeated invalidation rather than extending
+  the timeout without addressing its cause.
+- A successful, nonempty supplementary plan can now retain its alternatives when only
+  navigation changed and its generation, activity and optical mask are still valid.
+  Its old route field/key are cleared. Dispatch must wait for the existing asynchronous
+  route refresh on the current costmap, then recheck fresh pose, endpoint, safety zones,
+  connectivity and both outbound/destination-return time inequalities.
+- Optical changes still clear/recompute views. Empty/failed/obsolete plans are not
+  promoted into usable views. Repeated route changes retry only route fields while
+  preserving the original total five-second wait, no-goal deadlines and cancellation.
+- Regression cases cover one provider call across route changes, blocked endpoint,
+  disconnected home, optical replanning, consecutive navigation changes and disabling
+  during refresh. Default activation remains false; push stays with the user.
