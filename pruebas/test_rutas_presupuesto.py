@@ -5,6 +5,7 @@ from threading import Event
 import pytest
 
 from equipo_jar.mapa import Grid, Pose
+from equipo_jar import vuelta
 from equipo_jar.rutas_presupuesto import build_route_field, estimate_route
 
 
@@ -84,6 +85,21 @@ def test_cancellation_is_observed():
     with pytest.raises(CancelledError):
         build_route_field(corridor(), Pose(0.9, 0.5, 0.0),
                           Pose(0.5, 0.5, 0.0), 10.0, cancel=cancel)
+
+
+def test_cancellation_interrupts_a_traversal_already_in_progress(monkeypatch):
+    cancel = Event()
+    original = vuelta.neighbours
+    expanded = []
+    def neighbours(cell):
+        expanded.append(cell)
+        cancel.set()
+        return original(cell)
+    monkeypatch.setattr(vuelta, 'neighbours', neighbours)
+    with pytest.raises(CancelledError):
+        build_route_field(corridor(), Pose(0.9, 0.5, 0.0),
+                          Pose(0.5, 0.5, 0.0), 10.0, cancel=cancel)
+    assert len(expanded) == 1
 
 
 def test_worker_result_cannot_mutate_route_fields():

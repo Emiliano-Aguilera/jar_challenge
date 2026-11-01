@@ -39,9 +39,9 @@ def build_route_field(grid: Grid, robot: Pose, start: Pose, at_s: float, *,
             or not isinstance(start, Pose) or not _valid_time(at_s)):
         return None
     snapshot = Grid(grid.width, grid.height, grid.resolution, grid.data, grid.origin)
-    outward = steps_to_start(snapshot, robot.x, robot.y, 0.0, 98, 0.0)
+    outward = steps_to_start(snapshot, robot.x, robot.y, 0.0, 98, 0.0, cancel=cancel)
     check_cancelled(cancel)
-    home = steps_to_start(snapshot, start.x, start.y, 0.0, 98, 0.0)
+    home = steps_to_start(snapshot, start.x, start.y, 0.0, 98, 0.0, cancel=cancel)
     check_cancelled(cancel)
     if snapshot.cell(robot.x, robot.y) not in home or not outward:
         return None
