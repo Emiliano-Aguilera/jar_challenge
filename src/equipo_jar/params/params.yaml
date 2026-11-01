@@ -144,6 +144,9 @@ fusion:
     min_baseline_m: 0.3
     #PARAM: covariance floor (std) while seen from one spot, m (> mission's max_desvio_m).
     single_view_sigma_m: 0.15
+    #PARAM: error common to all views of a box (std, m), added to the covariance (>= 0; 0 off).
+    #       Week-10 bag: 0.07 with today's AMCL, 0.04 with the odometry scale fix (PR #34).
+    shared_sigma_m: 0.07
     #PARAM: seconds without observations before a weak candidate is dropped (> 0).
     stale_timeout_s: 20.0
     #PARAM: candidates with at least this many observations are never dropped (>= 1).
