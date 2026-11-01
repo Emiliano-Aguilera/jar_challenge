@@ -22,7 +22,7 @@ from geometry_msgs.msg import PoseStamped
 from equipo_jar.comun import QOS_ESTADO, QOS_MAPA, correr, parametros_en_vivo
 from equipo_jar.reportes import armar_reporte
 from equipo_jar_msgs.msg import Candidatas
-from equipo_jar.confirmacion import select_to_report
+from equipo_jar.confirmacion import near_any, select_to_report
 from equipo_jar.exploracion import yaw_from_quaternion, first_pending, angle_difference, goal_position, box_zones, near_box, return_verdict, goal_blocked, start_ready
 from equipo_jar.inspeccion import (pick_doubtful, viewpoint_for, forget_failed_inspection,
                                    unhelpful_inspection, inspection_outcome)
@@ -103,6 +103,8 @@ class Mision(Node):
         self.current_inspection = None  # (id, x, y, observaciones) del viaje de inspección en curso
         self.look_until = None  # al llegar a mirar una candidata: hasta cuándo espera a que se confirme
         self.inspection_spot = None  # (x, y) desde donde se mira la candidata del viaje en curso
+        self.inspection_cancel_goal = None
+        self.inspection_canceling = False
         self.tried_views = {}   # por id: lugares que no dieron resultado o a los que Nav2 no llegó
         self.settle_until = None
         self.current_goal = None
@@ -260,6 +262,8 @@ class Mision(Node):
         goal = NavigateToPose.Goal()
         goal.pose = pose
         goal.behavior_tree = tree
+        self.inspection_cancel_goal = None
+        self.inspection_canceling = False
         self.nav_state = "sending"
         self.recoveries = 0
         future = self.navegacion.send_goal_async(goal, feedback_callback=self.on_feedback)
@@ -278,10 +282,48 @@ class Mision(Node):
                 self.get_logger().warning('Primer viaje sin pose de inicio: no se va a poder volver')
         return True
 
+    def inspection_is_reported(self):
+        if self.current_inspection is None:
+            return False
+        cand_id, x, y, _ = self.current_inspection
+        return (cand_id in self.reported_ids
+                or near_any(x, y, self.reported_points, self.p['min_report_distance_m']))
+
+    def cancel_reported_inspection(self):
+        if (self.state != 'exploring' or self.nav_state != 'moving'
+                or self.current_goal is None or self.stuck_canceling
+                or not self.inspection_is_reported()
+                or self.inspection_cancel_goal is self.current_goal):
+            return
+        goal = self.current_goal
+        self.inspection_cancel_goal = goal
+        self.inspection_canceling = True
+        try:
+            future = goal.cancel_goal_async()
+            future.add_done_callback(lambda result: self.on_inspection_cancel_response(result, goal))
+            self.get_logger().info('Cancelling inspection: candidate already reported')
+        except Exception as e:
+            self.inspection_canceling = False
+            self.get_logger().warning(f'Inspection cancellation unavailable: {e}')
+
+    def on_inspection_cancel_response(self, future, goal):
+        if (self.current_goal is not goal or self.inspection_cancel_goal is not goal
+                or self.nav_state != 'moving' or self.state in ('finishing', 'finished')):
+            return
+        try:
+            if not future.result().goals_canceling:
+                self.inspection_canceling = False
+                self.get_logger().warning('Inspection cancellation rejected; waiting for navigation')
+        except Exception as e:
+            self.inspection_canceling = False
+            self.get_logger().warning(f'Inspection cancellation response unavailable: {e}')
+
     def check_stuck(self):
         if self.nav_state != 'moving' or self.stuck_canceling:
             return
         now = self.seconds_since_t0()
+        if self.inspection_canceling and now - self.goal_start_time <= self.p['goal_timeout_s']:
+            return
         pose = self.odom_pose()
 
         if pose is None or self.last_motion_pose is None:
@@ -363,6 +405,7 @@ class Mision(Node):
             self.get_logger().error(f'Error en on_goal_response:\n{traceback.format_exc()}', throttle_duration_sec=5.0)
 
     def handle_on_goal_result(self, future):
+        self.inspection_canceling = False
         status = future.result().status
         if status == GoalStatus.STATUS_SUCCEEDED:
             self.nav_state = 'arrived'
@@ -428,6 +471,7 @@ class Mision(Node):
             self.update_search_history()
         # Después del arranque: sin localización lista, una candidata podría quedar mal ubicada.
         self.check_reports(self.p['min_observations'], self.p['max_deviation_m'])
+        self.cancel_reported_inspection()
         self.check_stuck()
         self.check_goal_near_box()
         self.check_goal_blocked()
@@ -465,7 +509,11 @@ class Mision(Node):
                 yaw = yaw_from_quaternion(self.current_point.pose.orientation)
                 self.visited.append((x, y, yaw))
             if self.current_inspection is not None:
-                if self.nav_state == 'failed':
+                if self.inspection_is_reported():
+                    self.current_inspection = None
+                    self.look_until = None
+                    self.inspection_spot = None
+                elif self.nav_state == 'failed':
                     # Observaciones de ahora, no las del envío: reintenta solo si llegan más después.
                     cand_id, cand_x, cand_y, observations = self.current_inspection
                     for c in self.candidatas or []:
@@ -581,7 +629,7 @@ class Mision(Node):
         if self.nav_state == 'sending':
             return
         if self.nav_state == 'moving' and not self.return_sent:
-            if not self.canceling:
+            if not self.canceling and not self.inspection_canceling:
                 self.current_goal.cancel_goal_async()
                 self.canceling = True
                 self.get_logger().info("Cancelando objetivo...")

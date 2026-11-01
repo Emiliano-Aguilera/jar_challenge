@@ -634,3 +634,18 @@ named parameter in `params/`.
   both endpoints. Estimates retain the snapshot timestamp and expire instead of being
   refreshed merely because another costmap message arrived. This helper is ready for
   the asynchronous mission integration; it is not yet called by mission.
+
+## End an inspection after its report (2026-11-01)
+
+- During exploration, a moving inspection is cancelled once its candidate is reported,
+  by stable ID or the existing report-distance rule after candidate merging. A report
+  for a different victim does not cancel the trip. The next goal waits for the actual
+  navigation result, not only the cancellation acknowledgement.
+- Reported inspections clear without another confirmation wait or failed-view accounting.
+  Rejected/failed cancellation leaves the real action active and preserves its watchdog;
+  late cancellation responses cannot change the next goal. The existing goal timeout and
+  final stop still apply if Nav2 never provides a result.
+- `pruebas/test_cancelar_inspeccion_reportada.py` exercises the real mission node and
+  controlled action futures. This change is independent of extra_search_enabled.
+  The user wants recorded simulation comparisons after Marco's provider is integrated;
+  no new simulations were dispatched for this isolated change.
