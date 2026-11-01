@@ -2,6 +2,7 @@ from concurrent.futures import Future
 from types import SimpleNamespace
 
 from action_msgs.msg import GoalStatus
+from std_msgs.msg import Bool
 from equipo_jar_msgs.msg import Candidata
 import pytest
 
@@ -223,6 +224,7 @@ def test_pending_cancel_does_not_bypass_final_stop_deadline(inspecting):
     node.step_logic()
     assert goal.cancel_calls == 2
     clock.seconds = 5.0 + node.p['done_limit_s']
+    node.on_stop_confirmed(Bool(data=True))
     node.step_logic()
     assert node.state == 'finishing'
     node.step_logic()
