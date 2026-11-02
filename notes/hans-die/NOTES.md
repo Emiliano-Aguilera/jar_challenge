@@ -817,6 +817,8 @@ is skipped: bt_navigator logs it before its TF is ready). Return = judge's dista
   rule.
 - Decided (#67): freshness by arrival time; after `confirm_timeout_s` (3 s) of zero output the
   stop is confirmed anyway. Mission unchanged.
+- Bautista's review: fresh `/odom` that still shows motion vetoes that timeout, up to
+  `confirm_max_s` (10 s), so noise at rest cannot block `/done` forever.
 
 ### Q: maze_3 stuck at (3.03, -2.49) with "Resulting plan has 0 poses" (Emiliano, #64)
 
@@ -826,3 +828,19 @@ is skipped: bt_navigator logs it before its TF is ready). Return = judge's dista
   the map). Same message as laberinto_1 with AMCL 0.1-0.33 m off (xy tolerance 0.15 test).
 - In Humble's MPPI (`path_handler.cpp`) an empty plan without a TF error means the plan's
   closest pose is outside the local costmap. Open: not reproduced; watch the new run log.
+
+### Q: why does MPPI reject every path ("Resulting plan has 0 poses") for the rest of a run?
+
+- ~4 of ~25 runs on 11-02, NavFn and Smac alike (ventanas, laberinto_1, maze_3).
+- A diagnostic node (branch `navegacion/diag-costmap`) compared each `/plan` start with the
+  robot pose. In laberinto_1 (batch 20261102-141009-915cec1), from t = 9864 every path started
+  at (-1.82, -2.72), where the robot had been, while `bt_navigator` and the node saw the right
+  pose. planner_server's TF view froze: a lookup at time 0 returns the last stored pose with no
+  error. MPPI (Humble `path_handler.cpp`) only searches the first `max_robot_pose_search_dist`
+  (1.5 m) of the path, so once the robot is farther than that from the path start, every path
+  is empty.
+- Decided (#73): `localizacion` watches `/plan`; 3 paths in a row starting > 0.5 m from the
+  robot restart planner_server (deactivate, cleanup, configure, activate), at most once per
+  30 s. Cleanup and configure rebuild the costmap's TF buffer and listener
+  (`costmap_2d_ros.cpp`). Forced every 30 s: maze_3 400/400 and Callejones 800/800, ~1.9 s and
+  one BT costmap clearing per restart.
