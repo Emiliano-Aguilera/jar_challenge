@@ -178,6 +178,26 @@ One entry per decision: the question, what was tried, what was decided.
   `usar_amcl: false`, which publishes true at once, but a dead node must not blind detection).
   Skipped frames show as `localizing` in the 10 s summary. `settle_s` 0 in mission stays.
 
+## Can a yellow, green, orange or neutral distractor pass the red filter? (2026-11-02)
+
+- Ask (AlsinaBautista, FOR_THE_TEAM.md): practice maps only have blue distractors; the
+  competition has yellow, green and neutral ones. Check the red thresholds against them.
+- Tried (synthetic, no real image of such a distractor exists yet): OpenCV HSV, the filter is
+  H in [0, 8] U [170, 180] (10 before #64), S >= 100, V >= 60. Three checks through the repo's
+  `red_mask` + `find_blobs`: every pure hue; 15 colors as 50x60 patches with hue jitter
+  (sigma 3), shading and sensor noise, 20 draws each; and a white-balance shift (R x k, B / k,
+  k 0.8-1.5) to mimic warm or cold venue light.
+- Result: yellow (H 26-30), green (57-60), blue (120) and the neutrals (grey, white, black,
+  beige: S < 100) never give a blob, not even one mask pixel, under any shift. Yellow stays
+  above H 21 at k 1.5. The only near neighbours are orange (H 15) and brown cardboard
+  (H 10-13): with the upper hue at 10 they leave 60-77 scattered mask pixels per frame (no
+  blob) and pass as single pixels at k >= 1.3; at 8 (#64) they leave 6-16 pixels and pass at
+  no k. Red boxes stay at H 178-1 under every shift.
+- Decided: no change to `hsv_red_low_1` or the saturation minimum (18 hue steps of margin to
+  yellow; lowering S would only bring the neutrals closer). #64 matters against the cardboard
+  walls, not against the listed distractors. On site: point the camera at one distractor of
+  each color with `publish_debug: true` before the first run, since this is synthetic only.
+
 ## Next
 
 - Repeat the measurement with localization (AMCL) instead of the fixed map = odom.
