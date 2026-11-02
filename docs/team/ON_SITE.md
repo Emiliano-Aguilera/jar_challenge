@@ -10,7 +10,7 @@ item, write the answer here and drop the on-site step.
 | What | How | Params it sets | Open question |
 | --- | --- | --- | --- |
 | Box size | Tape-measure one real box: width, depth, height. | `box_side_m` (detection: the visible face is half a side in front of the center); check `map_box_extent_m` | "¿Las cajas reales miden lo mismo que en el simulador…?" (Not sent) |
-| Robot still on `/odom` | `ros2 topic echo /odom` for 10 s with the robot still: the speeds must stay below the thresholds. In the organizers' bag they are exactly 0. | `parada.still_linear_mps`, `still_angular_rads` (`confirm_timeout_s` confirms the stop anyway after 3 s, PR #67) | |
+| Robot still on `/odom` | `ros2 topic echo /odom` for 10 s with the robot still: the speeds must stay below the thresholds. In the organizers' bag they are exactly 0. | `parada.still_linear_mps`, `still_angular_rads` (`confirm_timeout_s` confirms the stop after 3 s unless `/odom` shows motion, `confirm_max_s` after 10 s in any case, PR #67); `localizacion.quieto_lineal_ms`, `quieto_angular_rads` (still for the AMCL checks, PR #73) | |
 | Gyro sign | Nothing to do: learned at the first turn. Check the `gyro sign` line in the log. The real gyro was inverted in both bags. | `odometria_imu.signo_giroscopo` (0 = learn) | |
 | Distance scale | Drive 1 m straight, tape-measure it and compare with `/odom`. The organizers' second bag gave 0.988 against the LiDAR: leave 1.0 unless the error is over ~3 %. | `odometria_imu.escala_avance` | |
 | Heading after turns | Turn 360° in place and compare `/odom`, the IMU and `/amcl_pose`. | `localizacion.actualizaciones_giro` | |
