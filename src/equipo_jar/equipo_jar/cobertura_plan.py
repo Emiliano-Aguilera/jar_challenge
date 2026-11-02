@@ -6,7 +6,7 @@ agreement before we can maintain the remaining route during a run.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import heapq
 import math
 
@@ -33,6 +33,8 @@ class Settings:
     order_start_delay_s: float = 8.0
     view_clearance: float = 0.24
     view_preferred_clearance: float = 0.30
+    start_max_shift_m: float = 0.20
+    start_min_goal_distance_m: float = 0.25
 
     def __post_init__(self):
         positive = ('robot_radius', 'candidate_spacing', 'target_spacing',
@@ -56,7 +58,8 @@ class Settings:
             raise ValueError('order_check_interval_s must be finite and at least observation_time')
         if not math.isfinite(self.order_start_delay_s) or self.order_start_delay_s < 0:
             raise ValueError('order_start_delay_s must be finite and nonnegative')
-        for name in ('view_clearance', 'view_preferred_clearance'):
+        for name in ('view_clearance', 'view_preferred_clearance',
+                     'start_max_shift_m', 'start_min_goal_distance_m'):
             if not math.isfinite(getattr(self, name)) or getattr(self, name) < 0:
                 raise ValueError(f'{name} must be finite and nonnegative')
 
@@ -83,6 +86,7 @@ class Plan:
     metrics: Metrics | None = None
     diagnostics: Diagnostics | None = None
     unpolished_metrics: Metrics | None = None
+    start_anchor: Pose | None = None
 
 
 @dataclass(frozen=True)
@@ -242,14 +246,48 @@ def route_metrics(choices, start_cell, start_yaw, costs, settings, possible):
                    possible.bit_count(), tuple(curve))
 
 
+class _RouteClock:
+    """Exact duration before building visibility curves for rejected routes.
+
+    Cache directed edge increments within one fixed-view ordering call. Retain
+    route_metrics' arithmetic and accumulation order, including floating-point
+    behavior at the existing duration thresholds.
+    """
+    def __init__(self, start_cell, start_yaw, costs, settings):
+        self.start_cell, self.start_yaw = start_cell, start_yaw
+        self.costs, self.settings = costs, settings
+        self.turn_cost = getattr(costs, 'turn_between', None)
+        self.edges = {}
+
+    def __call__(self, choices):
+        elapsed = 0.0
+        cell, yaw = self.start_cell, self.start_yaw
+        for nxt, pose, _ in choices:
+            key = cell, yaw, nxt, pose.yaw
+            increment = self.edges.get(key)
+            if increment is None:
+                leg = self.costs.between(cell, nxt)
+                turn = (self.turn_cost(yaw, pose.yaw) if self.turn_cost is not None
+                        else abs(angle_difference(yaw, pose.yaw)))
+                increment = (leg / self.settings.travel_speed + turn / self.settings.turn_speed
+                             + self.settings.observation_time)
+                self.edges[key] = increment
+            elapsed += increment
+            cell, yaw = nxt, pose.yaw
+        return elapsed
+
+
 def improve_order(choices, start_cell, start_yaw, costs, settings, possible, cancel=None):
     """Bounded 2-opt and relocation sweeps, retaining every selected view."""
     choices = list(choices)
     metrics = route_metrics(choices, start_cell, start_yaw, costs, settings, possible)
+    clock = _RouteClock(start_cell, start_yaw, costs, settings)
     for first in range(len(choices) - 1):
         for last in range(first + 1, len(choices)):
             check_cancelled(cancel)
             candidate = choices[:first] + list(reversed(choices[first:last + 1])) + choices[last + 1:]
+            if clock(candidate) >= metrics.duration - 1e-9:
+                continue
             trial = route_metrics(candidate, start_cell, start_yaw, costs, settings, possible)
             if (trial.duration < metrics.duration - 1e-9
                     and trial.mean_first_view_time <= metrics.mean_first_view_time + 1e-9):
@@ -257,11 +295,13 @@ def improve_order(choices, start_cell, start_yaw, costs, settings, possible, can
     # Keep every view: equal sampled coverage does not prove equal visibility
     # between samples, so removing a seemingly redundant pose would be unsafe.
     choices = relocate_order(choices, start_cell, start_yaw, costs, settings, possible,
-                             settings.order_check_interval_s, settings.order_start_delay_s, cancel)
+                             settings.order_check_interval_s, settings.order_start_delay_s, cancel,
+                             _clock=clock)
     # Later moves can unlock improvements for views visited early in the first
     # sweep. One cleanup sweep keeps the work bounded and repeats every guard.
     return relocate_order(choices, start_cell, start_yaw, costs, settings, possible,
-                          settings.order_check_interval_s, settings.order_start_delay_s, cancel)
+                          settings.order_check_interval_s, settings.order_start_delay_s, cancel,
+                          _clock=clock)
 
 
 def _order_checkpoints(curve, interval, start_delay):
@@ -296,7 +336,7 @@ def _meets_order_checks(curve, checks):
 
 
 def relocate_order(choices, start_cell, start_yaw, costs, settings, possible,
-                   interval, start_delay, cancel=None):
+                   interval, start_delay, cancel=None, *, _clock=None):
     """One bounded relocation sweep, preserving all views and sampled checks.
 
     Accept only lower mean first-view time (or equal mean and shorter search),
@@ -311,6 +351,7 @@ def relocate_order(choices, start_cell, start_yaw, costs, settings, possible,
     check_cancelled(cancel)
     current = list(choices)
     metrics = route_metrics(current, start_cell, start_yaw, costs, settings, possible)
+    clock = _RouteClock(start_cell, start_yaw, costs, settings) if _clock is None else _clock
     for entry in tuple(choices):
         check_cancelled(cancel)
         first = current.index(entry)
@@ -322,6 +363,8 @@ def relocate_order(choices, start_cell, start_yaw, costs, settings, possible,
             if last == first:
                 continue
             trial = rest[:last] + [entry] + rest[last:]
+            if clock(trial) > metrics.duration + 1e-9:
+                continue
             candidate = route_metrics(trial, start_cell, start_yaw, costs, settings, possible)
             if candidate.duration > metrics.duration + 1e-9:
                 continue
@@ -384,6 +427,58 @@ def observation_cells(grid, reachable, settings, cancel=None, *, preferred=False
     return reachable & grid.safe_cells(clearance, settings.free_threshold, cancel)
 
 
+def planning_start_cell(grid, start, safe, settings, cancel=None):
+    """Choose a nearby planning anchor only from a known-free actual start.
+
+    A bounded, clear center segment prevents snapping through walls/unknowns.
+    This does not certify the swept robot footprint or command an escape:
+    Nav2 must still plan and execute from the real pose. Shared map reachability
+    stays strict. A zero shift limit disables this initial-plan fallback.
+    """
+    check_cancelled(cancel)
+    actual = grid.cell(start.x, start.y)
+    if actual in safe:
+        return actual
+    if (actual is None or not grid.free(actual, settings.free_threshold)
+            or settings.start_max_shift_m == 0):
+        raise ValueError('robot pose is outside the safe free space; no local free start')
+    candidates = []
+    for cell in safe:
+        check_cancelled(cancel)
+        distance = math.dist((start.x, start.y), grid.center(cell))
+        if distance <= settings.start_max_shift_m:
+            candidates.append((distance, cell[1], cell[0], cell))
+    for _, _, _, cell in sorted(candidates):
+        check_cancelled(cancel)
+        if grid.visible((start.x, start.y), grid.center(cell), settings.free_threshold):
+            return cell
+    raise ValueError('robot pose is outside the safe free space; no nearby visible safe anchor')
+
+
+def _recovery_order(choices, start, settings):
+    """Keep all selected views but avoid mission's nearby-goal in-place shortcut.
+
+    The configured minimum must exceed mission's turn_in_place_m. This is a
+    dispatch compatibility check, not an orientation/arrival guarantee from Nav2.
+    """
+    for index, (_, pose, _) in enumerate(choices):
+        if math.dist((start.x, start.y), (pose.x, pose.y)) >= settings.start_min_goal_distance_m:
+            return choices[index:index + 1] + choices[:index] + choices[index + 1:]
+    raise ValueError('no observation goal beyond the start recovery distance')
+
+
+def _entry_metrics(metrics, distance, settings):
+    """Include the local connector estimate in outbound and return accounting."""
+    seconds = distance / settings.travel_speed
+    return replace(metrics, distance=metrics.distance + distance,
+                   duration=metrics.duration + seconds,
+                   return_distance=metrics.return_distance + distance,
+                   mean_first_view_time=(metrics.mean_first_view_time + seconds
+                                         if len(metrics.coverage_curve) > 1 else 0.0),
+                   coverage_curve=((0.0, 0),) + tuple(
+                       (t + seconds, count) for t, count in metrics.coverage_curve[1:]))
+
+
 def make_plan(grid, start, settings=Settings(), camera=Camera(), *,
               refine=True, improve=True, diagnostics=False, cancel=None):
     """Greedily cover sampled free cells, balancing new visibility and travel time.
@@ -394,7 +489,8 @@ def make_plan(grid, start, settings=Settings(), camera=Camera(), *,
     check_cancelled(cancel)
     safe = grid.safe_cells(settings.robot_radius + settings.safety_margin,
                            settings.free_threshold, cancel)
-    start_cell = grid.cell(start.x, start.y)
+    start_cell = planning_start_cell(grid, start, safe, settings, cancel)
+    recovery = start_cell != grid.cell(start.x, start.y)
     reachable = reachable_cells(safe, start_cell)
     observation = observation_cells(grid, reachable, settings, cancel)
     preferred = observation_cells(grid, observation, settings, cancel, preferred=True)
@@ -466,6 +562,10 @@ def make_plan(grid, start, settings=Settings(), camera=Camera(), *,
         for _ in range(budget):
             chosen, best_score = None, 0.0
             for cell, pose, mask in available:
+                if (recovery and not result
+                        and math.dist((start.x, start.y), (pose.x, pose.y))
+                        < settings.start_min_goal_distance_m):
+                    continue
                 gain = (mask & ~predicted).bit_count()
                 if not gain:
                     continue
@@ -486,10 +586,20 @@ def make_plan(grid, start, settings=Settings(), camera=Camera(), *,
     # between target samples, then fill gaps within the remaining view budget.
     select_views(base_options, settings.max_views)
     select_views(options, settings.max_views - len(result))
+    if recovery:
+        result = _recovery_order(result, start, settings)
     unpolished = route_metrics(result, start_cell, start.yaw, costs, settings, possible)
     if improve:
         result = improve_order(result, start_cell, start.yaw, costs, settings, possible, cancel)
+    if recovery:
+        result = _recovery_order(result, start, settings)
     metrics = route_metrics(result, start_cell, start.yaw, costs, settings, possible)
+    anchor = None
+    if recovery:
+        anchor = Pose(*grid.center(start_cell), start.yaw)
+        shift = math.dist((start.x, start.y), (anchor.x, anchor.y))
+        metrics = _entry_metrics(metrics, shift, settings)
+        unpolished = _entry_metrics(unpolished, shift, settings)
     details = None
     if diagnostics:
         covered = tuple(cell for index, cell in enumerate(targets) if predicted & (1 << index))
@@ -504,4 +614,4 @@ def make_plan(grid, start, settings=Settings(), camera=Camera(), *,
         details = Diagnostics(tuple(targets), covered, outside, deferred,
                               tuple(positions), tuple(legs), added)
     return Plan(tuple(entry[1] for entry in result), len(targets), predicted.bit_count(),
-                len(reachable), len(options), metrics, details, unpolished)
+                len(reachable), len(options), metrics, details, unpolished, anchor)

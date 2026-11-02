@@ -1,5 +1,6 @@
 """ROS adapter checks with generated messages; no simulator or motors."""
 from concurrent.futures import Future
+from types import SimpleNamespace
 import math
 import time
 
@@ -262,6 +263,103 @@ def test_failed_start_recovers_after_localization_changes(ros_pair):
     assert coverage._planned_generation == -1
     put_tf(coverage)
     spin_until(executor, lambda: coverage._planned_generation == coverage._generation)
+
+
+def test_near_wall_start_publishes_a_translation_goal_with_unchanged_clearance(ros_pair):
+    from equipo_jar.exploracion import goal_position
+    from equipo_jar.mapa import Grid
+    coverage, peer, executor = ros_pair
+    put_tf(coverage, x=.26, y=.55)
+    message = map_message()
+    grid = Grid.from_occupancy_grid(message)
+    assert grid.cell(.26, .55) not in grid.safe_cells(.21, 25)
+    received = []
+    peer.create_subscription(Path, '/jar/plan_cobertura', received.append, QOS_ESTADO)
+    coverage.al_recibir_mapa(message)
+    spin_until(executor, lambda: bool(received))
+    first = received[-1].poses[0].pose.position
+    x, y, in_place = goal_position(first.x, first.y, (.26, .55, 0), .20)
+    assert not in_place
+    assert (x, y) == (first.x, first.y)
+    stops = grid.safe_cells(.24, 25)
+    assert all(grid.cell(p.pose.position.x, p.pose.position.y) in stops for p in received[-1].poses)
+
+
+def test_failed_start_retries_after_same_cell_tf_correction_with_bounded_backoff(ros_pair, monkeypatch):
+    import equipo_jar.cobertura as adapter
+    coverage, _, executor = ros_pair
+    clock = [100.0]
+    monkeypatch.setattr(adapter, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
+    put_tf(coverage, x=.101, y=.55)  # Nearest safe center is outside the .20 m limit.
+    coverage.al_recibir_mapa(map_message())
+    spin_until(executor, lambda: coverage._failed_start is not None)
+    cell = coverage._grid.cell(.101, .55)
+    put_tf(coverage, x=.19, y=.55)
+    assert coverage._grid.cell(.19, .55) == cell
+    clock[0] = 101.9
+    coverage._tick()
+    assert coverage._future is None
+    clock[0] = 102.1
+    spin_until(executor, lambda: coverage._planned_generation == coverage._generation)
+
+
+def test_unchanged_pose_retries_transient_worker_failure(ros_pair, monkeypatch):
+    import equipo_jar.cobertura as adapter
+    coverage, _, executor = ros_pair
+    clock, calls = [100.0], []
+    original = adapter.make_plan
+    def flaky(*args, **kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            raise RuntimeError('controlled transient failure')
+        return original(*args, **kwargs)
+    monkeypatch.setattr(adapter, 'make_plan', flaky)
+    monkeypatch.setattr(adapter, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
+    put_tf(coverage)
+    coverage.al_recibir_mapa(map_message())
+    spin_until(executor, lambda: coverage._failed_start is not None)
+    for _ in range(5):
+        coverage._tick()
+    assert len(calls) == 1
+    clock[0] = 102.1
+    spin_until(executor, lambda: coverage._planned_generation == coverage._generation)
+    assert len(calls) == 2
+
+
+def test_obsolete_worker_failure_does_not_poison_current_generation(ros_pair):
+    coverage, _, _ = ros_pair
+    coverage.al_recibir_mapa(map_message())
+    failed = Future()
+    failed.set_exception(ValueError('old start'))
+    coverage._future = failed
+    coverage._future_generation = coverage._generation - 1
+    coverage._tick()
+    assert coverage._failed_start is None
+
+
+def test_small_tf_correction_cannot_publish_recovery_as_an_in_place_goal(ros_pair, monkeypatch):
+    coverage, _, _ = ros_pair
+    coverage.al_recibir_mapa(map_message())
+    put_tf(coverage, x=.31, y=.55)
+    coverage._planning_pose = Pose(.26, .55, 0)
+    coverage._planning_camera = Camera(.1, 0, 0)
+    future = Future()
+    future.set_result(Plan((Pose(.55, .55, 0),), 1, 1, 1, 1,
+                           start_anchor=Pose(.35, .55, 0)))
+    coverage._future = future
+    coverage._future_generation = coverage._generation
+    published = []
+    monkeypatch.setattr(coverage, '_publish', published.append)
+    coverage._tick()
+    assert not published
+    assert coverage._planned_generation == -1
+
+
+@pytest.mark.parametrize('name,value', [('retry_interval_s', 0.0), ('retry_interval_s', -1.0),
+                                       ('retry_interval_s', math.nan), ('start_max_shift_m', -.01)])
+def test_invalid_recovery_parameters_are_rejected_atomically(ros_pair, name, value):
+    coverage, _, _ = ros_pair
+    assert not coverage.set_parameters_atomically([Parameter(name, value=value)]).successful
 
 
 def test_stale_localization_does_not_start_planning(ros_pair):

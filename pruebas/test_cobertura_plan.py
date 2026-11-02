@@ -6,7 +6,7 @@ import pytest
 
 from equipo_jar.cobertura_plan import (
     Camera, Grid, Pose, Settings, TravelCosts, distances, improve_order, make_plan,
-    reachable_cells, route_metrics, sampled_cells, shortest_leg)
+    planning_start_cell, reachable_cells, route_metrics, sampled_cells, shortest_leg)
 
 
 def room(width=12, height=12, resolution=0.1, blocked=(), origin=Pose(0.0, 0.0, 0.0)):
@@ -107,6 +107,142 @@ def test_unsafe_start_is_rejected_instead_of_snapped_through_wall():
     grid = room()
     with pytest.raises(ValueError, match='safe free space'):
         make_plan(grid, Pose(*grid.center((0, 0)), 0.0))
+
+
+@pytest.mark.parametrize('clearance', [0.16, 0.22, 0.25])
+@pytest.mark.parametrize('resolution', [0.03, 0.05])
+def test_wall_start_uses_a_local_anchor_without_reducing_any_goal_clearance(clearance, resolution):
+    # The first wall occupies [0,resolution]; clearance is from its inner face.
+    grid = room(width=60, height=55, resolution=resolution)
+    start = Pose(resolution + clearance, 0.8, 0.0)
+    settings = replace(Settings(), max_views=8, max_positions=24, max_targets=100)
+    plan = make_plan(grid, start, settings, diagnostics=True)
+    safe = grid.safe_cells(0.21, settings.free_threshold)
+    stops = grid.safe_cells(0.24, settings.free_threshold)
+    cell = planning_start_cell(grid, start, safe, settings)
+    assert cell in safe
+    assert plan.poses
+    assert all(grid.cell(p.x, p.y) in stops for p in plan.poses)
+    if grid.cell(start.x, start.y) not in safe:
+        assert plan.start_anchor == Pose(*grid.center(cell), start.yaw)
+        assert math.dist((start.x, start.y), grid.center(cell)) <= settings.start_max_shift_m
+        assert grid.visible((start.x, start.y), grid.center(cell), settings.free_threshold)
+        first = plan.poses[0]
+        assert math.dist((start.x, start.y), (first.x, first.y)) >= settings.start_min_goal_distance_m
+        assert plan.diagnostics.legs[0][0] == cell
+        assert all(c in safe for leg in plan.diagnostics.legs for c in leg)
+    else:
+        assert plan.start_anchor is None
+
+
+def test_start_anchor_is_nearest_visible_safe_center_with_deterministic_ties():
+    grid = room(width=30, height=25, resolution=0.05)
+    start = Pose(0.18, 0.6, 0.0)
+    safe = grid.safe_cells(0.21, 25)
+    settings = Settings()
+    actual = planning_start_cell(grid, start, safe, settings)
+    candidates = [c for c in safe if math.dist((start.x, start.y), grid.center(c)) <= .20
+                  and grid.visible((start.x, start.y), grid.center(c), 25)]
+    expected = min(candidates, key=lambda c: (math.dist((start.x, start.y), grid.center(c)), c[1], c[0]))
+    assert actual == expected
+
+
+@pytest.mark.parametrize('blocked_value', [100, -1])
+def test_local_anchor_cannot_cross_a_wall_or_unknown_even_when_it_is_nearest(blocked_value):
+    data = [0] * 100
+    for j in range(10):
+        data[j * 10 + 4] = blocked_value
+    grid = Grid(10, 10, .05, data)
+    start = Pose(*grid.center((3, 5)), 0.0)
+    with pytest.raises(ValueError, match='safe free space'):
+        planning_start_cell(grid, start, {(5, 5)}, Settings())
+
+
+@pytest.mark.parametrize('start', [Pose(-.01, .55, 0), Pose(.05, .55, 0)])
+def test_outside_or_occupied_start_is_not_repaired(start):
+    with pytest.raises(ValueError, match='safe free space'):
+        make_plan(room(width=25, height=25), start)
+
+
+def test_unknown_start_is_not_repaired():
+    grid = room(width=25, height=25)
+    data = list(grid.data)
+    data[5 * grid.width + 1] = -1
+    grid = Grid(grid.width, grid.height, grid.resolution, data)
+    with pytest.raises(ValueError, match='safe free space'):
+        make_plan(grid, Pose(.15, .55, 0))
+
+
+@pytest.mark.parametrize('limit', [0.0, .01])
+def test_start_recovery_is_bounded_and_can_be_disabled(limit):
+    with pytest.raises(ValueError, match='safe free space'):
+        make_plan(room(width=25, height=25), Pose(.16, .55, 0),
+                  replace(Settings(), start_max_shift_m=limit))
+
+
+def test_recovery_preserves_all_views_and_counts_the_connector_in_both_directions():
+    grid = room(width=25, height=25, resolution=.05)
+    start = Pose(.21, .6, 0)
+    settings = replace(Settings(), max_views=8, max_positions=24, max_targets=60,
+                       start_min_goal_distance_m=0)
+    recovered = make_plan(grid, start, settings, improve=False)
+    assert recovered.start_anchor is not None
+    anchored = make_plan(grid, recovered.start_anchor, settings, improve=False)
+    assert recovered.poses == anchored.poses
+    assert recovered.predicted_count == anchored.predicted_count
+    shift = math.dist((start.x, start.y), (recovered.start_anchor.x, recovered.start_anchor.y))
+    assert recovered.metrics.distance == pytest.approx(anchored.metrics.distance + shift)
+    assert recovered.metrics.return_distance == pytest.approx(anchored.metrics.return_distance + shift)
+    assert recovered.metrics.duration == pytest.approx(anchored.metrics.duration + shift / settings.travel_speed)
+    assert recovered.metrics.coverage_curve[-1][0] == recovered.metrics.duration
+
+
+def test_recovery_cannot_publish_only_nearby_goals_that_mission_would_turn_in_place():
+    with pytest.raises(ValueError, match='recovery distance'):
+        make_plan(room(width=25, height=25), Pose(.16, .55, 0),
+                  replace(Settings(), start_min_goal_distance_m=10.0))
+
+
+def test_one_view_budget_still_selects_a_translation_when_recovering():
+    start = Pose(.21, .6, 0)
+    plan = make_plan(room(width=25, height=25, resolution=.05), start,
+                     replace(Settings(), max_views=1))
+    assert plan.start_anchor is not None
+    assert len(plan.poses) == 1
+    assert math.dist((start.x, start.y), (plan.poses[0].x, plan.poses[0].y)) >= .25
+
+
+@pytest.mark.parametrize('field', ['start_max_shift_m', 'start_min_goal_distance_m'])
+@pytest.mark.parametrize('value', [-.1, math.nan, math.inf])
+def test_invalid_start_recovery_parameters(field, value):
+    with pytest.raises(ValueError, match=field):
+        replace(Settings(), **{field: value})
+
+
+def test_start_recovery_can_be_cancelled_during_search():
+    from concurrent.futures import CancelledError
+    class Cancel:
+        checks = 0
+        def is_set(self):
+            self.checks += 1
+            return self.checks == 3
+    with pytest.raises(CancelledError):
+        planning_start_cell(room(), Pose(.16, .55, 0), {(i, 5) for i in range(3, 10)},
+                            Settings(), Cancel())
+
+
+def test_recovery_is_invariant_under_rotated_translated_grid_origin():
+    plain = room(width=25, height=25, resolution=.05)
+    origin = Pose(-2.1, 3.2, .63)
+    rotated = room(width=25, height=25, resolution=.05, origin=origin)
+    local = Pose(.18, .6, .1)
+    start = Pose(origin.x + math.cos(origin.yaw) * local.x - math.sin(origin.yaw) * local.y,
+                 origin.y + math.sin(origin.yaw) * local.x + math.cos(origin.yaw) * local.y,
+                 origin.yaw + local.yaw)
+    settings = Settings()
+    a = planning_start_cell(plain, local, plain.safe_cells(.21, 25), settings)
+    b = planning_start_cell(rotated, start, rotated.safe_cells(.21, 25), settings)
+    assert a == b
 
 
 def test_route_contains_safe_finite_oriented_goals_and_honors_limits():

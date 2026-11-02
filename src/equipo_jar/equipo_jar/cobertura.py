@@ -6,6 +6,7 @@ navigation results; it replans when the map or a planning parameter changes.
 from concurrent.futures import CancelledError, ThreadPoolExecutor
 from dataclasses import asdict
 import math
+import time
 from threading import Event
 
 from geometry_msgs.msg import PoseStamped
@@ -38,7 +39,8 @@ class Cobertura(Node):
     def __init__(self):
         super().__init__('cobertura')
         defaults = {**asdict(Settings()), 'base_frame': 'base_footprint',
-                    'camera_frame': 'cam_1_color_optical_frame', 'tf_max_age': 1.0}
+                    'camera_frame': 'cam_1_color_optical_frame', 'tf_max_age': 1.0,
+                    'retry_interval_s': 2.0}
         self.p = {name: self.declare_parameter(name, value).value
                   for name, value in defaults.items()}
         self._validate(self.p)
@@ -47,6 +49,7 @@ class Cobertura(Node):
         self._future = None
         self._future_generation = None
         self._failed_start = None
+        self._failed_at = -math.inf
         self._planning_start = None
         self._planning_pose = None
         self._planning_camera = None
@@ -69,9 +72,9 @@ class Cobertura(Node):
         for name in ('base_frame', 'camera_frame'):
             if not isinstance(parameters[name], str) or not parameters[name].strip():
                 raise ValueError(f'{name} must be a nonempty frame name')
-        age = parameters['tf_max_age']
-        if not math.isfinite(age) or age <= 0:
-            raise ValueError('tf_max_age must be finite and positive')
+        for name in ('tf_max_age', 'retry_interval_s'):
+            if not math.isfinite(parameters[name]) or parameters[name] <= 0:
+                raise ValueError(f'{name} must be finite and positive')
 
     def _validate_parameters(self, parameters):
         proposed = {name: self.get_parameter(name).value for name in self.p}
@@ -131,8 +134,11 @@ class Cobertura(Node):
                 return  # A newer map/configuration or shutdown superseded this calculation.
             except Exception as exc:
                 # Invalid input or a planning failure must not kill the ROS node.
+                if generation != self._generation:
+                    return
                 self.get_logger().error(f'Planning failed: {exc}')
                 self._failed_start = (generation, self._planning_start)
+                self._failed_at = time.monotonic()
                 return
             if generation != self._generation:
                 return  # A map/parameter changed while the worker was running.
@@ -141,7 +147,7 @@ class Cobertura(Node):
             except (TransformException, ValueError) as exc:
                 self._wait(str(exc))
                 return  # Retry from a fresh pose, without publishing an obsolete plan.
-            if self._start_changed(pose, camera):
+            if self._start_changed(pose, camera) or self._recovery_start_changed(result, pose):
                 self.get_logger().info('Pose changed during planning; rebuilding from the current pose.')
                 return
             self._publish(result)
@@ -155,7 +161,8 @@ class Cobertura(Node):
             return
         self._last_wait_reason = None
         start_cell = self._grid.cell(pose.x, pose.y)
-        if self._failed_start == (self._generation, start_cell):
+        if (self._failed_start == (self._generation, start_cell)
+                and time.monotonic() - self._failed_at < self.p['retry_interval_s']):
             return
         settings = Settings(**{key: self.p[key] for key in asdict(Settings())})
         self._future_generation = self._generation
@@ -177,6 +184,20 @@ class Cobertura(Node):
                 or math.hypot(camera.x - optical.x, camera.y - optical.y) > self._grid.resolution / 2
                 or abs(angle_difference(camera.yaw, optical.yaw)) > angular)
 
+    def _recovery_start_changed(self, result, pose):
+        # Even a small TF correction can turn a previously distant first goal
+        # into mission's in-place shortcut, or invalidate the local connector.
+        anchor = result.start_anchor
+        if anchor is None:
+            return False
+        cell = self._grid.cell(pose.x, pose.y)
+        return (cell is None or not self._grid.free(cell, self.p['free_threshold'])
+                or math.hypot(anchor.x - pose.x, anchor.y - pose.y) > self.p['start_max_shift_m']
+                or not self._grid.visible((pose.x, pose.y), (anchor.x, anchor.y), self.p['free_threshold'])
+                or not result.poses
+                or math.hypot(result.poses[0].x - pose.x, result.poses[0].y - pose.y)
+                < self.p['start_min_goal_distance_m'])
+
     def _wait(self, reason):
         # The exact missing timestamp can change every tick; log once per waiting phase.
         if self._last_wait_reason is None:
@@ -184,6 +205,13 @@ class Cobertura(Node):
         self._last_wait_reason = reason
 
     def _publish(self, result):
+        if result.start_anchor is not None:
+            anchor, actual = result.start_anchor, self._planning_pose
+            shift = math.hypot(anchor.x - actual.x, anchor.y - actual.y)
+            self.get_logger().warning(
+                f'Initial planning anchor shifted {shift:.3f} m into safe space; '
+                'actual TF and navigation start are unchanged. '
+                'Nav2 must validate and execute the approach.')
         msg = Path()
         msg.header.frame_id = 'map'
         msg.header.stamp = self.get_clock().now().to_msg()

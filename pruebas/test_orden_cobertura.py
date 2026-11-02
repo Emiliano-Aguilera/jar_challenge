@@ -24,6 +24,53 @@ def settings():
     return replace(Settings(), travel_speed=1.0, turn_speed=1.0, observation_time=1.0)
 
 
+@pytest.mark.parametrize('cached_turns', [False, True])
+def test_route_clock_is_exact_for_directed_costs_and_repeated_views(cached_turns):
+    from equipo_jar.cobertura_plan import _RouteClock
+
+    class DirectedCosts:
+        def between(self, first, last):
+            return math.dist(first, last) + (0.03 if first < last else 0.07)
+
+    class WithTurns(DirectedCosts):
+        def turn_between(self, first, last):
+            return abs(math.atan2(math.sin(first - last), math.cos(first - last))) + 0.125
+
+    costs = WithTurns() if cached_turns else DirectedCosts()
+    config = replace(settings(), travel_speed=0.31, turn_speed=0.67, observation_time=0.7)
+    tasks = [view(i % 3, i % 2, 1 << i, yaw) for i, yaw in enumerate(
+        (-math.pi - 1e-12, math.pi + 1e-12, 0.0, 0.0, 0.5, -0.5, 3.0, 4.0, 0.5))]
+    tasks.append(tasks[2])
+    clock = _RouteClock((0, 0), -math.pi, costs, config)
+    rng = random.Random(281026)
+    for _ in range(80):
+        rng.shuffle(tasks)
+        route = tasks[:rng.randrange(len(tasks) + 1)]
+        assert clock(route) == route_metrics(route, (0, 0), -math.pi, costs, config, 511).duration
+
+
+def test_duration_prefilter_keeps_the_authoritative_order_with_fewer_full_metrics(monkeypatch):
+    from equipo_jar import cobertura_plan as planner
+
+    rng = random.Random(918)
+    tasks = [view(rng.randrange(1, 10), rng.randrange(1, 10), 1 << i, rng.random() * math.tau)
+             for i in range(14)]
+    metrics_calls = []
+    original = planner.route_metrics
+    def counted(*args, **kwargs):
+        metrics_calls.append(1)
+        return original(*args, **kwargs)
+    monkeypatch.setattr(planner, 'route_metrics', counted)
+    optimized = planner.improve_order(tasks, (0, 0), 0.0, MetricCosts(), settings(), (1 << 14) - 1)
+    optimized_calls = len(metrics_calls)
+    metrics_calls.clear()
+    # Disable only the new early rejection; all original acceptance guards run.
+    monkeypatch.setattr(planner, '_RouteClock', lambda *args: lambda choices: -math.inf)
+    reference = planner.improve_order(tasks, (0, 0), 0.0, MetricCosts(), settings(), (1 << 14) - 1)
+    assert optimized == reference
+    assert optimized_calls < len(metrics_calls)
+
+
 def test_relocation_shortens_search_without_losing_a_view():
     tasks = [view(10, 0, 1), view(1, 0, 2)]
     result = relocate_order(tasks, (0, 0), 0.0, MetricCosts(), settings(), 3, 30.0, 0.0)
