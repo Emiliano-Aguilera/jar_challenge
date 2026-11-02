@@ -18,6 +18,7 @@ class Parada(Node):
             'command_max_age_s': 0.3, 'odom_max_age_s': 0.5,
             'still_time_s': 0.5, 'still_linear_mps': 0.01,
             'still_angular_rads': 0.02, 'confirm_timeout_s': 3.0,
+            'confirm_max_s': 10.0,
         })
         self.has_map = False
         self.blocked = False
@@ -27,6 +28,7 @@ class Parada(Node):
         self.odom_at = None
         self.odom_stamp = None
         self.still_since = None
+        self.moving = False
         self.pub_cmd = self.create_publisher(Twist, '/cmd_vel', 10)
         self.pub_confirmed = self.create_publisher(Bool, '/jar/parada_confirmada', QOS_ESTADO)
         self.create_subscription(Twist, '/jar/cmd_vel_smoothed', self.on_command, 10)
@@ -65,6 +67,7 @@ class Parada(Node):
             self.command = None
             self.still_since = None
             self.odom_at = None
+            self.moving = False
             self.pub_cmd.publish(Twist())
             self.pub_confirmed.publish(Bool(data=False))
 
@@ -85,13 +88,15 @@ class Parada(Node):
                 or (self.odom_stamp is not None and stamp <= self.odom_stamp)
                 or not all(map(math.isfinite, values))):
             self.still_since = None
+            self.moving = False
             return
         if self.odom_at is None or now - self.odom_at > self.p['odom_max_age_s']:
             self.still_since = None
         self.odom_at, self.odom_stamp = now, stamp
-        if (math.hypot(*values[:2]) > self.p['still_linear_mps']
-                or abs(values[2]) > self.p['still_linear_mps']
-                or any(abs(v) > self.p['still_angular_rads'] for v in values[3:])):
+        self.moving = (math.hypot(*values[:2]) > self.p['still_linear_mps']
+                       or abs(values[2]) > self.p['still_linear_mps']
+                       or any(abs(v) > self.p['still_angular_rads'] for v in values[3:]))
+        if self.moving:
             self.still_since = None
         elif self.still_since is None:
             self.still_since = now
@@ -105,12 +110,16 @@ class Parada(Node):
         if (not valid or self.odom_at is None
                 or not 0 <= now - self.odom_at <= self.p['odom_max_age_s']):
             self.still_since = None
+            self.moving = False
         still = (self.still_since is not None
                  and now - self.still_since >= self.p['still_time_s'])
         # Fallback: zero has been published this long, so the robot has stopped (it stops by
-        # itself after 0.5 s without /cmd_vel) even if /odom is missing, late or noisy.
-        timed_out = (valid and self.blocked_at is not None
-                     and now - self.blocked_at >= self.p['confirm_timeout_s'])
+        # itself after 0.5 s without /cmd_vel) even if /odom is missing, late or invalid.
+        # Fresh odometry that still shows motion vetoes it, up to confirm_max_s.
+        blocked_for = now - self.blocked_at if self.blocked_at is not None else None
+        timed_out = (valid and blocked_for is not None
+                     and blocked_for >= self.p['confirm_timeout_s']
+                     and (not self.moving or blocked_for >= self.p['confirm_max_s']))
         confirmed = self.blocked and (still or timed_out)
         self.pub_confirmed.publish(Bool(data=confirmed))
 
