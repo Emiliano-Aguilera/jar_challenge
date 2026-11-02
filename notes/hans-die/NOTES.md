@@ -780,3 +780,49 @@ is skipped: bt_navigator logs it before its TF is ready). Return = judge's dista
 - Organizers' floor tests: from rest the real robot needs ~0.15 m/s or ~0.5 rad/s to move.
   BackUp was 0.05 m/s (never moves) and Spin's minimum 0.4 rad/s. Now 0.15 and 0.5.
 - Open: MPPI may still ask for less than 0.15 m/s near goals; the Rosario team watches for it.
+
+## Before the cutoff (2026-11-02)
+
+### Q: why did the way back fail in Callejones? (NavFn, asked by Bautista)
+
+- NavFn in Humble traces its path at most 4 x the costmap's longer side in steps of half a
+  cell (`navfn_planner.cpp:398`, hard-coded): about 2 x the map side in metres, ~14 m on a
+  7 m map. The 28 m way back failed 3 times with the same goal; retries cannot help.
+- Decided: Smac 2D (`nav2_smac_planner/SmacPlanner2D`, on the allowed list), keeping the plugin
+  name `GridBased` so the BTs do not change. It blocks the same cells as NavFn (cost >= 253, the
+  center closer than 0.12 m to an obstacle; `collision_checker.cpp`, `navfn.cpp`), so it does
+  not open or close passages. `tolerance 0.05` keeps the "goal on a box" behaviour;
+  `cost_travel_multiplier 2.0` keeps paths in the middle of corridors.
+- Smac 2D also refuses to plan when the start cell is blocked ("Starting point in lethal
+  space"), as NavFn does in practice; the BT's costmap clearing got past it once in maze_3.
+
+### Q: what does the new bag (robot with the encoder fix) change?
+
+- Organizers' bag `2026-10-30_donatello_minimap_contenders` (236 s, map 0.03 m/cell), replayed
+  with `bag_replay/` (map origin and resolution changed in `common.py`, `ODOM_SCALE` 1.0).
+  LiDAR-to-map reference: inliers < 5 cm median 0.95, rms 2.7 cm.
+- Distance: reference / wheels 0.988 over 207 straight windows. `escala_avance: 1.0` is right.
+- Turns (10, 32-182°): heading error per turn, wheels 2.1° median / 3.7° max, gyro 1.1° / 2.0°.
+  Keep `fuente_rumbo: giroscopo`. Total turn, gyro / wheels: 1.006.
+- Gyro sign still inverted (correlation -0.99); `signo_giroscopo: 0` learns it.
+- `/odom` at rest: exactly 0 (707 samples). Stamp to arrival: 1.4 ms median, so the bag's
+  recorder shared the robot's clock. The track station may not: see `parada` below.
+- Decided: no param change.
+
+### Q: can parada block /done on the real robot?
+
+- `parada` (#61) took `/odom` as fresh only if its stamp was 0-0.5 s behind the station's
+  clock. The robot's computer stamps `/odom`; an unsynced clock (ahead: no param fixes it) or
+  `/odom` noisy at rest meant no confirmation, no `/done`, -100 and the run ending on the 60 s
+  rule.
+- Decided (#67): freshness by arrival time; after `confirm_timeout_s` (3 s) of zero output the
+  stop is confirmed anyway. Mission unchanged.
+
+### Q: maze_3 stuck at (3.03, -2.49) with "Resulting plan has 0 poses" (Emiliano, #64)
+
+- 1 of ~40 server runs since 11-01 (`equipo.log` of each). The robot was 4 cm from its goal;
+  Spin and BackUp moved it, so there was room; MPPI dropped every new plan, also to far goals,
+  for the rest of the run. LiDAR-to-map score at the AMCL pose fell to 0.51 there (box not in
+  the map). Same message as laberinto_1 with AMCL 0.1-0.33 m off (xy tolerance 0.15 test).
+- In Humble's MPPI (`path_handler.cpp`) an empty plan without a TF error means the plan's
+  closest pose is outside the local costmap. Open: not reproduced; watch the new run log.
