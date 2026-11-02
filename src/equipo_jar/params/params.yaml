@@ -11,6 +11,13 @@ cobertura:
   ros__parameters:
     robot_radius: 0.18
     safety_margin: 0.03
+    #PARAM: bounded initial planning-anchor shift from a known-free pose (m; 0 disables).
+    start_max_shift_m: 0.20
+    #PARAM: first recovered goal must be at least this far from actual TF (m).
+    # Keep above mission's turn_in_place_m (0.20); does not constrain Nav2's approach.
+    start_min_goal_distance_m: 0.25
+    #PARAM: retry a failed initial plan with current TF, even within the same cell (s, > 0).
+    retry_interval_s: 2.0
     #PARAM: minimum observation clearance, including the padded turning envelope (m, >= 0).
     view_clearance: 0.24
     #PARAM: prefer this clearance; tighter views only recover otherwise unseen targets (m, >= 0).
