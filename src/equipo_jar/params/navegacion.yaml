@@ -211,7 +211,6 @@ controller_server:
         consider_footprint: true      # cerca de obstáculos chequea el rectángulo, no un círculo
         collision_cost: 1000000.0
         near_goal_distance: 1.0
-        trajectory_point_step: 2
       # threshold_to_consider: distancia en línea recta al objetivo. Más cerca que eso
       # MPPI deja de seguir el camino y va derecho al objetivo. Con 1.0 m tiraba contra
       # la pared cuando el objetivo estaba del otro lado (vuelta en U en laberinto_1).
@@ -328,17 +327,28 @@ planner_server:
   ros__parameters:
     expected_planner_frequency: 5.0
     planner_plugins: [GridBased]
+    # Smac 2D (A* on the costmap). NavFn stops tracing its path after 4 x the costmap's longer
+    # side in cells, a limit fixed in Humble's code (navfn_planner.cpp:398): on a ~7 m map that is
+    # ~14 m of path, and a 28 m way back failed 3 times. Smac 2D has no such limit and blocks the
+    # same cells as NavFn (cost >= 253: the center closer than 0.12 m to an obstacle).
+    # The name stays GridBased, so the behavior trees do not change. To go back to NavFn:
+    # plugin nav2_navfn_planner/NavfnPlanner, tolerance 0.05, use_astar false, allow_unknown false.
     GridBased:
-      plugin: nav2_navfn_planner/NavfnPlanner
-      # Si el objetivo cae en zona prohibida, planifica hasta una celda libre a <= 0.05 m (0.07 en
-      # diagonal): menos que xy_goal_tolerance (0.10), así el final del camino cuenta como llegada.
-      # Con 0.2 el camino terminaba hasta 0.28 m lejos y el robot quedaba ahí sin llegar nunca
-      # (punto de vista sobre una caja: 50 s). Con 0 rechazaba objetivos en el borde (+9 s).
+      plugin: nav2_smac_planner/SmacPlanner2D
+      # Goal in a blocked cell: plan to the closest free cell within this distance (m). Smaller
+      # than xy_goal_tolerance (0.10), so the end of the path counts as arrival. With NavFn, 0.2
+      # left the robot up to 0.28 m away (view over a box: 50 s stuck) and 0 rejected goals at
+      # the edge (+9 s).
       tolerance: 0.05
-      # Dijkstra (Nav2's default). With A*, NavFn sometimes fails to extract a path that
-      # exists ("Failed to create plan from potential"): maze_1's return lost ~16 s.
-      use_astar: false
       allow_unknown: false
+      downsample_costmap: false
+      # Weight of the costmap's inflation cost in the path length: paths keep to the middle of
+      # corridors, as NavFn's did. 0 = shortest path along the walls.
+      cost_travel_multiplier: 2.0
+      max_iterations: 1000000
+      max_on_approach_iterations: 1000
+      max_planning_time: 1.0          # s; a 7 m map plans in a few ms
+      use_final_approach_orientation: false
 
 behavior_server:
   ros__parameters:
