@@ -88,6 +88,7 @@ def generate_launch_description():
         nodo('equipo_jar', 'parada', 'parada'),
         # Run log for the organizers (logs_jar/log.txt); it never stops the run.
         nodo('equipo_jar', 'registro', 'registro'),
+        nodo('equipo_jar', 'diag_costmap', 'diag_costmap'),
         # navegar.xml: Humble's default tree, with the goal checker named (there are two).
         nodo('nav2_bt_navigator', 'bt_navigator', 'bt_navigator', extra={
             'default_nav_to_pose_bt_xml': os.path.join(
