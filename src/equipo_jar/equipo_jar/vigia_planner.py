@@ -1,6 +1,6 @@
 """Planner watch: notice when planner_server plans from a stale robot pose.
 
-Seen in the official simulator (laberinto_1, 2026-11-02): planner_server's TF view froze, so
+Seen in the official simulator (a practice maze, 2026-11-02): planner_server's TF view froze, so
 every new path started where the robot had been seconds before, while other nodes saw the
 right pose. MPPI followed those paths until the robot was ~1.5 m from their start, then
 rejected every path ("Resulting plan has 0 poses") until the run ended. NavFn and Smac 2D
