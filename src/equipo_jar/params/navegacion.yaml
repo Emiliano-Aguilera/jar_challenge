@@ -23,6 +23,14 @@ parada:
     still_linear_mps: 0.01
     still_angular_rads: 0.02
 
+# Run log (registro.py): every node's log in $JAR_LOG_DIR/log.txt or <workspace>/logs_jar/log.txt.
+registro:
+  ros__parameters:
+    max_bytes: 20000000               # stop writing here; the organizers keep up to 25 MB
+    nivel_minimo: 20                  # 20 INFO, 30 WARN
+    repetidas_s: 5.0                  # the same line within this is counted, not written
+    pose_cada_s: 1.0                  # AMCL pose line every this many s
+
 amcl:
   ros__parameters:
     global_frame_id: map
