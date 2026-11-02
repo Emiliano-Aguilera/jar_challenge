@@ -50,7 +50,7 @@ class VisionParams:
     #       accepted; min S (100) rejects greys and washed-out pinks; min V (60) rejects
     #       near-black. First thing to retune under the venue's lighting.
     hsv_low_1: Tuple[int, int, int] = (0, 100, 60)
-    hsv_high_1: Tuple[int, int, int] = (10, 255, 255)
+    hsv_high_1: Tuple[int, int, int] = (8, 255, 255)
     #PARAM: hsv_low_2 / hsv_high_2 = second red range (H near 180).
     #       Support: same as above. Lower H (170) sets how much magenta is accepted.
     hsv_low_2: Tuple[int, int, int] = (170, 100, 60)
@@ -574,3 +574,30 @@ def observation_sigma(distance_m: float, sigma_base_m: float, sigma_per_m: float
             while turning: 0.03 m per meter.
     """
     return sigma_base_m + sigma_per_m * max(0.0, distance_m)
+
+
+# ----------------------------------------------------------------------------- frame gating
+
+
+def skip_for_localization(flag_seen: bool, ready_once: bool, ready_now: bool,
+                          since_map_s: float, wait_max_s: float,
+                          wait_start: bool, skip_doubt: bool) -> bool:
+    """True if this frame must be skipped because localization does not trust its pose yet.
+
+    `/jar/localizacion_lista` (localization -> detection, docs/team/INTERFACES.md) is false
+    until AMCL has settled at the start and, on the real robot, after each turn until the
+    heading is fixed again. A box seen with a wrong heading lands off in `map` (15° at
+    1.5 m = 0.39 m), and fusion cannot tell such an observation from a good one.
+
+    - No flag ever received (`flag_seen` false): never skip. The node that publishes it is
+      not running, so there is nothing to wait for.
+    - Start (`wait_start`): skip until the flag has been true once, at most `wait_max_s`
+      after `/map` (same rule and default as mission's `localization_wait_max_s`): if
+      localization never says ready, detection must still work.
+    - After turns (`skip_doubt`): skip while the flag is false again.
+    """
+    if not flag_seen:
+        return False
+    if wait_start and not ready_once and since_map_s < wait_max_s:
+        return True
+    return skip_doubt and ready_once and not ready_now

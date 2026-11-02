@@ -10,6 +10,10 @@ Inputs (QoS per the rules, docs/QOS.md):
                                                             subscribed only if use_cloud_fallback
                                                             or cloud_check, both off by default)
   /tf, /tf_static             camera, LiDAR and base frames; map -> odom from localization
+  /jar/localizacion_lista     std_msgs/Bool   reliable + transient local (localization's "pose
+                                              trusted" flag; frames taken while it is false are
+                                              skipped at the start, and after turns if
+                                              skip_heading_doubt)                vision.skip_for_localization
 
 Output (team-internal, docs/team/INTERFACES.md lets the perception owners define it):
   /jar/observaciones          geometry_msgs/PoseWithCovarianceStamped, frame `map`
@@ -45,20 +49,21 @@ from rclpy.qos import qos_profile_sensor_data
 from rclpy.time import Time
 from sensor_msgs.msg import CameraInfo, Image, LaserScan, PointCloud2
 from sensor_msgs_py import point_cloud2
+from std_msgs.msg import Bool
 
 import message_filters
 import tf2_geometry_msgs  # noqa: F401  (registers PointStamped transforms in tf2)
 import tf2_ros
 
 from equipo_jar import vision
-from equipo_jar.comun import QOS_MAPA, correr, parametros_en_vivo
+from equipo_jar.comun import QOS_ESTADO, QOS_MAPA, correr, parametros_en_vivo
 
 # Live-tunable parameters (section `deteccion` of params.yaml). Read them from self.p at use
 # time, never cache them: a change made during a run applies to the next frame.
 PARAM_DEFAULTS = {
     # Segmentation (see vision.VisionParams for ranges and reasoning)
     'hsv_red_low_1': [0, 100, 60],
-    'hsv_red_high_1': [10, 255, 255],
+    'hsv_red_high_1': [8, 255, 255],
     'hsv_red_low_2': [170, 100, 60],
     'hsv_red_high_2': [180, 255, 255],
     'morphology_kernel_px': 3,
@@ -101,6 +106,10 @@ PARAM_DEFAULTS = {
     'robot_frame': 'base_footprint',
     'fixed_frame': 'odom',               # frame used to bridge image time and scan time
     'per_ray_time': True,                # use the time of the blob's middle LiDAR ray, not the scan stamp
+    # Localization's "pose trusted" flag (/jar/localizacion_lista), see vision.skip_for_localization
+    'wait_localization_start': True,     # no frames until the flag has been true once...
+    'localization_wait_max_s': 10.0,     # ...or this long after /map (mission's start rule)
+    'skip_heading_doubt': False,         # also skip frames while the flag is false after a turn
     'publish_debug': False,
 }
 
@@ -115,6 +124,10 @@ class Detection(Node):
         self._cloud_cache = None            # (stamp key, (points (H,W,3), frame)) of the last converted cloud
         self.t_last_proc = None
         self.map = None                     # (grid (h, w) int16, resolution, origin_x, origin_y)
+        self.t_map = None                   # node clock when /map arrived (t0 of the run)
+        self.loc_flag_seen = False          # /jar/localizacion_lista received at least once
+        self.loc_ready_once = False         # the flag has been true at least once
+        self.loc_ready_now = False          # the flag's last value
         self.rejections = {}                # reason -> count, logged every 10 s
         self.t_last_summary = None
         self.n_published = 0
@@ -149,6 +162,9 @@ class Detection(Node):
                 PointCloud2, '/cam_1/depth/color/points', self.on_cloud, qos_profile_sensor_data)
         # The judge's map, for the wall check (transient local: arrives even if published earlier).
         self.create_subscription(OccupancyGrid, '/map', self.on_map, QOS_MAPA)
+        # Localization's flag: same QoS as the publisher (reliable + transient local), so the
+        # last value arrives even if it was published before this node started.
+        self.create_subscription(Bool, '/jar/localizacion_lista', self.on_localization_ready, QOS_ESTADO)
 
         # Observations are a stream, not a state: default reliable QoS, no transient local.
         self.pub_obs = self.create_publisher(PoseWithCovarianceStamped, '/jar/observaciones', 10)
@@ -171,7 +187,26 @@ class Detection(Node):
         """OccupancyGrid -> (grid, resolution, origin). Row = y, column = x (row-major)."""
         grid = np.array(msg.data, dtype=np.int16).reshape(msg.info.height, msg.info.width)
         self.map = (grid, msg.info.resolution, msg.info.origin.position.x, msg.info.origin.position.y)
+        if self.t_map is None:
+            self.t_map = self.get_clock().now()
         self.get_logger().info(f'Map received: {msg.info.width}x{msg.info.height}')
+
+    def on_localization_ready(self, msg):
+        self.loc_flag_seen = True
+        self.loc_ready_now = bool(msg.data)
+        if msg.data and not self.loc_ready_once:
+            self.loc_ready_once = True
+            self.get_logger().info('Localization ready: processing frames')
+
+    def _skip_for_localization(self):
+        """True if localization does not trust its pose yet (vision.skip_for_localization)."""
+        since_map = 0.0
+        if self.t_map is not None:
+            since_map = (self.get_clock().now() - self.t_map).nanoseconds * 1e-9
+        return vision.skip_for_localization(
+            self.loc_flag_seen, self.loc_ready_once, self.loc_ready_now, since_map,
+            float(self.p['localization_wait_max_s']),
+            bool(self.p['wait_localization_start']), bool(self.p['skip_heading_doubt']))
 
     def _reject(self, reason):
         """Count a rejected blob by reason; the summary goes to the log every 10 s."""
@@ -251,6 +286,12 @@ class Detection(Node):
         if self.t_last_proc is not None and (t - self.t_last_proc) < 1.0 / rate:
             return
         self.t_last_proc = t
+        self._log_summary(t)
+        # Localization does not trust its pose (start-up, or heading fix after a turn):
+        # a frame now would put the box in the wrong place. Counted as 'localizing'.
+        if self._skip_for_localization():
+            self._reject('localizing')
+            return
         if self.K is None:
             self.get_logger().warn('no camera_info yet', throttle_duration_sec=5.0)
             return
@@ -284,7 +325,6 @@ class Detection(Node):
             np.asarray(scan_msg.ranges), scan_msg.angle_min, scan_msg.angle_increment,
             scan_msg.range_min, scan_msg.range_max)
 
-        self._log_summary(t)
         side = float(self.p['box_side_m'])
 
         for blob in blobs:
