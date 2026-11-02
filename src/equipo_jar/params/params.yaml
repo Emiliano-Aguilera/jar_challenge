@@ -42,8 +42,10 @@ deteccion:
     # Red in OpenCV HSV (H in [0,180), S and V in [0,255]); two ranges because red wraps at 0.
     # Lists of 3 on purpose: the CI rejects numeric lists of 4 or more.
     #PARAM: first thing to retune under the venue's lighting.
+    #       Upper H of range 1 = 8: brown cardboard sits at H 10-13 and passed at 10; boxes in two
+    #       real bags have 99 % of pixels at H <= 2 and <= 8 (8 keeps 99.9 % and 99.25 %; 7 cuts more).
     hsv_red_low_1: [0, 100, 60]
-    hsv_red_high_1: [10, 255, 255]
+    hsv_red_high_1: [8, 255, 255]
     hsv_red_low_2: [170, 100, 60]
     hsv_red_high_2: [180, 255, 255]
     #PARAM: morphology kernel (odd, >= 1; 1 disables). 3 at 320x240.
