@@ -80,8 +80,8 @@ deteccion:
     # --- Checks against false positives (a false report costs -100 and the -200 bonus) ---
     #PARAM: blob width / expected width of a box at the LiDAR distance (0 < min < 1 < max).
     #       Coarse sanity check: the central beams already fix the corner case (ratio ~0.5).
-    #       Real boxes seen while passing a doorway at 0.8 m measured 0.53-0.60 (laberinto_1
-    #       replay); 0.45 keeps them. Raise it only if false boxes slip past the central beams.
+    #       Real boxes seen while passing a doorway at 0.8 m measured 0.53-0.60 (a practice
+    #       recording replay); 0.45 keeps them. Raise it only if false boxes slip past the central beams.
     width_ratio_min: 0.45
     width_ratio_max: 1.8
     #PARAM: observations farther than this are dropped, m (> 0). Coverage looks from 2.0 m.

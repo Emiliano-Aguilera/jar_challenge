@@ -1,5 +1,5 @@
 """Fusion node (`fusion`): groups detection's observations into candidates and publishes
-them on /jar/candidatas (docs/team/INTERFACES.md).
+them on /jar/candidatas.
 
 ROS wiring only; the math is in candidate_fusion.py and is tested without ROS.
 

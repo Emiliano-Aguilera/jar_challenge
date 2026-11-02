@@ -1,7 +1,7 @@
 """Observation fusion, no ROS: from many noisy detections to a few candidates with an
 averaged position and an honest 2x2 covariance.
 
-This is the math behind the `fusion` node. Mission (docs/team/INTERFACES.md) receives every
+This is the math behind the `fusion` node. Mission receives every
 candidate and decides what to report; it filters on `observaciones` and on the largest
 eigenvalue of `covarianza_xy`. So the job here is not to say "confirmed" but to make the
 count and the covariance truthful.

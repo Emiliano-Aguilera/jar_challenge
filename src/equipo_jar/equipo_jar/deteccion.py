@@ -15,7 +15,7 @@ Inputs (QoS per the rules, docs/QOS.md):
                                               skipped at the start, and after turns if
                                               skip_heading_doubt)                vision.skip_for_localization
 
-Output (team-internal, docs/team/INTERFACES.md lets the perception owners define it):
+Output (team-internal topic, defined by the perception module):
   /jar/observaciones          geometry_msgs/PoseWithCovarianceStamped, frame `map`
                               one message per box seen in a frame; position = estimated box
                               center; covariance[0] = covariance[7] = sigma^2 of this single

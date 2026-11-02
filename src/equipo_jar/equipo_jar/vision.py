@@ -584,7 +584,7 @@ def skip_for_localization(flag_seen: bool, ready_once: bool, ready_now: bool,
                           wait_start: bool, skip_doubt: bool) -> bool:
     """True if this frame must be skipped because localization does not trust its pose yet.
 
-    `/jar/localizacion_lista` (localization -> detection, docs/team/INTERFACES.md) is false
+    `/jar/localizacion_lista` (localization -> detection) is false
     until AMCL has settled at the start and, on the real robot, after each turn until the
     heading is fixed again. A box seen with a wrong heading lands off in `map` (15° at
     1.5 m = 0.39 m), and fusion cannot tell such an observation from a good one.
