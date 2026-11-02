@@ -34,17 +34,20 @@ inline Velocity unpack(const geometry_msgs::msg::Twist& v) {
   return {v.linear.x, v.linear.y, v.angular.z};
 }
 // Keep parameter names and limits in one table; callbacks reject unsafe/in-flight edits.
-#define PASSAGE_DOUBLES(X)                                                                       \
-  X(extra_margin)                                                                                \
-  X(lookahead)                                                                                   \
-  X(center_range)                                                                                \
-  X(detect_width)                                                                                \
-  X(max_v)                                                                                       \
-  X(max_lateral)                                                                                 \
-  X(max_correction_w)                                                                            \
-  X(align_w) X(heading_tolerance) X(heading_abort) X(position_tolerance) X(min_v) X(min_align_w) \
-      X(linear_gain) X(yaw_gain) X(track_lookahead) X(still_speed) X(still_w) X(still_dwell)     \
-          X(reaction) X(deceleration) X(max_duration) X(progress_timeout) X(progress_distance)   \
+#define PASSAGE_DOUBLES(X)                                                                     \
+  X(command_reserve)                                                                           \
+  X(heading_step)                                                                              \
+  X(extra_margin)                                                                              \
+  X(lookahead)                                                                                 \
+  X(center_range)                                                                              \
+  X(detect_width)                                                                              \
+  X(max_v)                                                                                     \
+  X(max_lateral)                                                                               \
+  X(max_correction_w)                                                                          \
+  X(align_w)                                                                                   \
+  X(heading_tolerance) X(heading_abort) X(position_tolerance) X(min_v) X(min_align_w)          \
+      X(linear_gain) X(yaw_gain) X(track_lookahead) X(still_speed) X(still_w) X(still_dwell)   \
+          X(reaction) X(deceleration) X(max_duration) X(progress_timeout) X(progress_distance) \
               X(grid_max_age) X(scan_max_age) X(tf_max_age)
 class PassageController : public nav2_core::Controller {
  public:
@@ -218,6 +221,7 @@ class PassageController : public nav2_core::Controller {
       auto measured = unpack(velocity);
       if (!finite(measured)) throw std::runtime_error("Invalid odometry velocity");
       auto before = passage_.phase();
+      bool approaching = false;
       if (!passage_.locked()) {
         std::vector<Vec> points;
         points.reserve(plan_.poses.size());
@@ -232,20 +236,50 @@ class PassageController : public nav2_core::Controller {
           if (!safe_stop(snapshot, b, pose, measured, config_.extra_margin, config_.reaction,
                          config_.deceleration) ||
               !passage_.begin(*detection.crossing, snapshot, b, pose, config_, monotonic())) {
-            if (!turn_safe(snapshot, b, position(pose), config_.extra_margin))
+            if (!turn_safe(snapshot, b, position(pose), config_.extra_margin)) {
               passage_.hold("already inside unchecked narrow passage");
-            throw std::runtime_error("cannot stop and align safely before narrow passage");
+              throw std::runtime_error("cannot stop and align safely before narrow passage");
+            }
+            approaching = true;
           }
         } else if (detection.seen) {
-          if (!turn_safe(snapshot, b, position(pose), config_.extra_margin))
+          if (!turn_safe(snapshot, b, position(pose), config_.extra_margin)) {
             passage_.hold("already inside unchecked narrow passage");
-          throw std::runtime_error("narrow passage has no checked fixed-heading exit");
+            throw std::runtime_error("narrow passage has no checked fixed-heading exit");
+          }
+          approaching = true;
         }
       }
       shared_->locked = passage_.locked();
       if (!passage_.locked()) {
         locked_body_.reset();
-        return inner_->computeVelocityCommands(input, velocity, checker);
+        auto command = inner_->computeVelocityCommands(input, velocity, checker);
+        if (approaching) {
+          auto proposed = unpack(command.twist);
+          auto local = local_snapshot(pose);
+          auto permitted = [&](const Grid& grid, Pose p, Velocity v, double reserve) {
+            return approach_stop_safe(grid, b, p, v, config_.extra_margin,
+                                      config_.reaction + reserve, config_.deceleration);
+          };
+          if (!permitted(snapshot, pose, measured, 0) ||
+              !permitted(local.first, local.second, measured, 0))
+            throw std::runtime_error("unchecked passage ahead: approach braking area exhausted");
+          auto safe = [&]() {
+            return permitted(snapshot, pose, proposed, config_.command_reserve) &&
+                   permitted(local.first, local.second, proposed, config_.command_reserve);
+          };
+          for (unsigned attempt = 0; attempt < 20 && !safe(); attempt++) {
+            proposed.x *= .8;
+            proposed.y *= .8;
+            proposed.w *= .8;
+          }
+          if (!safe())
+            throw std::runtime_error("unchecked passage ahead: no safe approach command");
+          command.twist.linear.x = proposed.x;
+          command.twist.linear.y = proposed.y;
+          command.twist.angular.z = proposed.w;
+        }
+        return command;
       }
       if (!locked_body_) locked_body_ = b;
       checker->reset();

@@ -1,4 +1,6 @@
 #include <cassert>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 
 #include "equipo_jar_navegacion/passage.hpp"
@@ -15,6 +17,55 @@ Grid corridor(double half = .2) {
 int main() {
   Body b{-.201, .139, -.12, .12};
   Config cfg;
+  // Recorded first-goal approach: the old tangent/greedy detector rejects every
+  // candidate and the controller never leaves the start (run 41437278210).
+  std::ifstream fixture(std::filesystem::path(__FILE__).parent_path() / "recorded_approach.txt");
+  assert(fixture.good());
+  unsigned w, h;
+  double resolution, ox, oy;
+  fixture >> w >> h >> resolution >> ox >> oy;
+  Pose start;
+  fixture >> start.x >> start.y >> start.yaw;
+  size_t count;
+  fixture >> count;
+  std::vector<Vec> recorded_path(count);
+  for (auto& point : recorded_path) fixture >> point.x >> point.y;
+  fixture >> count;
+  std::vector<unsigned char> cells;
+  for (size_t i = 0; i < count; i++) {
+    unsigned cost, length;
+    fixture >> cost >> length;
+    cells.insert(cells.end(), length, cost);
+  }
+  assert(!fixture.fail());
+  Grid recorded(w, h, resolution, ox, oy, std::move(cells));
+  auto recorded_route = detect(recorded, b, recorded_path, start, cfg);
+  assert(recorded_route.seen && recorded_route.crossing);
+  assert(std::abs(angle(recorded_route.crossing->yaw)) < .1);
+  assert(recorded_route.crossing->points.back().x > 1.0);
+  for (size_t i = 1; i < recorded_route.crossing->points.size(); i++) {
+    auto a = recorded_route.crossing->points[i - 1], z = recorded_route.crossing->points[i];
+    assert(safe_segment(recorded, b, {a.x, a.y, recorded_route.crossing->yaw},
+                        {z.x, z.y, recorded_route.crossing->yaw}, cfg.extra_margin));
+  }
+  Pose reversed = start;
+  reversed.yaw = M_PI;
+  auto reversed_route = detect(recorded, b, recorded_path, reversed, cfg);
+  assert(reversed_route.crossing);
+  Passage replay;
+  Pose replay_pose = start;
+  Velocity replay_velocity;
+  assert(replay.begin(*recorded_route.crossing, recorded, b, start, cfg, 0));
+  for (unsigned i = 0; i < 1200 && replay.locked(); i++) {
+    auto command = replay.tick(recorded, replay_pose, replay_velocity, cfg, i * .025);
+    if (replay.phase() == Phase::HOLD)
+      std::cerr << "recorded hold: " << replay.reason() << " pose=" << replay_pose.x << ","
+                << replay_pose.y << "\n";
+    assert(replay.phase() != Phase::HOLD);
+    replay_pose = advance(replay_pose, command, .025);
+    replay_velocity = command;
+  }
+  assert(!replay.locked() && replay_pose.x > 1.0);
   auto g = corridor();
   std::vector<Vec> line{{0, 0}, {1.6, 0}};
   auto d = detect(g, b, line, Pose{0, 0, 0}, cfg);

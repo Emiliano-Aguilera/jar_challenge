@@ -185,6 +185,8 @@ controller_server:
       passage:
         # Experimental branch: test with recordings before merging.
         enabled: true
+        command_reserve: 0.1        # reserve for the next control/smoothing interval
+        heading_step: 0.19634954084936207  # body heading search spacing (rad)
         extra_margin: 0.02           # additional to the existing padded footprint
         lookahead: 1.4
         center_range: 0.12

@@ -7,28 +7,51 @@ namespace equipo_jar_navegacion {
 struct Config {
   bool enabled = false;
   double extra_margin = .02, lookahead = 1.4, center_range = .12, detect_width = .46;
+  double heading_step = M_PI / 16;
   double max_v = .15, max_lateral = .05, max_correction_w = .08, align_w = .5;
   double heading_tolerance = .035, heading_abort = .12, position_tolerance = .02,
          track_lookahead = .08;
   double linear_gain = 2.0, yaw_gain = 2.0, min_v = .15, min_align_w = .5;
   double still_speed = .01, still_w = .02, still_dwell = .3;
+  double command_reserve = .1;
   double reaction = .3, deceleration = .3, max_duration = 60, progress_timeout = 8,
          progress_distance = .03;
   double grid_max_age = 2.0, scan_max_age = .5, tf_max_age = .3;
   bool valid() const {
-    for (double v : {min_v,           min_align_w,       extra_margin,
-                     lookahead,       center_range,      detect_width,
-                     max_v,           max_lateral,       max_correction_w,
-                     align_w,         heading_tolerance, heading_abort,
-                     linear_gain,     yaw_gain,          position_tolerance,
-                     track_lookahead, still_speed,       still_w,
-                     still_dwell,     reaction,          deceleration,
-                     max_duration,    progress_timeout,  progress_distance,
-                     grid_max_age,    scan_max_age,      tf_max_age})
+    for (double v : {command_reserve,
+                     heading_step,
+                     min_v,
+                     min_align_w,
+                     extra_margin,
+                     lookahead,
+                     center_range,
+                     detect_width,
+                     max_v,
+                     max_lateral,
+                     max_correction_w,
+                     align_w,
+                     heading_tolerance,
+                     heading_abort,
+                     linear_gain,
+                     yaw_gain,
+                     position_tolerance,
+                     track_lookahead,
+                     still_speed,
+                     still_w,
+                     still_dwell,
+                     reaction,
+                     deceleration,
+                     max_duration,
+                     progress_timeout,
+                     progress_distance,
+                     grid_max_age,
+                     scan_max_age,
+                     tf_max_age})
       if (!std::isfinite(v) || v <= 0) return false;
-    return min_v <= max_v && min_align_w <= align_w && extra_margin >= .01 && max_v <= .3 &&
-           max_lateral <= max_v && max_correction_w <= .2 && align_w <= 1 &&
-           heading_tolerance < heading_abort && heading_abort <= .25 &&
+    return command_reserve >= .05 && command_reserve <= .5 && heading_step >= .05 &&
+           heading_step <= M_PI / 4 && min_v <= max_v && min_align_w <= align_w &&
+           extra_margin >= .01 && max_v <= .3 && max_lateral <= max_v && max_correction_w <= .2 &&
+           align_w <= 1 && heading_tolerance < heading_abort && heading_abort <= .25 &&
            position_tolerance <= extra_margin && lookahead <= 2 && reaction >= .3 &&
            deceleration <= .3 && grid_max_age <= 2 && scan_max_age <= 1 && tf_max_age <= .5;
   }
@@ -113,56 +136,81 @@ inline Detection detect(const Grid& g, Body b, const std::vector<Vec>& path, Pos
   if (!turn_safe(g, b, points[first], c.extra_margin) ||
       !turn_safe(g, b, points[last], c.extra_margin) || last <= first)
     return result;
-  if (std::abs(angle(yaw + M_PI - pose.yaw)) < std::abs(angle(yaw - pose.yaw)))
-    yaw = angle(yaw + M_PI);
-  // Try a small family around the measured corridor axis. No map-specific poses.
-  for (double offset : {0., .10, -.10, .20, -.20}) {
-    Crossing candidate;
-    candidate.yaw = angle(yaw + offset);
-    Vec normal{-std::sin(candidate.yaw), std::cos(candidate.yaw)};
-    bool good = true;
+  // The position path bends around an obstacle: its incoming tangent is not
+  // necessarily the corridor axis. Search body headings across a full turn,
+  // preferring the current orientation to avoid an unnecessary alignment turn.
+  std::vector<double> headings{pose.yaw, yaw};
+  int directions = int(std::ceil(M_PI / c.heading_step));
+  for (int k = 1; k <= directions; k++) {
+    headings.push_back(angle(pose.yaw + k * M_PI / directions));
+    headings.push_back(angle(pose.yaw - k * M_PI / directions));
+  }
+  for (double heading : headings) {
+    struct State {
+      Vec point;
+      double cost = INFINITY;
+      int parent = -1;
+    };
+    Vec normal{-std::sin(heading), std::cos(heading)};
+    int span = std::max(1, int(std::ceil(c.center_range / (g.resolution * .5))));
+    std::vector<std::vector<State>> layers;
+    bool reachable = true;
     for (size_t i = first; i <= last; i++) {
-      Vec best = points[i];
-      double score = -INFINITY;
-      int span = int(std::floor(c.center_range / (g.resolution * .5)));
-      for (int k = -span; k <= span; k++) {
-        double shift = k * g.resolution * .5;
-        Vec p = points[i] + normal * shift;
+      std::vector<State> layer;
+      auto candidates = lateral_centers(g, b, points[i], heading, c.extra_margin, c.center_range);
+      // Keep zero/coarse alternatives for turn-safe endpoints and connections.
+      for (int k = -span; k <= span; k++)
+        candidates.push_back(points[i] + normal * (k * c.center_range / span));
+      for (Vec p : candidates) {
+        double shift = norm(p - points[i]);
+        if (!safe_pose(g, b, {p.x, p.y, heading}, c.extra_margin)) continue;
         if ((i == first || i == last) && !turn_safe(g, b, p, c.extra_margin)) continue;
-        if (!safe_pose(g, b, {p.x, p.y, candidate.yaw}, c.extra_margin)) continue;
-        double reserve = c.extra_margin;
-        for (double extra = c.extra_margin + .01; extra <= c.extra_margin + .06; extra += .01) {
-          if (!safe_pose(g, b, {p.x, p.y, candidate.yaw}, extra)) break;
-          reserve = extra;
+        State state{p};
+        double offset_cost = std::abs(shift) * .05;
+        if (layers.empty()) {
+          if (safe_segment(g, b, {pose.x, pose.y, heading}, {p.x, p.y, heading}, c.extra_margin))
+            state.cost = norm(p - position(pose)) + offset_cost;
+        } else {
+          // Keep connected alternatives. A greedy best point can be safe by
+          // itself while its swept connection clips the corner of a box.
+          const auto& previous = layers.back();
+          for (size_t j = 0; j < previous.size(); j++) {
+            double cost = previous[j].cost + norm(p - previous[j].point) + offset_cost;
+            if (cost >= state.cost) continue;
+            auto a = previous[j].point;
+            if (!safe_segment(g, b, {a.x, a.y, heading}, {p.x, p.y, heading}, c.extra_margin))
+              continue;
+            state.cost = cost;
+            state.parent = int(j);
+          }
         }
-        double value = reserve - std::abs(shift) * .1;
-        if (!candidate.points.empty()) value -= norm(p - candidate.points.back()) * .05;
-        if (value > score) {
-          score = value;
-          best = p;
-        }
+        if (std::isfinite(state.cost)) layer.push_back(state);
       }
-      if (!std::isfinite(score)) {
-        good = false;
+      if (layer.empty()) {
+        reachable = false;
         break;
       }
-      if (!candidate.points.empty()) {
-        Vec a = candidate.points.back();
-        if (!safe_segment(g, b, {a.x, a.y, candidate.yaw}, {best.x, best.y, candidate.yaw},
-                          c.extra_margin)) {
-          good = false;
-          break;
-        }
-      }
-      candidate.points.push_back(best);
+      layers.push_back(std::move(layer));
     }
-    if (good && candidate.points.size() > 1) {
-      result.crossing = candidate;
-      return result;
+    if (!reachable || layers.size() < 2) continue;
+    const auto& exits = layers.back();
+    int index = int(std::min_element(exits.begin(), exits.end(),
+                                     [](const auto& a, const auto& b) { return a.cost < b.cost; }) -
+                    exits.begin());
+    Crossing candidate;
+    candidate.yaw = heading;
+    for (size_t i = layers.size(); i-- > 0;) {
+      const auto& state = layers[i][index];
+      candidate.points.push_back(state.point);
+      index = state.parent;
     }
+    std::reverse(candidate.points.begin(), candidate.points.end());
+    result.crossing = std::move(candidate);
+    return result;
   }
   return result;
 }
+
 enum class Phase { NORMAL, BRAKE, ALIGN, TRACK, EXIT, HOLD };
 inline const char* phase_name(Phase p) {
   switch (p) {
@@ -235,9 +283,9 @@ class Passage {
       return turn_safe(live, body_, position(p), c.extra_margin) &&
              turn_safe(frozen_, body_, position(p), c.extra_margin);
     };
-    auto stopping = [&](Velocity v) {
-      return safe_stop(live, body_, p, v, c.extra_margin, c.reaction, c.deceleration) &&
-             safe_stop(frozen_, body_, p, v, c.extra_margin, c.reaction, c.deceleration);
+    auto stopping = [&](Velocity v, double reserve = 0.) {
+      return safe_stop(live, body_, p, v, c.extra_margin, c.reaction + reserve, c.deceleration) &&
+             safe_stop(frozen_, body_, p, v, c.extra_margin, c.reaction + reserve, c.deceleration);
     };
     if (!pose_safe(p) || !stopping(actual)) {
       hold("current footprint or braking envelope obstructed");
@@ -277,7 +325,13 @@ class Passage {
         return {};
       }
       while (next_ + 1 < crossing_.points.size() &&
-             norm(crossing_.points[next_] - position(p)) <= c.track_lookahead)
+             norm(crossing_.points[next_] - position(p)) <= c.track_lookahead &&
+             safe_segment(live, body_, p,
+                          {crossing_.points[next_ + 1].x, crossing_.points[next_ + 1].y, p.yaw},
+                          c.extra_margin) &&
+             safe_segment(frozen_, body_, p,
+                          {crossing_.points[next_ + 1].x, crossing_.points[next_ + 1].y, p.yaw},
+                          c.extra_margin))
         next_++;
       Vec target = crossing_.points[next_], delta = target - position(p);
       if (next_ + 1 == crossing_.points.size() && norm(delta) <= c.position_tolerance &&
@@ -292,9 +346,20 @@ class Passage {
       double speed = norm(world);
       if (speed > 1e-9) world = world * (std::clamp(speed, c.min_v, c.max_v) / speed);
       command.x = std::cos(p.yaw) * world.x + std::sin(p.yaw) * world.y;
-      command.y = std::clamp(-std::sin(p.yaw) * world.x + std::cos(p.yaw) * world.y, -c.max_lateral,
-                             c.max_lateral);
+      command.y = -std::sin(p.yaw) * world.x + std::cos(p.yaw) * world.y;
+      if (std::abs(command.y) > c.max_lateral) {
+        double scale = c.max_lateral / std::abs(command.y);
+        command.x *= scale;
+        command.y *= scale;
+      }
       command.w = std::clamp(c.yaw_gain * yaw_error, -c.max_correction_w, c.max_correction_w);
+      // Slow for a bend/exit before its braking envelope reaches a wall. Keep
+      // x/y in proportion: clipping only y changes the checked travel direction.
+      for (unsigned attempt = 0; attempt < 20 && !stopping(command, c.command_reserve); attempt++) {
+        command.x *= .8;
+        command.y *= .8;
+        command.w *= .8;
+      }
     } else if (phase_ == Phase::EXIT) {
       if (!turning()) {
         hold("whole-body exit has no turning room");
@@ -306,7 +371,7 @@ class Passage {
       }
       return {};
     }
-    if (!stopping(command)) {
+    if (!stopping(command, phase_ == Phase::TRACK ? c.command_reserve : 0.)) {
       hold("proposed motion or braking envelope obstructed");
       return {};
     }

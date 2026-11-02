@@ -142,6 +142,75 @@ inline bool safe_segment(const Grid& g, Body b, Pose a, Pose z, double extra) {
   }
   return true;
 }
+// Centers of free lateral intervals, including gaps narrower than a sampling
+// step. Each occupied cell forbids an interval of translations by SAT; taking
+// the complement avoids missing a real gap merely because of sample alignment.
+inline std::vector<Vec> lateral_centers(const Grid& g, Body body, Vec p, double yaw, double extra,
+                                        double range) {
+  if (!g.valid() || !valid(body) || !finite(Pose{p.x, p.y, yaw}) || !std::isfinite(extra) ||
+      extra < 0 || !std::isfinite(range) || range <= 0)
+    return {};
+  auto polygon = corners(body, {p.x, p.y, yaw}, extra);
+  Vec normal{-std::sin(yaw), std::cos(yaw)};
+  double xmin = INFINITY, xmax = -INFINITY, ymin = INFINITY, ymax = -INFINITY;
+  for (auto v : polygon)
+    for (double shift : {-range, range}) {
+      auto q = v + normal * shift;
+      xmin = std::min(xmin, q.x);
+      xmax = std::max(xmax, q.x);
+      ymin = std::min(ymin, q.y);
+      ymax = std::max(ymax, q.y);
+    }
+  std::vector<std::pair<double, double>> blocked;
+  for (int y = g.iy(ymin) - 1; y <= g.iy(ymax) + 1; y++)
+    for (int x = g.ix(xmin) - 1; x <= g.ix(xmax) + 1; x++) {
+      if (!g.obstacle(x, y)) continue;
+      double lo = g.origin_x + x * g.resolution, bo = g.origin_y + y * g.resolution;
+      std::array<Vec, 4> cell{{{lo, bo},
+                               {lo + g.resolution, bo},
+                               {lo + g.resolution, bo + g.resolution},
+                               {lo, bo + g.resolution}}};
+      double lower = -range, upper = range;
+      for (Vec axis :
+           std::array<Vec, 4>{{{1, 0}, {0, 1}, {std::cos(yaw), std::sin(yaw)}, normal}}) {
+        double amin = INFINITY, amax = -INFINITY, bmin = INFINITY, bmax = -INFINITY;
+        for (auto v : polygon) {
+          amin = std::min(amin, dot(v, axis));
+          amax = std::max(amax, dot(v, axis));
+        }
+        for (auto v : cell) {
+          bmin = std::min(bmin, dot(v, axis));
+          bmax = std::max(bmax, dot(v, axis));
+        }
+        double speed = dot(normal, axis);
+        if (std::abs(speed) < 1e-10) {
+          if (amax < bmin - 1e-10 || bmax < amin - 1e-10) {
+            lower = 1;
+            upper = -1;
+            break;
+          }
+        } else {
+          double a = (bmin - amax) / speed, z = (bmax - amin) / speed;
+          if (a > z) std::swap(a, z);
+          lower = std::max(lower, a);
+          upper = std::min(upper, z);
+        }
+      }
+      if (lower <= upper) blocked.emplace_back(lower, upper);
+    }
+  std::sort(blocked.begin(), blocked.end());
+  std::vector<Vec> out;
+  auto add = [&](double a, double z) {
+    if (z - a > 1e-8) out.push_back(p + normal * ((a + z) * .5));
+  };
+  double cursor = -range;
+  for (auto interval : blocked) {
+    if (interval.first > cursor) add(cursor, interval.first);
+    cursor = std::max(cursor, interval.second);
+  }
+  if (cursor < range) add(cursor, range);
+  return out;
+}
 inline Pose advance(Pose p, Velocity v, double dt) {
   // Exact integration of a constant body-frame planar twist.
   double dx, dy;
@@ -169,6 +238,21 @@ inline bool safe_stop(const Grid& g, Body b, Pose p, Velocity v, double extra, d
     Pose next = advance(p, v, duration / n);
     if (!safe_segment(g, b, p, next, extra)) return false;
     p = next;
+  }
+  return true;
+}
+// Before committing to a checked crossing, the complete braking trajectory must
+// remain in an area with turning clearance. This allows a safe approach without
+// letting an unresolved passage silently fall back to MPPI inside the pinch.
+inline bool approach_stop_safe(const Grid& g, Body b, Pose p, Velocity v, double extra,
+                               double reaction, double decel) {
+  if (!safe_stop(g, b, p, v, extra, reaction, decel)) return false;
+  double speed = std::hypot(v.x, v.y);
+  double duration = reaction + std::max(speed, std::abs(v.w) * radius(b)) / decel;
+  int n = std::max(1, int(std::ceil(duration / .025)));
+  for (int i = 0; i <= n; i++) {
+    auto q = advance(p, v, duration * i / n);
+    if (!turn_safe(g, b, position(q), extra + speed * duration / (2 * n))) return false;
   }
   return true;
 }

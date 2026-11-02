@@ -23,7 +23,8 @@ from tf2_ros import TransformBroadcaster, StaticTransformBroadcaster
 
 
 class Fixture(Node):
-    def __init__(self):
+    def __init__(self, scenario="corridor"):
+        self.scenario = scenario
         super().__init__('passage_transport_fixture')
         self.x = self.y = self.yaw = 0.0
         self.cmd = Twist()
@@ -60,7 +61,8 @@ class Fixture(Node):
         self.map.info.origin.orientation.w = 1.
         xx = -1 + (np.arange(180) + .5) * .025
         yy = -1.25 + (np.arange(100) + .5) * .025
-        self.cells = np.where((xx[None, :] >= .35) & (xx[None, :] <= 1.1)
+        end = 2.0 if scenario == "approach" else 1.1
+        self.cells = np.where((xx[None, :] >= .35) & (xx[None, :] <= end)
                               & (np.abs(yy[:, None]) >= .2), 100, 0)
         self.map.data = self.cells.astype('int8').ravel().tolist()
         self.create_timer(.02, self.step)
@@ -152,6 +154,7 @@ class Fixture(Node):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--scenario', choices=['corridor', 'approach'], default='corridor')
     parser.add_argument('--timeout', type=float, default=80)
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=False)
@@ -160,7 +163,7 @@ def main():
                                 'localizacion:=false', 'use_sim_time:=false'],
                                stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
     rclpy.init()
-    node = Fixture()
+    node = Fixture(args.scenario)
     try:
         deadline = time.monotonic() + args.timeout
         while rclpy.ok() and node.result is None and time.monotonic() < deadline:
@@ -171,7 +174,16 @@ def main():
                   'final_pose': [node.x, node.y, node.yaw], 'trace': node.trace,
                   'limitation': 'Synthetic ROS/kinematic integration, not official simulator or physical validation.'}
         (args.output/'summary.json').write_text(json.dumps(result, indent=2)+'\n')
-        ok = node.result == 4 and any(s.startswith('cross:') for s in node.phases) and any(s.startswith('exit:') for s in node.phases)
+        if args.scenario == 'approach':
+            # The unresolved exit is outside lookahead. Move in the open approach,
+            # then stop before losing full turning clearance (corner at x=.35).
+            radius = math.hypot(.201 + .02, .12 + .02)
+            moved = max(p[1] for p in node.trace) > .02
+            outside = all(math.hypot(max(.35-p[1], 0), max(.2-abs(p[2]), 0)) > radius
+                          for p in node.trace)
+            ok = moved and outside and not any(s.startswith(('cross:', 'hold:')) for s in node.phases)
+        else:
+            ok = node.result == 4 and any(s.startswith('cross:') for s in node.phases) and any(s.startswith('exit:') for s in node.phases)
         print(json.dumps({k:v for k,v in result.items() if k!='trace'}), flush=True)
         return 0 if ok else 1
     finally:

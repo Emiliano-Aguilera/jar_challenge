@@ -41,6 +41,19 @@ int main() {
   assert(safe_stop(obstacle, b, Pose{0, 0, 0}, Velocity{.05, 0, 0}, .01, .3, .3));
   assert(!turn_safe(g, b, Vec{.8, -.31}, .01));
   assert(turn_safe(g, b, Vec{0, 0}, .01));
+  // A passage ahead must not freeze a robot still braking entirely in open
+  // space, but no command may carry its turning envelope into the constriction.
+  assert(approach_stop_safe(obstacle, b, Pose{0, 0, 0}, Velocity{.05, 0, 0}, .02, .4, .3));
+  assert(!approach_stop_safe(obstacle, b, Pose{.1, 0, 0}, Velocity{.2, 0, 0}, .02, .4, .3));
+  // A narrow free interval between samples must still yield its center.
+  auto slit = room();
+  mark(slit, -.5, .15, 1., .3);
+  mark(slit, -.5, -.3, 1., -.15);
+  auto centers = lateral_centers(slit, b, Vec{.2, .007123}, 0, .02, .12);
+  assert(centers.size() == 1);
+  assert(std::abs(centers[0].y) < 1e-8);
+  mark(slit, -.5, -.15, 1., .15, 255);
+  assert(lateral_centers(slit, b, Vec{.2, .007123}, 0, .02, .12).empty());
   Grid fine(400, 400, .005, -1., -1., std::vector<unsigned char>(400 * 400, 0));
   mark(fine, .255, -.005, .260, .005);
   assert(!turn_safe(fine, b, Vec{0, 0}, .02));  // Extra margin grows both corner axes.

@@ -9,10 +9,14 @@ not a validated competition improvement.
 The Nav2 controller plugin delegates ordinary motion to the existing MPPI controller
 with the same parameters. For a recognized short, two-sided narrow passage, it checks a
 fixed-heading route against the full global raw costmap, including sensed obstacles.
-It recenters nearby path positions and uses the existing **padded rectangular footprint**
+It searches full body orientations and connected lateral alternatives around nearby path positions,
+including centers of gaps between sampling positions. It uses the existing **padded rectangular footprint**
 plus `extra_margin` (0.02 m). It never reduces the chassis or costmap padding.
 
-1. Check that the approach and an exit with room for the whole body to turn are known
+1. If the crossing is still unresolved ahead, allow MPPI to approach only while
+   actual/proposed braking trajectories retain full turning clearance in both global
+   and local grids. Scale the complete twist together if needed; never drift into
+   an unchecked pinch. Once committed, check that the approach and an exit with room for the whole body to turn are known
    within `lookahead` (1.4 m). Unknown/outside cells block the geometry check.
 2. Brake and observe a stationary interval; align only in a checked turning area.
 3. Translate with a fixed body heading, allowing small yaw corrections and limited
@@ -39,8 +43,9 @@ mission interface. Mission still uses `navigate_to_pose` and its existing cancel
   this mode. It is not a planner over arbitrary position/heading space. A long unseen
   exit or a route requiring a body turn inside is rejected. A 64 cm doorway with a post
   inside must be evaluated as a whole maneuver, not accepted by doorway width alone.
-- Rejection while still outside leaves the passage lock unset, so another goal can be
-  tried. Failure/data loss **after entering the mode** latches `hold` and denies recovery
+- An unresolved passage ahead does not immediately reject the whole goal. The
+  approach remains constrained to checked braking/turning space; when that space is
+  exhausted, navigation fails without setting the lock, so another goal can be tried. Failure/data loss **after entering the mode** latches `hold` and denies recovery
   rotation. No autonomous reverse-escape controller is implemented in this first version.
   Do not clear the lock or restart a competition run to force movement.
 - A frozen grid prevents costmap clearing from removing the original passage obstacles
@@ -55,6 +60,10 @@ mission interface. Mission still uses `navigate_to_pose` and its existing cancel
   of passage parameters are rejected while locked. To compare the same build in wide
   space while idle, set `FollowPath.passage.enabled` false on `controller_server`.
 - The low speeds/corrections and goal approach still need physical-robot calibration.
+  Commands preserve their x/y direction when applying the lateral limit and slow
+  before a bend/exit when the stopping envelope requires it. `min_v` is a nominal
+  tracking floor before these safety reductions. `command_reserve` adds 0.1 s to
+  proposed stopping checks for the next control/smoothing interval.
   Unit tests and synthetic kinematics do not establish contact-free execution.
 
 ## Local checks
@@ -109,7 +118,31 @@ A green workflow or a newly reported victim alone does not establish a successfu
 passage. Separate runs with RTF below 0.9 from timing comparisons. Never attribute this
 mode's success to a run where it did not activate.
 
-## Verification recorded before publishing
+## Startup regression and recorded fixture
+
+The first official comparison (Actions run `41437278210`, robot `d7568e9`, worlds
+`5bfdb9e`) ended both repetitions for immobility, with zero translation/victims/contacts.
+The old detector used the approach diagonal as its only candidate axis, chose lateral
+samples greedily, and rejected the entire goal before entry. Low RTF also caused freshness
+errors, but geometry rejection reproduces without timing or server load.
+
+`recorded_approach.txt` stores the first nontrivial `/plan`, its preceding raw global grid
+and the robot TF pose from repetition 2, in text with run-length-encoded cell costs. It is
+a test fixture outside `src/`, never installed or read by the robot. The regression checks
+connected full-body geometry, a kinematic crossing and a reversed initial heading. The
+actual obstacle dimensions/poses remain unknown to runtime code. A stale snapshot cannot
+prove that an unseen obstacle surface is clear; the live local/global safety checks remain
+necessary.
+
+The `approach` transport scenario has no checked exit within lookahead. It must make forward
+progress in open space while preserving turning clearance, and must not enter the passage:
+
+```bash
+python3 pruebas/pasaje_angosto/probe_transport.py --scenario approach \
+  --output build/passage-approach-01 --timeout 20
+```
+
+## Verification recorded before initial publishing
 
 The full existing Python suite passed: **792 tests**.
 `tools/verificar.sh --template` passed all controls, including the interface/map-wait
@@ -123,4 +156,17 @@ PR CI smoke tests are separate from the recorded server comparison.
 The alignment command honors the configured 0.5 rad/s turn-from-rest floor outside the
 passage; translational commands use a configurable 0.15 m/s floor before component
 limits. Lateral/yaw corrections while translating still need hardware calibration.
-Independent review and the recorded official scenarios above remain merge gates.
+The recorded official scenarios above remain merge gates.
+
+
+## Startup correction validation
+
+The recorded regression, reversed-heading case and existing geometry/state tests pass.
+The real Nav2 unresolved-approach test fails on the original build (no forward progress)
+and passes on the correction while retaining full turning clearance. The corridor probe
+also completes with action status 4. These tests use synthetic sensors/kinematics and do
+not replace an official run with current sensing, AMCL, collisions and normal server RTF.
+The full repository verification passes, including 259 tests and the interface/map-wait
+audit. Code review found the opposite-heading case, now fixed and covered. The previous
+792-test Python result above belongs to the initial implementation, not a fresh full-suite
+run of the startup correction.
