@@ -171,17 +171,47 @@ controller_server:
       required_movement_angle: 0.5
       movement_time_allowance: 5.0     # trabado antes: Nav2 prueba sus recoveries
     general_goal_checker:
-      plugin: nav2_controller::SimpleGoalChecker
+      plugin: equipo_jar_navegacion/PassageGoalChecker
       stateful: true                  # primero llega a la posición, después gira
       xy_goal_tolerance: 0.10
       yaw_goal_tolerance: 0.25
     precise_goal_checker:             # return bonus: 4 wheels inside 0.25 m -> position error < 0.10 m
-      plugin: nav2_controller::SimpleGoalChecker
+      plugin: equipo_jar_navegacion/PassageGoalChecker
       stateful: true
       xy_goal_tolerance: 0.05         # AMCL itself is ~0.05 m off: tighter does not help
       yaw_goal_tolerance: 6.28        # any heading: the wheels are symmetric around the center
     FollowPath:
-      plugin: nav2_mppi_controller::MPPIController
+      plugin: equipo_jar_navegacion/PassageController
+      passage:
+        # Experimental branch: test with recordings before merging.
+        enabled: true
+        extra_margin: 0.02           # additional to the existing padded footprint
+        lookahead: 1.4
+        center_range: 0.12
+        detect_width: 0.46
+        max_v: 0.15
+        max_lateral: 0.05
+        max_correction_w: 0.08
+        align_w: 0.5
+        heading_tolerance: 0.035
+        heading_abort: 0.12
+        position_tolerance: 0.02
+        track_lookahead: 0.08
+        min_v: 0.15
+        min_align_w: 0.5       # measured turn-from-rest floor; only outside the passage
+        linear_gain: 2.0
+        yaw_gain: 2.0
+        still_speed: 0.01
+        still_w: 0.02
+        still_dwell: 0.3
+        reaction: 0.3
+        deceleration: 0.3
+        max_duration: 60.0
+        progress_timeout: 8.0
+        progress_distance: 0.03
+        grid_max_age: 2.0     # 1 Hz publish on a 2 Hz update loop can take 1.5 s
+        scan_max_age: 0.5
+        tf_max_age: 0.3
       motion_model: Omni              # mecanum: también se mueve de costado
       time_steps: 40                  # 40 x 0.05 s = mira 2 s hacia adelante
       model_dt: 0.05
@@ -342,14 +372,15 @@ planner_server:
 
 behavior_server:
   ros__parameters:
+    passage_guard_timeout_s: 0.1
     costmap_topic: local_costmap/costmap_raw
     footprint_topic: local_costmap/published_footprint
     cycle_frequency: 10.0             # el robot frena con 0.5 s sin /cmd_vel
     behavior_plugins: [spin, backup, wait]
     spin:
-      plugin: nav2_behaviors/Spin
+      plugin: equipo_jar_navegacion/GuardedSpin
     backup:
-      plugin: nav2_behaviors/BackUp
+      plugin: equipo_jar_navegacion/GuardedBackUp
     wait:
       plugin: nav2_behaviors/Wait
     global_frame: odom
