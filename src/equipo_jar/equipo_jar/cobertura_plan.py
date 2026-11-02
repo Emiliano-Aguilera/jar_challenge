@@ -246,14 +246,48 @@ def route_metrics(choices, start_cell, start_yaw, costs, settings, possible):
                    possible.bit_count(), tuple(curve))
 
 
+class _RouteClock:
+    """Exact duration before building visibility curves for rejected routes.
+
+    Cache directed edge increments within one fixed-view ordering call. Retain
+    route_metrics' arithmetic and accumulation order, including floating-point
+    behavior at the existing duration thresholds.
+    """
+    def __init__(self, start_cell, start_yaw, costs, settings):
+        self.start_cell, self.start_yaw = start_cell, start_yaw
+        self.costs, self.settings = costs, settings
+        self.turn_cost = getattr(costs, 'turn_between', None)
+        self.edges = {}
+
+    def __call__(self, choices):
+        elapsed = 0.0
+        cell, yaw = self.start_cell, self.start_yaw
+        for nxt, pose, _ in choices:
+            key = cell, yaw, nxt, pose.yaw
+            increment = self.edges.get(key)
+            if increment is None:
+                leg = self.costs.between(cell, nxt)
+                turn = (self.turn_cost(yaw, pose.yaw) if self.turn_cost is not None
+                        else abs(angle_difference(yaw, pose.yaw)))
+                increment = (leg / self.settings.travel_speed + turn / self.settings.turn_speed
+                             + self.settings.observation_time)
+                self.edges[key] = increment
+            elapsed += increment
+            cell, yaw = nxt, pose.yaw
+        return elapsed
+
+
 def improve_order(choices, start_cell, start_yaw, costs, settings, possible, cancel=None):
     """Bounded 2-opt and relocation sweeps, retaining every selected view."""
     choices = list(choices)
     metrics = route_metrics(choices, start_cell, start_yaw, costs, settings, possible)
+    clock = _RouteClock(start_cell, start_yaw, costs, settings)
     for first in range(len(choices) - 1):
         for last in range(first + 1, len(choices)):
             check_cancelled(cancel)
             candidate = choices[:first] + list(reversed(choices[first:last + 1])) + choices[last + 1:]
+            if clock(candidate) >= metrics.duration - 1e-9:
+                continue
             trial = route_metrics(candidate, start_cell, start_yaw, costs, settings, possible)
             if (trial.duration < metrics.duration - 1e-9
                     and trial.mean_first_view_time <= metrics.mean_first_view_time + 1e-9):
@@ -261,11 +295,13 @@ def improve_order(choices, start_cell, start_yaw, costs, settings, possible, can
     # Keep every view: equal sampled coverage does not prove equal visibility
     # between samples, so removing a seemingly redundant pose would be unsafe.
     choices = relocate_order(choices, start_cell, start_yaw, costs, settings, possible,
-                             settings.order_check_interval_s, settings.order_start_delay_s, cancel)
+                             settings.order_check_interval_s, settings.order_start_delay_s, cancel,
+                             _clock=clock)
     # Later moves can unlock improvements for views visited early in the first
     # sweep. One cleanup sweep keeps the work bounded and repeats every guard.
     return relocate_order(choices, start_cell, start_yaw, costs, settings, possible,
-                          settings.order_check_interval_s, settings.order_start_delay_s, cancel)
+                          settings.order_check_interval_s, settings.order_start_delay_s, cancel,
+                          _clock=clock)
 
 
 def _order_checkpoints(curve, interval, start_delay):
@@ -300,7 +336,7 @@ def _meets_order_checks(curve, checks):
 
 
 def relocate_order(choices, start_cell, start_yaw, costs, settings, possible,
-                   interval, start_delay, cancel=None):
+                   interval, start_delay, cancel=None, *, _clock=None):
     """One bounded relocation sweep, preserving all views and sampled checks.
 
     Accept only lower mean first-view time (or equal mean and shorter search),
@@ -315,6 +351,7 @@ def relocate_order(choices, start_cell, start_yaw, costs, settings, possible,
     check_cancelled(cancel)
     current = list(choices)
     metrics = route_metrics(current, start_cell, start_yaw, costs, settings, possible)
+    clock = _RouteClock(start_cell, start_yaw, costs, settings) if _clock is None else _clock
     for entry in tuple(choices):
         check_cancelled(cancel)
         first = current.index(entry)
@@ -326,6 +363,8 @@ def relocate_order(choices, start_cell, start_yaw, costs, settings, possible,
             if last == first:
                 continue
             trial = rest[:last] + [entry] + rest[last:]
+            if clock(trial) > metrics.duration + 1e-9:
+                continue
             candidate = route_metrics(trial, start_cell, start_yaw, costs, settings, possible)
             if candidate.duration > metrics.duration + 1e-9:
                 continue
