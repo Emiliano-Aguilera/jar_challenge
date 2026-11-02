@@ -112,7 +112,7 @@ deteccion:
     obs_sigma_base_m: 0.05
     obs_sigma_per_m: 0.03
     #PARAM: image+scan pairs processed per second (> 0, <= camera rate).
-    processing_rate_hz: 5.0
+    processing_rate_hz: 10.0
     #PARAM: max image-scan timestamp gap to pair them, s (> 0; LiDAR period is ~0.14 s).
     #       Read at startup only.
     sync_tolerance_s: 0.1
