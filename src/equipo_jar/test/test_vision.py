@@ -42,6 +42,13 @@ def test_mask_rejects_distractor_colors():
         assert not vision.red_mask(img, P).any(), color
 
 
+def test_mask_rejects_brown_cardboard():
+    # Cardboard walls measured at H 10-12, S ~105. This BGR is H 10, S 105, V 150; the upper hue
+    # of range 1 is 8 to keep it out, so raising it back to 10 makes this fail.
+    img, _ = image_with_box(color=(88, 109, 150))
+    assert not vision.red_mask(img, P).any()
+
+
 def test_opening_removes_isolated_pixel_noise():
     img, _ = image_with_box()
     rng = np.random.default_rng(0)

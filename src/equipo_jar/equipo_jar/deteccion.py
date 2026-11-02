@@ -63,7 +63,7 @@ from equipo_jar.comun import QOS_ESTADO, QOS_MAPA, correr, parametros_en_vivo
 PARAM_DEFAULTS = {
     # Segmentation (see vision.VisionParams for ranges and reasoning)
     'hsv_red_low_1': [0, 100, 60],
-    'hsv_red_high_1': [10, 255, 255],
+    'hsv_red_high_1': [8, 255, 255],
     'hsv_red_low_2': [170, 100, 60],
     'hsv_red_high_2': [180, 255, 255],
     'morphology_kernel_px': 3,
