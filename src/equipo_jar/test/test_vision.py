@@ -369,3 +369,40 @@ def test_mapped_obstacle_extent_tells_a_wall_from_a_drawn_box():
     box[r - 2:r + 3, c - 2:c + 3] = 100                     # 5 x 5 cells = 0.25 m
     assert vision.mapped_obstacle_extent(box, res, ox, oy, (0.0, 0.0), 0.30) == pytest.approx(0.25)
     assert vision.mapped_obstacle_extent(box, res, ox, oy, (3.0, 3.0), 0.30) == 0.0
+
+
+# ----------------------------------------------------------------------------- frame gating
+
+
+def _skip(flag_seen=True, ready_once=False, ready_now=False, since_map_s=0.0,
+          wait_max_s=10.0, wait_start=True, skip_doubt=False):
+    return vision.skip_for_localization(flag_seen, ready_once, ready_now, since_map_s,
+                                        wait_max_s, wait_start, skip_doubt)
+
+
+def test_gate_waits_at_start_until_the_flag_is_true_once():
+    assert _skip(ready_once=False, ready_now=False)
+    assert not _skip(ready_once=True, ready_now=True)
+
+
+def test_gate_gives_up_waiting_after_the_start_timeout():
+    # Mission starts moving after its own 10 s: detection must not stay blind.
+    assert _skip(since_map_s=9.9)
+    assert not _skip(since_map_s=10.0)
+
+
+def test_gate_never_skips_without_a_localization_node():
+    # pruebas.launch.py style: nobody publishes the flag.
+    assert not _skip(flag_seen=False)
+    assert not _skip(flag_seen=False, skip_doubt=True)
+
+
+def test_gate_after_turns_only_if_asked():
+    # Flag was true once and is false again (heading fix after a turn).
+    assert not _skip(ready_once=True, ready_now=False, skip_doubt=False)
+    assert _skip(ready_once=True, ready_now=False, skip_doubt=True)
+    assert not _skip(ready_once=True, ready_now=True, skip_doubt=True)
+
+
+def test_gate_start_wait_can_be_turned_off():
+    assert not _skip(wait_start=False)

@@ -157,11 +157,33 @@ One entry per decision: the question, what was tried, what was decided.
   box seen through a doorway at 0.8 m (ratios 0.53-0.60). Blobs touching the image border are
   exempt from the size checks.
 
+## Should detection skip frames while localization is not ready? (2026-11-02)
+
+- Ask (hans-die, `INTERFACES.md`): `/jar/localizacion_lista` is false at start-up until AMCL
+  settles, and after each turn until the heading is fixed (on the real robot `/odom` counts
+  turns ~25 % too much; 15° at 1.5 m puts a box 0.39 m off). Detection should skip those frames.
+- Start-up: yes. Before the flag, the start pose is still being fixed (hand placement, LiDAR
+  estimate). A box seen then lands wrong; fusion keeps a candidate with >= 5 observations for
+  good, so mission would drive to inspect a ghost. Cost: none, the robot stands still until
+  mission sees the same flag (it waits up to `localization_wait_max_s`, 10 s). Detection uses the
+  same rule and default: if localization never says ready, both start at 10 s.
+- After turns: no, off by default (`skip_heading_doubt: false`). Mission decided not to wait for
+  the flag after trips (up to 21-34 s per run). Coverage plans `observation_time` 1.0 s per view
+  and hans-die measured the fix at 1.2-1.7 s in the sim (max 2.1 s), so detection would be blind
+  for the whole view and mission would leave before the flag returns. With the IMU heading (#44)
+  the error at stops is ~1.8° (0.05 m at 1.5 m), inside `obs_sigma` at that range. If the real
+  robot shows boxes off right after turns, turn it on (params only) and ask mission to wait too.
+- Decided: `vision.skip_for_localization` (pure, tested), wired in `deteccion` before the image
+  is decoded. No flag ever received = never skip (`pruebas.launch.py` runs `localizacion` with
+  `usar_amcl: false`, which publishes true at once, but a dead node must not blind detection).
+  Skipped frames show as `localizing` in the 10 s summary. `settle_s` 0 in mission stays.
+
 ## Next
 
 - Repeat the measurement with localization (AMCL) instead of the fixed map = odom.
 - Decide with the team whether to tighten `obs_sigma_*` after seeing the real robot.
 - Confirm with AlsinaBautista that the 0.15 m single-view floor fits mission's policy.
+- Check `localizing` counts in a server run: the start wait should be a few seconds, 0 later.
 
 ## Testing without the simulator
 
