@@ -28,6 +28,9 @@ Tres tareas:
    ends the node asks AMCL for no-motion updates (logic in correccion_giro.py).
    `/jar/localizacion_lista` (Bool, transient local) is false until the start-up fix is
    done and while the heading is in doubt: mission can wait and detection can skip frames.
+
+5. Planner watch (vigia_planner.py): if planner_server keeps planning from a stale robot
+   pose, take it down to unconfigured and back up (a fresh TF buffer).
 """
 import math
 import time
@@ -37,7 +40,7 @@ import numpy as np
 from geometry_msgs.msg import PoseWithCovarianceStamped
 from lifecycle_msgs.msg import State, Transition
 from lifecycle_msgs.srv import ChangeState, GetState
-from nav_msgs.msg import OccupancyGrid, Odometry
+from nav_msgs.msg import OccupancyGrid, Odometry, Path
 from rclpy.clock import Clock, ClockType
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
@@ -51,6 +54,7 @@ from equipo_jar.comun import QOS_ESTADO, QOS_MAPA, correr, parametros_en_vivo
 from equipo_jar.correccion_giro import CorreccionGiro
 from equipo_jar.pose_inicial import PoseInicial, puntos_del_scan
 from equipo_jar.vigia import Vigia
+from equipo_jar.vigia_planner import VigiaPlanner
 
 
 class Arranque:
@@ -72,6 +76,17 @@ class Arranque:
         self.pedido = None      # (cliente, future) en curso
         self.vence = 0.0
         self.ultimo_estado = None
+        self.bajando = set()    # nodes going down to unconfigured before configuring again
+
+    def reiniciar(self, nombre):
+        """Take an active node down to unconfigured and back up. False if busy or unknown."""
+        if nombre not in self.clientes or self.faltan:
+            return False
+        self.bajando.add(nombre)
+        self.faltan.append(nombre)
+        self.ultimo_estado = None
+        self.paso()
+        return True
 
     def paso(self):
         if not self.faltan:
@@ -97,6 +112,18 @@ class Arranque:
         if estado.id != self.ultimo_estado:
             self.log.info(f'{nombre}: {estado.label}')
             self.ultimo_estado = estado.id
+        if nombre in self.bajando:
+            if estado.id == State.PRIMARY_STATE_UNCONFIGURED:
+                self.bajando.discard(nombre)       # down: configure and activate as usual
+            else:
+                transicion = {State.PRIMARY_STATE_ACTIVE: Transition.TRANSITION_DEACTIVATE,
+                              State.PRIMARY_STATE_INACTIVE: Transition.TRANSITION_CLEANUP
+                              }.get(estado.id)
+                if transicion is not None:
+                    pedido = ChangeState.Request()
+                    pedido.transition.id = transicion
+                    self.pedir(pedido, self.clientes[nombre][1])
+                return
         if estado.id == State.PRIMARY_STATE_ACTIVE:
             self.faltan.pop(0)
             self.ultimo_estado = None
@@ -151,6 +178,9 @@ class Localizacion(Node):
             'vigia_confirmaciones': 2,
             'vigia_radio_m': 0.5,
             'vigia_rango_yaw_rad': 0.35,
+            # /odom below both counts as still for the checks above (the judge's still: 0.02, 0.05).
+            'quieto_lineal_ms': 0.02,
+            'quieto_angular_rads': 0.05,
             # Fine-tune AMCL while still (vigia.py). false: only the lost check.
             'afinar_quieto': True,
             'afinar_radio_m': 0.15,
@@ -167,6 +197,12 @@ class Localizacion(Node):
             'girando_rads': 0.3,          # above this the robot is turning (not driving corrections)
             'max_correccion_s': 4.0,      # stop waiting this long after the turn ends (no scans)
             'max_duda_s': 15.0,           # stop waiting this long after the doubt starts
+            # Planner watch (vigia_planner.py): restart planner_server when this many paths
+            # in a row start this far from the robot. <= 0 m = off.
+            'vigia_planner_distancia_m': 0.5,
+            'vigia_planner_veces': 3,
+            'vigia_planner_espera_s': 30.0,   # at most one restart this often
+            'vigia_planner_tf_max_s': 1.0,    # our own TF must have advanced within this time
         })
         # Los pone navegacion.launch.py. Sin AMCL (pruebas.launch.py) otro publica map -> odom.
         self.usar_amcl = self.declare_parameter('usar_amcl', True).value
@@ -218,6 +254,40 @@ class Localizacion(Node):
         # 0.2 s: un poco más que un barrido del LiDAR (~0.14 s), así cada pedido usa uno nuevo.
         self.create_timer(0.2, self.tick)
         self.t_vigia = 0.0
+        self.vigia_planner = VigiaPlanner(self.p)
+        self.tf_stamp = None          # last map -> base_footprint stamp seen
+        self.tf_avanzo = 0.0          # steady time when it last advanced
+        # planner_server publishes every path it computes on /plan (reliable, default QoS).
+        self.create_subscription(Path, '/plan', self.al_recibir_plan, 10)
+
+    def al_recibir_plan(self, msg):
+        """Planner watch: a path must start where the robot is (vigia_planner.py)."""
+        if not msg.poses or 'planner_server' not in self.arranque.clientes:
+            return
+        try:
+            tf = self.tf_buffer.lookup_transform(
+                msg.header.frame_id or 'map', 'base_footprint', Time())
+        except TransformException:
+            return
+        # Our own TF must be live: its stamp advanced within vigia_planner_tf_max_s (steady
+        # clock, so a robot clock offset does not matter).
+        ahora = time.monotonic()
+        stamp = segundos(tf.header.stamp)
+        if self.tf_stamp is None or stamp > self.tf_stamp:
+            self.tf_stamp, self.tf_avanzo = stamp, ahora
+        if ahora - self.tf_avanzo > self.p['vigia_planner_tf_max_s']:
+            return      # our own TF is stuck too: no reference to judge the planner by
+        robot = (tf.transform.translation.x, tf.transform.translation.y)
+        inicio = msg.poses[0].pose.position
+        distancia = self.vigia_planner.con_plan(ahora, (inicio.x, inicio.y), robot)
+        if distancia is None:
+            return
+        reiniciado = self.arranque.reiniciar('planner_server')
+        self.get_logger().warning(
+            f'Planner plans from a stale pose: path starts at ({inicio.x:.2f}, {inicio.y:.2f}), '
+            f'robot at ({robot[0]:.2f}, {robot[1]:.2f}), {distancia:.2f} m. '
+            + ('Restarting planner_server' if reiniciado else 'Nav2 start-up busy: no restart')
+            + f' (restarts {self.vigia_planner.reinicios})')
 
     def al_recibir_mapa(self, msg):
         if not self.mapa_recibido:
@@ -306,8 +376,9 @@ class Localizacion(Node):
 
     def al_recibir_odom(self, msg):
         tw = msg.twist.twist
-        quieto = (abs(tw.linear.x) < 0.02 and abs(tw.linear.y) < 0.02
-                  and abs(tw.angular.z) < 0.05)
+        quieto = (abs(tw.linear.x) < self.p['quieto_lineal_ms']
+                  and abs(tw.linear.y) < self.p['quieto_lineal_ms']
+                  and abs(tw.angular.z) < self.p['quieto_angular_rads'])
         if not quieto:
             self.quieto_desde = None
             self.vigia.descartar()

@@ -126,6 +126,10 @@ localizacion:
     vigia_confirmaciones: 2
     vigia_radio_m: 0.5
     vigia_rango_yaw_rad: 0.35
+    # /odom below both counts as still for the lost check and the fine-tuning. Raise them if
+    # the real /odom is noisy at rest, or those checks never run (docs/team/ON_SITE.md).
+    quieto_lineal_ms: 0.02
+    quieto_angular_rads: 0.05
     # Fine-tune AMCL while still: if the score is fine, move AMCL to the best pose within
     # afinar_radio_m when the fit is good and sharp (a plain corridor slides: no fix).
     afinar_quieto: true
@@ -144,6 +148,13 @@ localizacion:
     girando_rads: 0.3                 # above this the robot is turning, not just correcting
     max_correccion_s: 4.0             # stop waiting this long after the turn ends
     max_duda_s: 15.0                  # stop waiting this long after the doubt starts
+    # Planner watch (vigia_planner.py): planner_server's TF view can freeze, so its paths start
+    # where the robot was and MPPI ends up rejecting them all ("0 poses"). If this many paths
+    # in a row start this far from the robot, restart planner_server. <= 0 m = off.
+    vigia_planner_distancia_m: 0.5
+    vigia_planner_veces: 3
+    vigia_planner_espera_s: 30.0      # at most one restart this often
+    vigia_planner_tf_max_s: 1.0       # our own TF must have advanced within this time
     plazo_arranque_s: 5.0             # s sin respuesta de un nodo de Nav2 antes de volver a preguntar
 
 # ---------------------------------------------------------------------------
