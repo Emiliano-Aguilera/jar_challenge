@@ -150,7 +150,7 @@ localizacion:
     # Planner watch (vigia_planner.py): planner_server's TF view can freeze, so its paths start
     # where the robot was and MPPI ends up rejecting them all ("0 poses"). If this many paths
     # in a row start this far from the robot, restart planner_server. <= 0 m = off.
-    vigia_planner_distancia_m: 0.5
+    vigia_planner_distancia_m: 0.01
     vigia_planner_veces: 3
     vigia_planner_espera_s: 30.0      # at most one restart this often
     vigia_planner_tf_max_s: 1.0       # our own TF must have advanced within this time

@@ -5,7 +5,7 @@
 
 Shared context for the 5 team members **and their coding agents**. Everything here is verified against
 the rules, `tools/` or the simulator. If anything contradicts the official rules (cited as §N), the rules win:
-https://airclub-udesa.github.io/jar_site/reglamento/ . All team docs and Markdown files are in English.
+https://airclub-udesa.github.io/jar_site/reglamento/ . Language: see "Rules for agents".
 
 Read with this file:
 
@@ -181,6 +181,12 @@ branches from `development` (e.g. `navegacion/movimiento`), PR back to `developm
   `publicar-ranking.yml`). Don't edit our own workflows (`simular.yml`, `sesion.yml`) either: they run on the
   team's simulation server, which refuses unreviewed versions; ask Emiliano-Aguilera. No agent attribution in commits or PRs (no `Co-Authored-By`, no "Generated with");
   `.claude/settings.json` enforces this for Claude Code.
+- Language: everything agents write is in English: code identifiers, comments, docstrings, log messages,
+  commits, PRs, issues, docs and Markdown. Only chat replies and reports to your user use the user's language;
+  text for the organizers stays in Spanish (`docs/team/ORGANIZER_QUESTIONS.md`).
+  Keep official and template names as they are (`/victimas`, `victimas:=N`, `equipo_jar`, `competencia.launch.py`,
+  `armar_reporte`); existing Spanish names stay until their owner renames them. In English names avoid `victim`
+  (CI traps above): use `box`, `target` or `candidate`.
 - All text (commits, PRs, comments, docs, logs, messages): as simple and short as possible, plain words,
   but technically precise. Simple wording, same technical level.
 - Touching another module's files or a shared file (launch, `package.xml`, `setup.py`, `Dockerfile`, interfaces): ask first.
