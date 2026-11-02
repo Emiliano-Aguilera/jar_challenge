@@ -41,7 +41,7 @@ amcl:
     alpha3: 0.2
     # In OmniMotionModel alpha4 is the x/y noise added per radian turned. With 0.2 an
     # in-place 90° turn spread the particles ~0.2 m per axis, across walls into the next
-    # corridor (laberinto_1: AMCL 0.54 m off, inside a wall). 0.01: ~0.05 m.
+    # corridor (practice run: AMCL 0.54 m off, inside a wall). 0.01: ~0.05 m.
     alpha4: 0.01
     alpha5: 0.2                       # solo lo usa el modelo omni
     laser_model_type: likelihood_field
@@ -61,7 +61,7 @@ amcl:
     pf_err: 0.05
     pf_z: 0.99
     resample_interval: 1
-    update_min_d: 0.05                # actualizar seguido: laberinto chico, robot lento
+    update_min_d: 0.05                # actualizar seguido: mapa chico, robot lento
     update_min_a: 0.1
     recovery_alpha_fast: 0.0
     recovery_alpha_slow: 0.0
@@ -203,7 +203,7 @@ controller_server:
         cost_power: 1
         cost_weight: 4.0
       CostCritic:                     # obstáculos según el costmap: pasa mejor por huecos angostos
-        enabled: true                 # que ObstaclesCritic (con ese se trababa en maze_1)
+        enabled: true                 # que ObstaclesCritic (con ese se trababa en las prácticas)
         cost_power: 1
         cost_weight: 1.0              # bajo: en huecos angostos manda el camino (que ya va por el
                                       # medio). Chocar sigue prohibido: collision_cost no depende de esto
@@ -213,7 +213,7 @@ controller_server:
         near_goal_distance: 1.0
       # threshold_to_consider: distancia en línea recta al objetivo. Más cerca que eso
       # MPPI deja de seguir el camino y va derecho al objetivo. Con 1.0 m tiraba contra
-      # la pared cuando el objetivo estaba del otro lado (vuelta en U en laberinto_1).
+      # la pared cuando el objetivo estaba del otro lado (vuelta en U en una práctica).
       # 0.4 m: menos que lo que separa dos poses a ambos lados de una pared.
       GoalCritic:
         enabled: true
