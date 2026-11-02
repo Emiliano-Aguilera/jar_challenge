@@ -157,6 +157,52 @@ One entry per decision: the question, what was tried, what was decided.
   box seen through a doorway at 0.8 m (ratios 0.53-0.60). Blobs touching the image border are
   exempt from the size checks.
 
+## Should detection skip frames while localization is not ready? (2026-11-02)
+
+- Ask (hans-die, `INTERFACES.md`): `/jar/localizacion_lista` is false at start-up until AMCL
+  settles, and after each turn until the heading is fixed (on the real robot `/odom` counts
+  turns ~25 % too much; 15° at 1.5 m puts a box 0.39 m off). Detection should skip those frames.
+- Start-up: yes. Before the flag, the start pose is still being fixed (hand placement, LiDAR
+  estimate). A box seen then lands wrong; fusion keeps a candidate with >= 5 observations for
+  good, so mission would drive to inspect a ghost. Cost: none, the robot stands still until
+  mission sees the same flag (it waits up to `localization_wait_max_s`, 10 s). Detection uses the
+  same rule and default: if localization never says ready, both start at 10 s.
+- After turns: no, off by default (`skip_heading_doubt: false`). Mission decided not to wait for
+  the flag after trips (up to 21-34 s per run). Coverage plans `observation_time` 1.0 s per view
+  and hans-die measured the fix at 1.2-1.7 s in the sim (max 2.1 s), so detection would be blind
+  for the whole view and mission would leave before the flag returns. With the IMU heading (#44)
+  the error at stops is ~1.8° (0.05 m at 1.5 m), inside `obs_sigma` at that range. If the real
+  robot shows boxes off right after turns, turn it on (params only) and ask mission to wait too.
+- Decided: `vision.skip_for_localization` (pure, tested), wired in `deteccion` before the image
+  is decoded. No flag ever received = never skip (`pruebas.launch.py` runs `localizacion` with
+  `usar_amcl: false`, which publishes true at once, but a dead node must not blind detection).
+  Skipped frames show as `localizing` in the 10 s summary. `settle_s` 0 in mission stays.
+- Checked (server, maze_3_6x6, 150 s, largada 0.15,-0.1,0.2, batch 20261102-114028-39bd8c8):
+  `localizing` 36 per 10 s before `/map` and until the flag (4.6 s after `/map`), then 0 for the
+  rest of the run. Reports at 16.7 s (0.007 m) and 52.7 s (0.032 m); `development` the night
+  before (batch 20261101-225642-dc3d2df, 300 s, no offset): 14-16 s and 46-51 s, 0.03-0.05 m.
+  The third box needs ~170 s, so 150 s stops at 200 either way. 0 violations, 0 collisions.
+
+## Can a yellow, green, orange or neutral distractor pass the red filter? (2026-11-02)
+
+- Ask (AlsinaBautista, FOR_THE_TEAM.md): practice maps only have blue distractors; the
+  competition has yellow, green and neutral ones. Check the red thresholds against them.
+- Tried (synthetic, no real image of such a distractor exists yet): OpenCV HSV, the filter is
+  H in [0, 8] U [170, 180] (10 before #64), S >= 100, V >= 60. Three checks through the repo's
+  `red_mask` + `find_blobs`: every pure hue; 15 colors as 50x60 patches with hue jitter
+  (sigma 3), shading and sensor noise, 20 draws each; and a white-balance shift (R x k, B / k,
+  k 0.8-1.5) to mimic warm or cold venue light.
+- Result: yellow (H 26-30), green (57-60), blue (120) and the neutrals (grey, white, black,
+  beige: S < 100) never give a blob, not even one mask pixel, under any shift. Yellow stays
+  above H 21 at k 1.5. The only near neighbours are orange (H 15) and brown cardboard
+  (H 10-13): with the upper hue at 10 they leave 60-77 scattered mask pixels per frame (no
+  blob) and pass as single pixels at k >= 1.3; at 8 (#64) they leave 6-16 pixels and pass at
+  no k. Red boxes stay at H 178-1 under every shift.
+- Decided: no change to `hsv_red_low_1` or the saturation minimum (18 hue steps of margin to
+  yellow; lowering S would only bring the neutrals closer). #64 matters against the cardboard
+  walls, not against the listed distractors. On site: point the camera at one distractor of
+  each color with `publish_debug: true` before the first run, since this is synthetic only.
+
 ## Next
 
 - Repeat the measurement with localization (AMCL) instead of the fixed map = odom.

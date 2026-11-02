@@ -22,6 +22,21 @@ parada:
     still_time_s: 0.5
     still_linear_mps: 0.01
     still_angular_rads: 0.02
+    # After the stop request, confirm anyway once zero has been sent this long (s), unless fresh
+    # /odom still shows motion. Without it, /odom stamped by an unsynced robot clock would block
+    # /done (-100).
+    confirm_timeout_s: 3.0
+    # Confirm even if fresh /odom still shows motion after this long (s): odometry noisy at rest
+    # must not block /done forever.
+    confirm_max_s: 10.0
+
+# Run log (registro.py): every node's log in $JAR_LOG_DIR/log.txt or <workspace>/logs_jar/log.txt.
+registro:
+  ros__parameters:
+    max_bytes: 20000000               # stop writing here; the organizers keep up to 25 MB
+    nivel_minimo: 20                  # 20 INFO, 30 WARN
+    repetidas_s: 5.0                  # the same line within this is counted, not written
+    pose_cada_s: 1.0                  # AMCL pose line every this many s
 
 amcl:
   ros__parameters:
@@ -41,7 +56,7 @@ amcl:
     alpha3: 0.2
     # In OmniMotionModel alpha4 is the x/y noise added per radian turned. With 0.2 an
     # in-place 90° turn spread the particles ~0.2 m per axis, across walls into the next
-    # corridor (laberinto_1: AMCL 0.54 m off, inside a wall). 0.01: ~0.05 m.
+    # corridor (practice run: AMCL 0.54 m off, inside a wall). 0.01: ~0.05 m.
     alpha4: 0.01
     alpha5: 0.2                       # solo lo usa el modelo omni
     laser_model_type: likelihood_field
@@ -61,7 +76,7 @@ amcl:
     pf_err: 0.05
     pf_z: 0.99
     resample_interval: 1
-    update_min_d: 0.05                # actualizar seguido: laberinto chico, robot lento
+    update_min_d: 0.05                # actualizar seguido: mapa chico, robot lento
     update_min_a: 0.1
     recovery_alpha_fast: 0.0
     recovery_alpha_slow: 0.0
@@ -118,6 +133,10 @@ localizacion:
     vigia_confirmaciones: 2
     vigia_radio_m: 0.5
     vigia_rango_yaw_rad: 0.35
+    # /odom below both counts as still for the lost check and the fine-tuning. Raise them if
+    # the real /odom is noisy at rest, or those checks never run (docs/team/ON_SITE.md).
+    quieto_lineal_ms: 0.02
+    quieto_angular_rads: 0.05
     # Fine-tune AMCL while still: if the score is fine, move AMCL to the best pose within
     # afinar_radio_m when the fit is good and sharp (a plain corridor slides: no fix).
     afinar_quieto: true
@@ -136,6 +155,13 @@ localizacion:
     girando_rads: 0.3                 # above this the robot is turning, not just correcting
     max_correccion_s: 4.0             # stop waiting this long after the turn ends
     max_duda_s: 15.0                  # stop waiting this long after the doubt starts
+    # Planner watch (vigia_planner.py): planner_server's TF view can freeze, so its paths start
+    # where the robot was and MPPI ends up rejecting them all ("0 poses"). If this many paths
+    # in a row start this far from the robot, restart planner_server. <= 0 m = off.
+    vigia_planner_distancia_m: 0.5
+    vigia_planner_veces: 3
+    vigia_planner_espera_s: 30.0      # at most one restart this often
+    vigia_planner_tf_max_s: 1.0       # our own TF must have advanced within this time
     plazo_arranque_s: 5.0             # s sin respuesta de un nodo de Nav2 antes de volver a preguntar
 
 # ---------------------------------------------------------------------------
@@ -203,7 +229,7 @@ controller_server:
         cost_power: 1
         cost_weight: 4.0
       CostCritic:                     # obstáculos según el costmap: pasa mejor por huecos angostos
-        enabled: true                 # que ObstaclesCritic (con ese se trababa en maze_1)
+        enabled: true                 # que ObstaclesCritic (con ese se trababa en las prácticas)
         cost_power: 1
         cost_weight: 1.0              # bajo: en huecos angostos manda el camino (que ya va por el
                                       # medio). Chocar sigue prohibido: collision_cost no depende de esto
@@ -211,10 +237,9 @@ controller_server:
         consider_footprint: true      # cerca de obstáculos chequea el rectángulo, no un círculo
         collision_cost: 1000000.0
         near_goal_distance: 1.0
-        trajectory_point_step: 2
       # threshold_to_consider: distancia en línea recta al objetivo. Más cerca que eso
       # MPPI deja de seguir el camino y va derecho al objetivo. Con 1.0 m tiraba contra
-      # la pared cuando el objetivo estaba del otro lado (vuelta en U en laberinto_1).
+      # la pared cuando el objetivo estaba del otro lado (vuelta en U en una práctica).
       # 0.4 m: menos que lo que separa dos poses a ambos lados de una pared.
       GoalCritic:
         enabled: true
@@ -328,17 +353,28 @@ planner_server:
   ros__parameters:
     expected_planner_frequency: 5.0
     planner_plugins: [GridBased]
+    # Smac 2D (A* on the costmap). NavFn stops tracing its path after 4 x the costmap's longer
+    # side in cells, a limit fixed in Humble's code (navfn_planner.cpp:398): on a ~7 m map that is
+    # ~14 m of path, and a 28 m way back failed 3 times. Smac 2D has no such limit and blocks the
+    # same cells as NavFn (cost >= 253: the center closer than 0.12 m to an obstacle).
+    # The name stays GridBased, so the behavior trees do not change. To go back to NavFn:
+    # plugin nav2_navfn_planner/NavfnPlanner, tolerance 0.05, use_astar false, allow_unknown false.
     GridBased:
-      plugin: nav2_navfn_planner/NavfnPlanner
-      # Si el objetivo cae en zona prohibida, planifica hasta una celda libre a <= 0.05 m (0.07 en
-      # diagonal): menos que xy_goal_tolerance (0.10), así el final del camino cuenta como llegada.
-      # Con 0.2 el camino terminaba hasta 0.28 m lejos y el robot quedaba ahí sin llegar nunca
-      # (punto de vista sobre una caja: 50 s). Con 0 rechazaba objetivos en el borde (+9 s).
+      plugin: nav2_smac_planner/SmacPlanner2D
+      # Goal in a blocked cell: plan to the closest free cell within this distance (m). Smaller
+      # than xy_goal_tolerance (0.10), so the end of the path counts as arrival. With NavFn, 0.2
+      # left the robot up to 0.28 m away (view over a box: 50 s stuck) and 0 rejected goals at
+      # the edge (+9 s).
       tolerance: 0.05
-      # Dijkstra (Nav2's default). With A*, NavFn sometimes fails to extract a path that
-      # exists ("Failed to create plan from potential"): maze_1's return lost ~16 s.
-      use_astar: false
       allow_unknown: false
+      downsample_costmap: false
+      # Weight of the costmap's inflation cost in the path length: paths keep to the middle of
+      # corridors, as NavFn's did. 0 = shortest path along the walls.
+      cost_travel_multiplier: 2.0
+      max_iterations: 1000000
+      max_on_approach_iterations: 1000
+      max_planning_time: 1.0          # s; a 7 m map plans in a few ms
+      use_final_approach_orientation: false
 
 behavior_server:
   ros__parameters:

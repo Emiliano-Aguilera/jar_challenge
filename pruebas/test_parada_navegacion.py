@@ -118,6 +118,85 @@ def test_repeated_or_old_sensor_stamps_do_not_confirm_a_stop(guard):
     assert not confirmed[-1].data
 
 
+@pytest.mark.parametrize('offset_s', [-120.0, -2.0, 5.0])
+def test_unsynced_robot_clock_still_confirms_from_still_odometry(guard, offset_s):
+    node, clock, _, confirmed = guard
+    node.on_stop(Bool(data=True))
+    stamp = node.get_clock().now().nanoseconds + int(offset_s * 1e9)
+    for _ in range(7):
+        clock.seconds += 0.1
+        stamp += 100_000_000
+        msg = Odometry()
+        msg.header.stamp.sec, msg.header.stamp.nanosec = divmod(stamp, 1_000_000_000)
+        node.on_odom(msg)
+        node.tick()
+    assert confirmed[-1].data
+
+
+@pytest.mark.parametrize('speed', [None, float('nan')])
+def test_stop_confirms_after_timeout_without_usable_odometry(guard, speed):
+    node, clock, commands, confirmed = guard
+    node.on_stop(Bool(data=True))
+    timeout = node.p['confirm_timeout_s']
+    while clock.seconds < 10.0 + timeout - 0.15:
+        clock.seconds += 0.1
+        if speed is not None:
+            odom(node, speed)
+        node.tick()
+        assert not confirmed[-1].data
+    clock.seconds = 10.0 + timeout
+    node.tick()
+    assert confirmed[-1].data
+    assert all(msg.linear.x == 0.0 for msg in commands)
+
+
+def test_fresh_moving_odometry_vetoes_the_timeout_until_the_cap(guard):
+    node, clock, commands, confirmed = guard
+    node.on_stop(Bool(data=True))
+    cap = node.p['confirm_max_s']
+    while clock.seconds < 10.0 + cap - 0.15:
+        clock.seconds += 0.1
+        odom(node, 0.3)
+        node.tick()
+        assert not confirmed[-1].data
+    clock.seconds = 10.0 + cap
+    odom(node, 0.3)
+    node.tick()
+    assert confirmed[-1].data
+    assert all(msg.linear.x == 0.0 for msg in commands)
+
+
+@pytest.mark.parametrize('after', ['silence', 'nan'])
+def test_moving_odometry_that_goes_missing_or_invalid_falls_back_to_the_timeout(guard, after):
+    node, clock, _, confirmed = guard
+    node.on_stop(Bool(data=True))
+    clock.seconds += 0.1
+    odom(node, 0.3)
+    node.tick()
+    if after == 'nan':
+        clock.seconds += 0.1
+        odom(node, float('nan'))
+    clock.seconds = 10.0 + node.p['confirm_timeout_s']
+    node.tick()
+    assert confirmed[-1].data
+
+
+def test_moving_odometry_after_the_timeout_revokes_confirmation(guard):
+    node, clock, _, confirmed = guard
+    node.on_stop(Bool(data=True))
+    clock.seconds = 10.0 + node.p['confirm_timeout_s']
+    node.tick()
+    assert confirmed[-1].data
+    odom(node, 0.3)
+    node.tick()
+    assert not confirmed[-1].data
+    for _ in range(7):
+        clock.seconds += 0.1
+        odom(node)
+        node.tick()
+    assert confirmed[-1].data
+
+
 def test_ros_topics_stop_mission_even_with_continuing_nav2_commands():
     import time
     from rclpy.executors import SingleThreadedExecutor

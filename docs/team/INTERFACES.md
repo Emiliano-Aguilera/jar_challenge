@@ -68,8 +68,12 @@ change and once per second):
   `true` (max wait `localization_wait_max_s`, 10 s). It does not wait after each
   trip: with the IMU heading (#44) the fix after turns adds little (bag: 1.8° ->
   1.3°) and waiting would cost up to 21-34 s per run.
-- Detection: skip frames taken while it is `false` (still under discussion
-  with perception).
+- Detection: skips frames until the flag has been `true` once (at most
+  `localization_wait_max_s`, 10 s, after `/map`, like mission). After turns it
+  keeps processing (`skip_heading_doubt: false`): mission does not wait for the
+  flag after trips, and coverage looks 1.0 s at each view while a fix takes
+  1.2-1.7 s, so skipping would miss the view. Turn `skip_heading_doubt` on if
+  the real robot shows boxes landing off right after turns.
 - `actualizaciones_giro: 0` turns the fix off (the flag then only covers the
   start). The simulator has no odometry error, but the fix also works there.
 
@@ -103,7 +107,14 @@ Nav2 cancellation or late goal acceptance. It also latches on `/done`.
 Both stop topics are reliable + transient local, depth 1. The guard publishes
 `/jar/parada_confirmada` at 20 Hz, true only while inhibited and fresh odometry
 has remained stationary for `still_time_s` (0.5 s). Stale, repeated, invalid or
-moving samples revoke confirmation. Mission requires a fresh acknowledgement
+moving samples revoke confirmation. "Fresh" is the arrival time: the robot's clock
+stamps `/odom` and may differ from the track station's. Fallback: once zero has been
+sent for `confirm_timeout_s` (3 s) after the latch, the guard confirms without still
+odometry while `/odom` is missing, stale or invalid, so it cannot block `/done`. Fresh
+odometry that shows motion vetoes this fallback until `confirm_max_s` (10 s) after the
+latch; after that the guard confirms anyway, so odometry noisy at rest cannot block
+`/done` either. Zero output alone confirms that commands are inhibited, not that the
+robot is at rest. Mission requires a fresh acknowledgement
 before finishing and again before `/done`; no acknowledgement means no `/done`.
 The 590 s deadline only warns, and never bypasses this check. Goal acceptance
 times out after `goal_accept_timeout_s` (5 s): mission requests this terminal stop

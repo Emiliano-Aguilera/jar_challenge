@@ -138,6 +138,22 @@ deteccion:
     #       (~0.13 s sweep, ray i at stamp + (n-1-i) * time_increment) instead of the scan stamp.
     #       No effect when time_increment is 0 (simulator).
     per_ray_time: true
+    #PARAM: skip frames until localization has said its pose is trusted once
+    #       (/jar/localizacion_lista true; true/false). Before that the start pose is still being
+    #       fixed: a box seen from a wrong pose would give fusion a candidate in the wrong place,
+    #       and a wrong candidate with >= 5 observations is never dropped. Nothing is lost: the
+    #       robot does not move until mission sees the same flag. No flag published = no wait.
+    wait_localization_start: true
+    #PARAM: ...but at most this long after /map, s (> 0). Mission starts anyway after its own
+    #       localization_wait_max_s (10 s): keep both equal so detection is never blind while
+    #       the robot moves.
+    localization_wait_max_s: 10.0
+    #PARAM: also skip frames while the flag is false after a turn (true/false). Off: mission
+    #       does not wait for the flag after trips, coverage looks 1.0 s at each view and the
+    #       fix takes 1.2-1.7 s (sim), so detection would miss the view. With the IMU heading
+    #       the error at stops is ~1.8 deg (0.05 m at 1.5 m, inside obs_sigma). Turn on if the
+    #       real robot shows boxes landing off right after turns.
+    skip_heading_doubt: false
     #PARAM: publish /jar/deteccion/debug (costs CPU; false in competition). Startup only.
     publish_debug: false
 
