@@ -50,7 +50,7 @@ class VisionParams:
     #       accepted; min S (100) rejects greys and washed-out pinks; min V (60) rejects
     #       near-black. First thing to retune under the venue's lighting.
     hsv_low_1: Tuple[int, int, int] = (0, 100, 60)
-    hsv_high_1: Tuple[int, int, int] = (10, 255, 255)
+    hsv_high_1: Tuple[int, int, int] = (8, 255, 255)
     #PARAM: hsv_low_2 / hsv_high_2 = second red range (H near 180).
     #       Support: same as above. Lower H (170) sets how much magenta is accepted.
     hsv_low_2: Tuple[int, int, int] = (170, 100, 60)
