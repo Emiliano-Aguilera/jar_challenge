@@ -177,6 +177,11 @@ One entry per decision: the question, what was tried, what was decided.
   is decoded. No flag ever received = never skip (`pruebas.launch.py` runs `localizacion` with
   `usar_amcl: false`, which publishes true at once, but a dead node must not blind detection).
   Skipped frames show as `localizing` in the 10 s summary. `settle_s` 0 in mission stays.
+- Checked (server, maze_3_6x6, 150 s, largada 0.15,-0.1,0.2, batch 20261102-114028-39bd8c8):
+  `localizing` 36 per 10 s before `/map` and until the flag (4.6 s after `/map`), then 0 for the
+  rest of the run. Reports at 16.7 s (0.007 m) and 52.7 s (0.032 m); `development` the night
+  before (batch 20261101-225642-dc3d2df, 300 s, no offset): 14-16 s and 46-51 s, 0.03-0.05 m.
+  The third box needs ~170 s, so 150 s stops at 200 either way. 0 violations, 0 collisions.
 
 ## Can a yellow, green, orange or neutral distractor pass the red filter? (2026-11-02)
 
@@ -203,7 +208,6 @@ One entry per decision: the question, what was tried, what was decided.
 - Repeat the measurement with localization (AMCL) instead of the fixed map = odom.
 - Decide with the team whether to tighten `obs_sigma_*` after seeing the real robot.
 - Confirm with AlsinaBautista that the 0.15 m single-view floor fits mission's policy.
-- Check `localizing` counts in a server run: the start wait should be a few seconds, 0 later.
 
 ## Testing without the simulator
 
