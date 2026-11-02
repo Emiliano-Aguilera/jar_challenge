@@ -103,7 +103,10 @@ Nav2 cancellation or late goal acceptance. It also latches on `/done`.
 Both stop topics are reliable + transient local, depth 1. The guard publishes
 `/jar/parada_confirmada` at 20 Hz, true only while inhibited and fresh odometry
 has remained stationary for `still_time_s` (0.5 s). Stale, repeated, invalid or
-moving samples revoke confirmation. Mission requires a fresh acknowledgement
+moving samples revoke confirmation. "Fresh" is the arrival time: the robot's clock
+stamps `/odom` and may differ from the track station's. Once zero has been sent for
+`confirm_timeout_s` (3 s) after the latch, the guard confirms even without still
+odometry, so a missing or noisy `/odom` cannot block `/done`. Mission requires a fresh acknowledgement
 before finishing and again before `/done`; no acknowledgement means no `/done`.
 The 590 s deadline only warns, and never bypasses this check. Goal acceptance
 times out after `goal_accept_timeout_s` (5 s): mission requests this terminal stop
