@@ -118,6 +118,10 @@ localizacion:
     vigia_confirmaciones: 2
     vigia_radio_m: 0.5
     vigia_rango_yaw_rad: 0.35
+    # /odom below both counts as still for the lost check and the fine-tuning. Raise them if
+    # the real /odom is noisy at rest, or those checks never run (docs/team/ON_SITE.md).
+    quieto_lineal_ms: 0.02
+    quieto_angular_rads: 0.05
     # Fine-tune AMCL while still: if the score is fine, move AMCL to the best pose within
     # afinar_radio_m when the fit is good and sharp (a plain corridor slides: no fix).
     afinar_quieto: true

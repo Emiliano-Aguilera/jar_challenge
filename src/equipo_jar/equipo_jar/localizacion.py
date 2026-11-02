@@ -178,6 +178,9 @@ class Localizacion(Node):
             'vigia_confirmaciones': 2,
             'vigia_radio_m': 0.5,
             'vigia_rango_yaw_rad': 0.35,
+            # /odom below both counts as still for the checks above (the judge's still: 0.02, 0.05).
+            'quieto_lineal_ms': 0.02,
+            'quieto_angular_rads': 0.05,
             # Fine-tune AMCL while still (vigia.py). false: only the lost check.
             'afinar_quieto': True,
             'afinar_radio_m': 0.15,
@@ -373,8 +376,9 @@ class Localizacion(Node):
 
     def al_recibir_odom(self, msg):
         tw = msg.twist.twist
-        quieto = (abs(tw.linear.x) < 0.02 and abs(tw.linear.y) < 0.02
-                  and abs(tw.angular.z) < 0.05)
+        quieto = (abs(tw.linear.x) < self.p['quieto_lineal_ms']
+                  and abs(tw.linear.y) < self.p['quieto_lineal_ms']
+                  and abs(tw.angular.z) < self.p['quieto_angular_rads'])
         if not quieto:
             self.quieto_desde = None
             self.vigia.descartar()
