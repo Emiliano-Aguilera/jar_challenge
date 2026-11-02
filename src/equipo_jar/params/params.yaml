@@ -237,7 +237,7 @@ mision:
     # Trip back in legs (vuelta.py): Nav2's NavFn cannot plan paths longer than ~2x the map side.
     # Legs from the start if the way back on /map is longer than this (m; 0 = only after a
     # failed direct try).
-    return_direct_max_m: 10.0
+    return_direct_max_m: 0.0
     return_leg_m: 5.0                 # length of each leg on /map (m)
     return_max_legs: 10               # legs per run; then straight to the start, as before
     return_max_failed_legs: 2         # failed legs in a row before going straight to the start
