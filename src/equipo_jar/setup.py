@@ -14,6 +14,7 @@ setup(
         ('share/' + package_name + '/launch', glob('launch/*.launch.py')),
         ('share/' + package_name + '/params', glob('params/*.yaml')),
         ('share/' + package_name + '/behavior_trees', glob('behavior_trees/*.xml')),
+        ('share/' + package_name + '/senuelos_control', glob('../../pruebas/senuelos_control/*.py') + glob('../../pruebas/senuelos_control/*.json')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
