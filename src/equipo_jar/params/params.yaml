@@ -155,9 +155,9 @@ deteccion:
 fusion:
   ros__parameters:
     #PARAM: radius to attach an observation to a candidate, m (0.15 < v < 0.5).
-    association_dist_m: 0.4
+    association_dist_m: 0.3
     #PARAM: candidates closer than this merge, m (0 < v <= association_dist_m).
-    merge_dist_m: 0.3
+    merge_dist_m: 0.25
     #PARAM: robot displacement needed to lift the single-view floor, m (>= 0; 0 disables).
     min_baseline_m: 0.3
     #PARAM: covariance floor (std) while seen from one spot, m (> mission's max_desvio_m).
@@ -165,7 +165,7 @@ fusion:
     #PARAM: seconds without observations before a weak candidate is dropped (> 0).
     stale_timeout_s: 20.0
     #PARAM: candidates with at least this many observations are never dropped (>= 1).
-    min_obs_to_keep: 5
+    min_obs_to_keep: 2
     #PARAM: robot poses kept per candidate for the baseline (>= 2).
     max_poses: 50
     #PARAM: robot base frame in /tf.
@@ -207,7 +207,7 @@ mision:
     extra_camera_frame: cam_1_color_optical_frame
     min_observations: 5
     max_deviation_m: 0.10
-    min_report_distance_m: 0.40
+    min_report_distance_m: 0.35
     same_point_distance_m: 0.02
     same_point_angle_rad: 0.1
     return_time_s: 480.0
