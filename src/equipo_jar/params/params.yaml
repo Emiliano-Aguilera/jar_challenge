@@ -165,7 +165,7 @@ fusion:
     #PARAM: seconds without observations before a weak candidate is dropped (> 0).
     stale_timeout_s: 20.0
     #PARAM: candidates with at least this many observations are never dropped (>= 1).
-    min_obs_to_keep: 5
+    min_obs_to_keep: 2
     #PARAM: robot poses kept per candidate for the baseline (>= 2).
     max_poses: 50
     #PARAM: robot base frame in /tf.
