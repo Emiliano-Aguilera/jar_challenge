@@ -22,6 +22,9 @@ parada:
     still_time_s: 0.5
     still_linear_mps: 0.01
     still_angular_rads: 0.02
+    # After the stop request, confirm anyway once zero has been sent this long (s). Without it,
+    # /odom stamped by an unsynced robot clock or noisy at rest would block /done (-100).
+    confirm_timeout_s: 3.0
 
 amcl:
   ros__parameters:

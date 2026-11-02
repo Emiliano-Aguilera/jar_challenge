@@ -17,10 +17,11 @@ class Parada(Node):
         self.p = parametros_en_vivo(self, {
             'command_max_age_s': 0.3, 'odom_max_age_s': 0.5,
             'still_time_s': 0.5, 'still_linear_mps': 0.01,
-            'still_angular_rads': 0.02,
+            'still_angular_rads': 0.02, 'confirm_timeout_s': 3.0,
         })
         self.has_map = False
         self.blocked = False
+        self.blocked_at = None
         self.command = None
         self.command_at = None
         self.odom_at = None
@@ -60,6 +61,7 @@ class Parada(Node):
     def on_stop(self, msg):
         if msg.data and not self.blocked:
             self.blocked = True
+            self.blocked_at = self.now()
             self.command = None
             self.still_since = None
             self.odom_at = None
@@ -72,13 +74,14 @@ class Parada(Node):
     def on_odom(self, msg):
         if not self.blocked or not self.valid_config():
             return
+        # Freshness is the arrival time, not the stamp: on the real robot /odom is stamped by
+        # the robot's computer, whose clock may differ from this one. Stamps must only advance.
         now = self.now()
         stamp = msg.header.stamp.sec * 1_000_000_000 + msg.header.stamp.nanosec
-        age = (self.get_clock().now().nanoseconds - stamp) / 1e9
         velocity = msg.twist.twist
         values = (velocity.linear.x, velocity.linear.y, velocity.linear.z,
                   velocity.angular.x, velocity.angular.y, velocity.angular.z)
-        if (stamp <= 0 or not 0 <= age <= self.p['odom_max_age_s']
+        if (stamp <= 0
                 or (self.odom_stamp is not None and stamp <= self.odom_stamp)
                 or not all(map(math.isfinite, values))):
             self.still_since = None
@@ -102,8 +105,13 @@ class Parada(Node):
         if (not valid or self.odom_at is None
                 or not 0 <= now - self.odom_at <= self.p['odom_max_age_s']):
             self.still_since = None
-        confirmed = (self.blocked and self.still_since is not None
-                     and now - self.still_since >= self.p['still_time_s'])
+        still = (self.still_since is not None
+                 and now - self.still_since >= self.p['still_time_s'])
+        # Fallback: zero has been published this long, so the robot has stopped (it stops by
+        # itself after 0.5 s without /cmd_vel) even if /odom is missing, late or noisy.
+        timed_out = (valid and self.blocked_at is not None
+                     and now - self.blocked_at >= self.p['confirm_timeout_s'])
+        confirmed = self.blocked and (still or timed_out)
         self.pub_confirmed.publish(Bool(data=confirmed))
 
 
