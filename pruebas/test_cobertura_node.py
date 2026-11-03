@@ -199,14 +199,9 @@ def test_old_worker_result_is_discarded(ros_pair):
     assert coverage._planned_generation == -1
 
 
-@pytest.mark.parametrize('correction', ['position', 'heading'])
-def test_worker_result_from_old_robot_pose_is_discarded(ros_pair, monkeypatch, correction):
-    coverage, _, _ = ros_pair
+def finished_plan(coverage, monkeypatch, **robot):
     coverage.al_recibir_mapa(map_message())
-    if correction == 'position':
-        put_tf(coverage, x=1.25, y=1.25)
-    else:
-        put_tf(coverage, yaw=math.pi / 2)
+    put_tf(coverage, **robot)
     coverage._planning_pose = Pose(0.55, 0.55, 0.0)
     coverage._planning_camera = Camera(0.1, 0.0, 0.0)
     future = Future()
@@ -216,8 +211,21 @@ def test_worker_result_from_old_robot_pose_is_discarded(ros_pair, monkeypatch, c
     published = []
     monkeypatch.setattr(coverage, '_publish', published.append)
     coverage._tick()
-    assert not published
+    return published
+
+
+def test_worker_result_from_old_robot_position_is_discarded(ros_pair, monkeypatch):
+    coverage, _, _ = ros_pair
+    assert not finished_plan(coverage, monkeypatch, x=1.25, y=1.25)
     assert coverage._planned_generation == -1
+
+
+def test_worker_result_is_kept_when_only_the_heading_changed(ros_pair, monkeypatch):
+    # Mission turns in place while it waits for the plan: a heading check would throw
+    # away every plan that takes longer than one turn.
+    coverage, _, _ = ros_pair
+    assert finished_plan(coverage, monkeypatch, yaw=math.pi / 2)
+    assert coverage._planned_generation == coverage._generation
 
 
 def test_map_and_parameter_updates_cancel_old_calculations(ros_pair):

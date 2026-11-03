@@ -50,7 +50,7 @@ from std_msgs.msg import Bool
 from std_srvs.srv import Empty
 from tf2_ros import Buffer, TransformException, TransformListener
 
-from equipo_jar.comun import QOS_ESTADO, QOS_MAPA, correr, parametros_en_vivo
+from equipo_jar.comun import QOS_ESTADO, QOS_MAPA, correr, declarar, parametros_en_vivo
 from equipo_jar.correccion_giro import CorreccionGiro
 from equipo_jar.pose_inicial import PoseInicial, puntos_del_scan
 from equipo_jar.vigia import Vigia
@@ -78,6 +78,7 @@ class Arranque:
         self.ultimo_estado = None
         self.bajando = set()    # nodes going down to unconfigured before configuring again
         self.consulta = None    # (nombre, future, vence) of revisar's state check
+        self.siguiente = 0      # next node for revisar_todos, round robin
 
     def reiniciar(self, nombre):
         """Take an active node down to unconfigured and back up. False if busy or unknown."""
@@ -122,6 +123,22 @@ class Arranque:
         if cliente.service_is_ready():
             self.consulta = (nombre, cliente.call_async(GetState.Request()),
                              time.monotonic() + self.plazo_s)
+
+    def revisar_todos(self):
+        """revisar over every managed node in turn: one call per timer tick.
+
+        Every Nav2 node has respawn (navegacion.launch.py), not only planner_server. A pending
+        check is read first; then the next node is asked.
+        """
+        nombres = list(self.clientes)
+        if not nombres:
+            return
+        if self.consulta is not None:
+            self.revisar(self.consulta[0])
+            return
+        nombre = nombres[self.siguiente % len(nombres)]
+        self.siguiente += 1
+        self.revisar(nombre)
 
     def paso(self):
         if not self.faltan:
@@ -242,14 +259,18 @@ class Localizacion(Node):
         # Los pone navegacion.launch.py. Sin AMCL (pruebas.launch.py) otro publica map -> odom.
         self.usar_amcl = self.declare_parameter('usar_amcl', True).value
         nodos_nav2 = self.declare_parameter('nodos_nav2', ['']).value
-        plazo = self.declare_parameter('plazo_arranque_s', 5.0).value
+        plazo = declarar(self, 'plazo_arranque_s', 5.0)
         self.arranque = Arranque(
             self, (['amcl'] if self.usar_amcl else []) + [n for n in nodos_nav2 if n], plazo)
         # Reloj de pared: el arranque no depende de /clock.
         self.create_timer(0.5, self.arranque.paso, clock=Clock(clock_type=ClockType.STEADY_TIME))
-        # planner_server has respawn (navegacion.launch.py): if it crashed, bring the new one up.
-        self.create_timer(1.0, lambda: self.arranque.revisar('planner_server'),
-                          clock=Clock(clock_type=ClockType.STEADY_TIME))
+        # Every Nav2 node has respawn (navegacion.launch.py): if one crashed, bring the new
+        # process up. One check step per tick (s, <= 0 = off): each node is asked about every
+        # 2 x ticks x nodes (~6 s with 0.5 s and 6 nodes).
+        revisar = declarar(self, 'revisar_nav2_s', 0.5)
+        if revisar > 0:
+            self.create_timer(revisar, self.arranque.revisar_todos,
+                              clock=Clock(clock_type=ClockType.STEADY_TIME))
 
         self.mapa_recibido = False
         self.mapa = None
