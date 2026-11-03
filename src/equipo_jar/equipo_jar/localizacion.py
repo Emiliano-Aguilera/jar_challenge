@@ -50,7 +50,7 @@ from std_msgs.msg import Bool
 from std_srvs.srv import Empty
 from tf2_ros import Buffer, TransformException, TransformListener
 
-from equipo_jar.comun import QOS_ESTADO, QOS_MAPA, correr, parametros_en_vivo
+from equipo_jar.comun import QOS_ESTADO, QOS_MAPA, correr, declarar, parametros_en_vivo
 from equipo_jar.correccion_giro import CorreccionGiro
 from equipo_jar.pose_inicial import PoseInicial, puntos_del_scan
 from equipo_jar.vigia import Vigia
@@ -263,11 +263,11 @@ class Localizacion(Node):
         # Los pone navegacion.launch.py. Sin AMCL (pruebas.launch.py) otro publica map -> odom.
         self.usar_amcl = self.declare_parameter('usar_amcl', True).value
         nodos_nav2 = self.declare_parameter('nodos_nav2', ['']).value
-        plazo = self.declare_parameter('plazo_arranque_s', 5.0).value
+        plazo = declarar(self, 'plazo_arranque_s', 5.0)
         # After start-up, ask one Nav2 node's state this often (s); <= 0 = off. A process
         # that died (planner_server crashed during a restart, 2 of ~60 server runs on
         # 2026-11-02) comes back unconfigured (respawn in navegacion.launch.py).
-        revisar = self.declare_parameter('revisar_nav2_s', 0.5).value
+        revisar = declarar(self, 'revisar_nav2_s', 0.5)
         self.arranque = Arranque(
             self, (['amcl'] if self.usar_amcl else []) + [n for n in nodos_nav2 if n], plazo,
             revisar)

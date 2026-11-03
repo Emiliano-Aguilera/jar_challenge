@@ -17,7 +17,7 @@ from rclpy.time import Time
 from tf2_ros import Buffer, TransformException, TransformListener
 
 from equipo_jar.mapa import planar_yaw
-from equipo_jar.comun import QOS_ESTADO, QOS_MAPA, correr
+from equipo_jar.comun import QOS_ESTADO, QOS_MAPA, convertir_como, correr, declarar
 from equipo_jar.cobertura_plan import Camera, Grid, Pose, Settings, angle_difference, make_plan
 
 
@@ -41,8 +41,8 @@ class Cobertura(Node):
         defaults = {**asdict(Settings()), 'base_frame': 'base_footprint',
                     'camera_frame': 'cam_1_color_optical_frame', 'tf_max_age': 1.0,
                     'retry_interval_s': 2.0}
-        self.p = {name: self.declare_parameter(name, value).value
-                  for name, value in defaults.items()}
+        self._defaults = defaults
+        self.p = {name: declarar(self, name, value) for name, value in defaults.items()}
         self._validate(self.p)
         self._generation = 0
         self._planned_generation = -1
@@ -77,19 +77,24 @@ class Cobertura(Node):
                 raise ValueError(f'{name} must be finite and positive')
 
     def _validate_parameters(self, parameters):
-        proposed = {name: self.get_parameter(name).value for name in self.p}
+        proposed = {name: self._read_parameter(name) for name in self.p}
         for parameter in parameters:
             if parameter.name in proposed:
-                proposed[parameter.name] = parameter.value
+                proposed[parameter.name] = convertir_como(
+                    parameter.value, self._defaults[parameter.name])
         try:
             self._validate(proposed)
         except (ValueError, TypeError) as exc:
             return SetParametersResult(successful=False, reason=str(exc))
         return SetParametersResult(successful=True)
 
+    def _read_parameter(self, name):
+        # A YAML 3 for a 3.0 default is declared with dynamic typing (comun.declarar).
+        return convertir_como(self.get_parameter(name).value, self._defaults[name])
+
     def _sync_parameters(self):
         # Humble has no post-set callback. Read only values ROS has committed.
-        current = {name: self.get_parameter(name).value for name in self.p}
+        current = {name: self._read_parameter(name) for name in self.p}
         if current != self.p:
             self.p = current
             self._generation += 1
