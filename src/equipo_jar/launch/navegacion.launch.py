@@ -77,25 +77,29 @@ def generate_launch_description():
                     parameters=comunes + ([extra] if extra else []), remappings=list(remapeos),
                     **opciones)
 
+    # respawn: if the process dies, the launch starts it again (unconfigured) and
+    # localizacion configures and activates it (Arranque.revisar_todos). planner_server died
+    # (segfault) when its watch restart hung in cleanup (3 of 3 server runs on 2026-11-02);
+    # every Nav2 node gets the same, so no crash leaves the robot without navigation.
+    relanzar = {'respawn': True, 'respawn_delay': 1.0}
+
     # Siempre arrancan: en pruebas.launch.py usan la TF fija en vez de AMCL.
     navegacion = [
         nodo('nav2_controller', 'controller_server', 'controller_server', al_smoother,
-             extra=limites_controller),
-        # respawn: when planner_server's TF view freezes, localizacion restarts it (vigia_planner.py),
-        # but the cleanup hangs and the process dies (segfault, 3 of 3 server runs on 2026-11-02).
-        # The new process starts unconfigured; localizacion configures and activates it again.
+             extra=limites_controller, **relanzar),
         nodo('nav2_planner', 'planner_server', 'planner_server', respawn=True, respawn_delay=1.0),
-        nodo('nav2_behaviors', 'behavior_server', 'behavior_server', al_smoother),
+        nodo('nav2_behaviors', 'behavior_server', 'behavior_server', al_smoother, **relanzar),
         nodo('nav2_velocity_smoother', 'velocity_smoother', 'velocity_smoother', [
             ('cmd_vel', 'cmd_vel_nav'),
-            ('cmd_vel_smoothed', '/jar/cmd_vel_smoothed')], extra=limites_smoother),
-        nodo('equipo_jar', 'parada', 'parada'),
+            ('cmd_vel_smoothed', '/jar/cmd_vel_smoothed')], extra=limites_smoother, **relanzar),
+        # parada again: on restart it reads the latched /jar/parar and /map (transient local).
+        nodo('equipo_jar', 'parada', 'parada', **relanzar),
         # Run log for the organizers (logs_jar/log.txt); it never stops the run.
         nodo('equipo_jar', 'registro', 'registro'),
         # navegar.xml: Humble's default tree, with the goal checker named (there are two).
         nodo('nav2_bt_navigator', 'bt_navigator', 'bt_navigator', extra={
             'default_nav_to_pose_bt_xml': os.path.join(
-                compartido, 'behavior_trees', 'navegar.xml')}),
+                compartido, 'behavior_trees', 'navegar.xml')}, **relanzar),
     ]
     con_amcl = LaunchConfiguration('localizacion')
 

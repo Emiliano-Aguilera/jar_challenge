@@ -17,7 +17,7 @@ from rclpy.time import Time
 from tf2_ros import Buffer, TransformException, TransformListener
 
 from equipo_jar.mapa import planar_yaw
-from equipo_jar.comun import QOS_ESTADO, QOS_MAPA, correr
+from equipo_jar.comun import QOS_ESTADO, QOS_MAPA, convertir_como, correr, declarar
 from equipo_jar.cobertura_plan import Camera, Grid, Pose, Settings, angle_difference, make_plan
 
 
@@ -41,8 +41,8 @@ class Cobertura(Node):
         defaults = {**asdict(Settings()), 'base_frame': 'base_footprint',
                     'camera_frame': 'cam_1_color_optical_frame', 'tf_max_age': 1.0,
                     'retry_interval_s': 2.0}
-        self.p = {name: self.declare_parameter(name, value).value
-                  for name, value in defaults.items()}
+        self._defaults = defaults
+        self.p = {name: declarar(self, name, value) for name, value in defaults.items()}
         self._validate(self.p)
         self._generation = 0
         self._planned_generation = -1
@@ -77,19 +77,24 @@ class Cobertura(Node):
                 raise ValueError(f'{name} must be finite and positive')
 
     def _validate_parameters(self, parameters):
-        proposed = {name: self.get_parameter(name).value for name in self.p}
+        proposed = {name: self._read_parameter(name) for name in self.p}
         for parameter in parameters:
             if parameter.name in proposed:
-                proposed[parameter.name] = parameter.value
+                proposed[parameter.name] = convertir_como(
+                    parameter.value, self._defaults[parameter.name])
         try:
             self._validate(proposed)
         except (ValueError, TypeError) as exc:
             return SetParametersResult(successful=False, reason=str(exc))
         return SetParametersResult(successful=True)
 
+    def _read_parameter(self, name):
+        # A YAML 3 for a 3.0 default is declared with dynamic typing (comun.declarar).
+        return convertir_como(self.get_parameter(name).value, self._defaults[name])
+
     def _sync_parameters(self):
         # Humble has no post-set callback. Read only values ROS has committed.
-        current = {name: self.get_parameter(name).value for name in self.p}
+        current = {name: self._read_parameter(name) for name in self.p}
         if current != self.p:
             self.p = current
             self._generation += 1
@@ -175,12 +180,15 @@ class Cobertura(Node):
     def _start_changed(self, pose, camera):
         # Changes smaller than half a sampling step stay within this plan's
         # spatial/angular discretization. Bigger corrections need a fresh plan.
+        # The robot's heading is not checked: it only changes the cost of the first turn,
+        # and mission turns in place every idle_spin_s while it waits for this plan, so a
+        # planning time over ~10 s would discard every plan and never publish one.
+        # (`camera` is the camera mount in base_footprint: a turn does not change it.)
         linear = self.p['candidate_spacing'] / 2
         angular = math.pi / self.p['heading_count']
         old, optical = self._planning_pose, self._planning_camera
         return (old is None or optical is None
                 or math.hypot(pose.x - old.x, pose.y - old.y) > linear
-                or abs(angle_difference(pose.yaw, old.yaw)) > angular
                 or math.hypot(camera.x - optical.x, camera.y - optical.y) > self._grid.resolution / 2
                 or abs(angle_difference(camera.yaw, optical.yaw)) > angular)
 
