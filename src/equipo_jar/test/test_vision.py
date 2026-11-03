@@ -7,7 +7,7 @@ import pytest
 from equipo_jar import vision
 
 P = vision.VisionParams()
-# Robot camera: 320x240, fx = fy ≈ 271.8, cx ≈ 158.7 (team CLAUDE.md).
+# Robot camera: 320x240, fx = fy ≈ 271.8, cx ≈ 158.7 (robot contract).
 K = np.array([[271.8, 0.0, 158.7], [0.0, 271.8, 120.0], [0.0, 0.0, 1.0]])
 
 
@@ -36,7 +36,7 @@ def test_mask_covers_both_red_ranges():
 
 
 def test_mask_rejects_distractor_colors():
-    # Distractors are blue, yellow, green or neutral (team CLAUDE.md).
+    # Distractors are blue, yellow, green or neutral (challenge rules).
     for color in [(255, 0, 0), (0, 255, 255), (0, 255, 0), (255, 255, 255), (0, 0, 0), (128, 128, 128)]:
         img, _ = image_with_box(color=color)
         assert not vision.red_mask(img, P).any(), color

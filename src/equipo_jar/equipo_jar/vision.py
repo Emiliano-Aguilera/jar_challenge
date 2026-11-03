@@ -15,7 +15,7 @@ Pipeline (LiDAR is the primary range source; the depth cloud is the fallback):
     checks: width_is_consistent, area_is_consistent, map_range_along ──► center_from_face
 
 Why LiDAR first: on the real robot the depth cloud is valid only beyond 0.6 m, has ~38 %
-valid pixels and gaps of up to a second (team CLAUDE.md). The LiDAR plane (0.18 m) cuts
+valid pixels and gaps of up to a second (robot contract). The LiDAR plane (0.18 m) cuts
 the 0.30 m tall boxes, runs at ~7 Hz and has 0.05-12 m range, so it always sees them.
 
 Frame conventions:
