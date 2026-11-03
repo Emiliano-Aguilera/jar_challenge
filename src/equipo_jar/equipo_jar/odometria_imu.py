@@ -78,11 +78,16 @@ class OdometriaImu(Node):
     def al_recibir_odom(self, msg):
         pose = msg.pose.pose
         valores = (segundos(msg.header.stamp), pose.position.x, pose.position.y,
-                   yaw_de(pose.orientation), msg.twist.twist.angular.z)
+                   yaw_de(pose.orientation))
         if self.descartar(valores):
             return
+        # The turn rate only feeds the gyro sign: a bad one must not drop a good pose.
+        # 0 is below signo_wz_minimo_rads, so that sample is left out of the sign.
+        wz = msg.twist.twist.angular.z
+        if not math.isfinite(wz):
+            wz = 0.0
         self.frame_odom = msg.header.frame_id or 'odom'
-        self.publicar(self.rumbo.con_odom(*valores))
+        self.publicar(self.rumbo.con_odom(*valores, wz))
 
     def publicar(self, transformadas):
         if not transformadas:
