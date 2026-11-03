@@ -270,7 +270,8 @@ mision:
     # Still guard, on the wall clock like the judge's 60 s rule. Still = /odom below these
     # speeds (half the judge's 0.02 m/s and 0.05 rad/s, so mission never calls still what
     # the judge calls moving). After still_rescue_s still: cancel the trip in progress.
-    # After still_finish_s: last reports round and /done (the run would end anyway).
+    # After still_finish_s: the end-of-run reports round, once (no /done: it may move again).
+    # Counted from the first accepted goal, not from launch (the robot waits still for /map).
     still_linear_mps: 0.01
     still_angular_rads: 0.025
     still_rescue_s: 30.0

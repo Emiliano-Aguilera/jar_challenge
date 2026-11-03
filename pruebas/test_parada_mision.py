@@ -257,7 +257,7 @@ def run_for(node, wall, seconds, vx=0.0):
         node.step_logic()
 
 
-def test_still_guard_cancels_then_reports_and_stops_before_the_60_s_rule(mission, monkeypatch):
+def test_still_guard_cancels_then_reports_before_the_60_s_rule(mission, monkeypatch):
     node, _, _ = mission
     wall = SimpleNamespace(t=100.0)
     monkeypatch.setattr(node, 'wall_now', lambda: wall.t)
@@ -273,8 +273,33 @@ def test_still_guard_cancels_then_reports_and_stops_before_the_60_s_rule(mission
     assert node.state == 'exploring'
     assert reports == []
     run_for(node, wall, node.p['still_finish_s'] - node.p['still_rescue_s'])
-    assert node.state == 'stopping'
     assert reports == [(2.0, 2.0)]
+    # No /done: if the robot moves again, the run goes on.
+    assert node.state == 'exploring'
+    run_for(node, wall, 10.0)
+    assert reports == [(2.0, 2.0)]
+
+
+def test_still_time_before_the_first_goal_does_not_count(mission, monkeypatch):
+    # The robot waits still for /map (any time) and while it localizes: seen in the
+    # simulator, the guard cancelled the first goal right after it was accepted.
+    node, _, _ = mission
+    wall = SimpleNamespace(t=100.0)
+    monkeypatch.setattr(node, 'wall_now', lambda: wall.t)
+    reports = []
+    monkeypatch.setattr(node, 'reportar_victima', lambda x, y: reports.append((x, y)))
+    seen_once = candidate()
+    seen_once.observaciones = 1
+    node.candidatas = [seen_once]
+    run_for(node, wall, 120.0)
+    goal = Goal()
+    accept(node, goal)
+    run_for(node, wall, node.p['still_rescue_s'] - 1.0)
+    assert goal.cancel_calls == 0
+    assert reports == []
+    assert node.state == 'exploring'
+    run_for(node, wall, 2.0)
+    assert goal.cancel_calls == 1
 
 
 def test_still_guard_ignores_a_moving_robot(mission, monkeypatch):

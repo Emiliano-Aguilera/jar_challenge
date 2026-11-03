@@ -104,7 +104,7 @@ class Mision(Node):
                                             'still_linear_mps': 0.01,
                                             'still_angular_rads': 0.025,
                                             'still_rescue_s': 30.0,   # cancel the trip in progress
-                                            'still_finish_s': 45.0,   # final reports, then /done
+                                            'still_finish_s': 45.0,   # final reports round (once)
                                             'cancel_timeout_s': 10.0,  # a cancel with no result: move on
                                             'goal_accept_max_timeouts': 3})
 
@@ -191,6 +191,10 @@ class Mision(Node):
         self.still_since = None
         self.odom_at = None
         self.still_rescued = False
+        self.still_reported = False
+        # Still time counts only from the first accepted goal: the robot waits still for /map
+        # (any time, the judge's clock starts at /map) and while it localizes.
+        self.still_from = None
 
         self.create_subscription(OccupancyGrid, '/map', self.al_recibir_mapa, QOS_MAPA)
         self.create_subscription(Path, '/jar/plan_cobertura', self.al_recibir_plan, QOS_ESTADO)
@@ -223,6 +227,7 @@ class Mision(Node):
             if not still:
                 self.still_since = None
                 self.still_rescued = False
+                self.still_reported = False
             elif self.still_since is None:
                 self.still_since = now
         except Exception:
@@ -236,9 +241,10 @@ class Mision(Node):
     def still_for(self):
         """Wall seconds the robot has been still on /odom; 0 if moving or /odom is stale."""
         now = self.wall_now()
-        if self.still_since is None or self.odom_at is None or now - self.odom_at > 1.0:
+        if (self.still_since is None or self.still_from is None or self.odom_at is None
+                or now - self.odom_at > 1.0):
             return 0.0
-        return now - self.still_since
+        return now - max(self.still_since, self.still_from)
 
     def cancel_current(self, reason):
         """Cancel the goal in progress (stuck path). Returns False if it can't be sent."""
@@ -274,11 +280,13 @@ class Mision(Node):
         if self.state not in ('exploring', 'returning', 'checking') or not self.goal_ever_accepted:
             return
         still = self.still_for()
-        if still >= self.p['still_finish_s']:
-            self.get_logger().warning(f'Robot still for {still:.0f} s (wall clock): final reports '
-                                      'and /done before the 60 s rule ends the run')
+        if still >= self.p['still_finish_s'] and not self.still_reported:
+            # The 60 s rule may end the run soon: send what the end of the run would send.
+            # No /done: if the robot moves again, the run goes on.
+            self.still_reported = True
+            self.get_logger().warning(f'Robot still for {still:.0f} s (wall clock): final '
+                                      'reports round before the 60 s rule')
             self.check_reports(self.p['min_observations_final'], self.p['max_deviation_final_m'])
-            self.change_state('stopping')
             return
         if (still >= self.p['still_rescue_s'] and not self.still_rescued
                 and self.nav_state == 'moving' and self.cancel_sent_at is None):
@@ -561,6 +569,8 @@ class Mision(Node):
             return
         self.extra.accepted()
         self.accept_timeouts = 0
+        if not self.goal_ever_accepted:
+            self.still_from = self.wall_now()
         self.goal_ever_accepted = True
         self.current_goal = goal_handle
         self.nav_state = 'moving'
@@ -681,8 +691,6 @@ class Mision(Node):
         self.check_reports(self.p['min_observations'], self.p['max_deviation_m'])
         self.check_pending_cancel()
         self.check_still()
-        if self.state == 'stopping':
-            return
         self.cancel_reported_inspection()
         self.check_stuck()
         self.check_goal_near_box()
