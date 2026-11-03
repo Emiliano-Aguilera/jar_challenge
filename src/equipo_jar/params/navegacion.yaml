@@ -163,6 +163,10 @@ localizacion:
     vigia_planner_espera_s: 30.0      # at most one restart this often
     vigia_planner_tf_max_s: 1.0       # our own TF must have advanced within this time
     plazo_arranque_s: 5.0             # s sin respuesta de un nodo de Nav2 antes de volver a preguntar
+    # After start-up, ask one Nav2 node's state this often (s); <= 0 = off. A Nav2 process
+    # that died is started again by the launch (respawn) and found here unconfigured: this
+    # brings it back to active (planner_server crashed during a restart, 2026-11-02).
+    revisar_nav2_s: 0.5
 
 # ---------------------------------------------------------------------------
 # Navegación (Nav2): planner (camino), controller (seguirlo), behaviors

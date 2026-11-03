@@ -66,8 +66,9 @@ class Arranque:
     respuesta en `plazo_s` se abandona y se vuelve a preguntar el estado.
     """
 
-    def __init__(self, nodo, nombres, plazo_s):
+    def __init__(self, nodo, nombres, plazo_s, revisar_s=0.0):
         self.log = nodo.get_logger()
+        self.nombres = list(nombres)
         self.faltan = list(nombres)
         self.plazo_s = plazo_s
         self.clientes = {n: (nodo.create_client(GetState, f'/{n}/get_state'),
@@ -77,6 +78,59 @@ class Arranque:
         self.vence = 0.0
         self.ultimo_estado = None
         self.bajando = set()    # nodes going down to unconfigured before configuring again
+        # Check after start-up (revisar): a Nav2 process that died is started again by the
+        # launch (respawn) as unconfigured; this brings it back to active.
+        self.revisar_s = revisar_s
+        self.revision = None    # (nombre, cliente, future) of the state check in progress
+        self.t_revision = 0.0
+        self.siguiente = 0      # next node to check, round robin
+        self.arrancado = False  # all nodes reached active once
+        self.recuperados = 0
+
+    def tick(self):
+        """Steady timer: start-up steps, then the periodic check."""
+        self.paso()
+        self.revisar()
+
+    def revisar(self):
+        """With every node active, ask one node's state every revisar_s; a node found
+        unconfigured or inactive (a respawned process) is brought up again."""
+        if not self.arrancado or self.faltan or self.revisar_s <= 0 or not self.nombres:
+            return
+        ahora = time.monotonic()
+        if self.revision is not None:
+            nombre, cliente, futuro = self.revision
+            if futuro.done():
+                self.revision = None
+                try:
+                    estado = futuro.result().current_state
+                except Exception:   # noqa: BLE001 - a lost answer only skips one check
+                    return
+                self.revisado(nombre, estado)
+            elif ahora - self.t_revision > self.plazo_s:
+                cliente.remove_pending_request(futuro)
+                self.revision = None
+            return
+        if ahora - self.t_revision < self.revisar_s:
+            return
+        self.t_revision = ahora
+        nombre = self.nombres[self.siguiente % len(self.nombres)]
+        self.siguiente += 1
+        cliente = self.clientes[nombre][0]
+        if cliente.service_is_ready():   # not ready: the process is down or restarting
+            self.revision = (nombre, cliente, cliente.call_async(GetState.Request()))
+
+    def revisado(self, nombre, estado):
+        if self.faltan or estado.id not in (State.PRIMARY_STATE_UNCONFIGURED,
+                                            State.PRIMARY_STATE_INACTIVE):
+            return      # active, or a transition in progress: nothing to do
+        self.recuperados += 1
+        self.log.warning(f'{nombre}: {estado.label} after start-up (process restarted?): '
+                         f'bringing it up again (recoveries {self.recuperados})')
+        self.bajando.discard(nombre)
+        self.faltan.append(nombre)
+        self.ultimo_estado = None
+        self.paso()
 
     def reiniciar(self, nombre):
         """Take an active node down to unconfigured and back up. False if busy or unknown."""
@@ -129,6 +183,8 @@ class Arranque:
             self.ultimo_estado = None
             if not self.faltan:
                 self.log.info('Nav2 activo')
+                self.arrancado = True
+                self.t_revision = time.monotonic()
             return
         transicion = {State.PRIMARY_STATE_UNCONFIGURED: Transition.TRANSITION_CONFIGURE,
                       State.PRIMARY_STATE_INACTIVE: Transition.TRANSITION_ACTIVATE}.get(estado.id)
@@ -208,10 +264,15 @@ class Localizacion(Node):
         self.usar_amcl = self.declare_parameter('usar_amcl', True).value
         nodos_nav2 = self.declare_parameter('nodos_nav2', ['']).value
         plazo = self.declare_parameter('plazo_arranque_s', 5.0).value
+        # After start-up, ask one Nav2 node's state this often (s); <= 0 = off. A process
+        # that died (planner_server crashed during a restart, 2 of ~60 server runs on
+        # 2026-11-02) comes back unconfigured (respawn in navegacion.launch.py).
+        revisar = self.declare_parameter('revisar_nav2_s', 0.5).value
         self.arranque = Arranque(
-            self, (['amcl'] if self.usar_amcl else []) + [n for n in nodos_nav2 if n], plazo)
+            self, (['amcl'] if self.usar_amcl else []) + [n for n in nodos_nav2 if n], plazo,
+            revisar)
         # Reloj de pared: el arranque no depende de /clock.
-        self.create_timer(0.5, self.arranque.paso, clock=Clock(clock_type=ClockType.STEADY_TIME))
+        self.create_timer(0.5, self.arranque.tick, clock=Clock(clock_type=ClockType.STEADY_TIME))
 
         self.mapa_recibido = False
         self.mapa = None
