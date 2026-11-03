@@ -109,8 +109,8 @@ def test_box_drawn_in_the_map_is_not_taken_as_a_wall():
 
 # Cuarto cerrado de x 0.85 a 1.60 m e y 1.65 a 2.40 m (columnas 17-31, filas 33-47), con
 # una ranura de 10 cm (filas 39-40) en la pared de la derecha. Por la ranura se ve la caja
-# en (2, 2), pero el robot (0.42 m de ancho con margen) no pasa. Es el caso del bolsillo
-# de laberinto_1.
+# en (2, 2), pero el robot (0.42 m de ancho con margen) no pasa. Es el caso de un bolsillo
+# de un mapa de práctica.
 POCKET = ([(i, j) for i in range(17, 32) for j in (33, 47)]
           + [(i, j) for i in (17, 31) for j in range(33, 48) if not (i == 31 and j in (39, 40))])
 

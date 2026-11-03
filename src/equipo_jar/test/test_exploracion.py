@@ -123,7 +123,7 @@ MAP_RESOLUTION = 0.05   # m por celda en los mapas de práctica
 
 
 def test_coverage_views_25_cm_apart_are_different():
-    # Ejemplo de Marco (laberinto_1_start_0): vistas 31 y 34, misma dirección, a 0.25 m.
+    # Caso de un mapa de práctica: vistas 31 y 34, misma dirección, a 0.25 m.
     yaw = 4.71238898038469
     poses = [pose(-2.675, 2.125, yaw), pose(-2.925, 2.125, yaw)]
     visited = [(-2.675, 2.125, yaw_from_quaternion(quaternion(yaw)))]
@@ -160,7 +160,7 @@ def test_params_respect_the_coverage_resolution():
 # --- goal_position: girar en el lugar ---
 # Nav2 da por llegado un objetivo a menos de xy_goal_tolerance (0.10 m) y en el giro se
 # puede correr un poco. Si misión volviera a pedir el x,y del plan para el giro siguiente,
-# Nav2 tendría que acercarse otra vez (laberinto_1: 23 s trabado, notas de Hans).
+# Nav2 tendría que acercarse otra vez (en un mapa de práctica quedó 23 s trabado).
 
 TURN_RADIUS = 0.20
 
@@ -170,7 +170,7 @@ def test_without_tf_goes_to_the_plan_point():
 
 
 def test_robot_near_the_plan_point_turns_in_place():
-    # Caso de Hans: el objetivo (-2.17, 2.43) se dio por llegado con el robot a 0.14 m.
+    # Caso medido: el objetivo (-2.17, 2.43) se dio por llegado con el robot a 0.14 m.
     robot = (-2.03, 2.43, 0.5)
     assert goal_position(-2.17, 2.43, robot, TURN_RADIUS) == (-2.03, 2.43, True)
 
@@ -244,7 +244,7 @@ def test_near_box():
 
 
 def test_first_pending_skips_a_point_next_to_a_box():
-    # Caso de Hans en laberinto_simple: vista (0.144, 1.969) con la caja roja en (0.0, 2.0).
+    # Caso de un mapa de práctica: vista (0.144, 1.969) con la caja roja en (0.0, 2.0).
     poses = [pose(0.144, 1.969, 0.0), pose(1.0, 1.0, 0.0)]
     zones = box_zones([box_cand(1, 0.0, 2.0, sigma=0.10)], 2, CLEARANCE, 1.0)
     assert first_pending(poses, [], DIST, ANG, zones) is poses[1]
