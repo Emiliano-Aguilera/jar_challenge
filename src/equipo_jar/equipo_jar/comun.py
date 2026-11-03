@@ -95,12 +95,13 @@ def parametros_en_vivo(nodo, valores):
 def correr(clase_nodo, args=None):
     """main() de todos los nodos."""
     import rclpy
+    from rclpy.executors import ExternalShutdownException
     rclpy.init(args=args)
     nodo = clase_nodo()
     try:
         rclpy.spin(nodo)
-    except KeyboardInterrupt:
-        pass
+    except (KeyboardInterrupt, ExternalShutdownException):
+        pass    # Ctrl+C / end of the run: Humble raises the second one on SIGINT
     finally:
         nodo.destroy_node()
         if rclpy.ok():
