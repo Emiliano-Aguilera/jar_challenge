@@ -9,11 +9,12 @@ Esqueleto: espera el mapa y no hace nada más. Hasta recibir /map no se puede
 mover el robot ni reportar (§5).
 """
 import os
+import time
 from ament_index_python.packages import get_package_share_directory
 
 from geometry_msgs.msg import PointStamped
 from nav2_msgs.action import NavigateToPose
-from nav_msgs.msg import OccupancyGrid, Path
+from nav_msgs.msg import OccupancyGrid, Odometry, Path
 from rclpy.action import ActionClient
 from rclpy.node import Node
 from std_msgs.msg import Empty, Bool
@@ -97,7 +98,15 @@ class Mision(Node):
                                             'extra_view_clearance_m': 0.24,
                                             'extra_preferred_clearance_m': 0.30,
                                             'extra_turn_speed_rads': 0.7,
-                                            'extra_camera_frame': 'cam_1_color_optical_frame'})
+                                            'extra_camera_frame': 'cam_1_color_optical_frame',
+                                            # Still guard (wall clock, like the judge's 60 s rule):
+                                            # still = /odom below these (half the judge's 0.02 / 0.05).
+                                            'still_linear_mps': 0.01,
+                                            'still_angular_rads': 0.025,
+                                            'still_rescue_s': 30.0,   # cancel the trip in progress
+                                            'still_finish_s': 45.0,   # final reports, then /done
+                                            'cancel_timeout_s': 10.0,  # a cancel with no result: move on
+                                            'goal_accept_max_timeouts': 3})
 
         self.mapa = None
         self.grid = None
@@ -171,6 +180,18 @@ class Mision(Node):
         self.recoveries = 0
         self.extra = ExtraSearch(self)
 
+        # Goal bookkeeping: each sent goal gets a number, so a late answer or result of an
+        # abandoned goal is not taken for the current one.
+        self.goal_seq = 0
+        self.goal_rejected = False
+        self.accept_timeouts = 0
+        self.cancel_sent_at = None     # monotonic time of the pending cancel, if any
+        self.goal_ever_accepted = False
+        # Still guard (wall clock): since when /odom shows the robot still.
+        self.still_since = None
+        self.odom_at = None
+        self.still_rescued = False
+
         self.create_subscription(OccupancyGrid, '/map', self.al_recibir_mapa, QOS_MAPA)
         self.create_subscription(Path, '/jar/plan_cobertura', self.al_recibir_plan, QOS_ESTADO)
         self.create_subscription(
@@ -184,6 +205,85 @@ class Mision(Node):
             f'Hay que encontrar {self.cantidad_victimas} víctimas. Esperando el mapa en /map...')
         self.create_subscription(OccupancyGrid, '/global_costmap/costmap', self.on_costmap, QOS_MAPA)
         self.create_subscription(Bool, '/jar/localizacion_lista', self.on_localization_ready, QOS_ESTADO)
+        self.create_subscription(Odometry, '/odom', self.on_odom, 10)
+
+    def on_odom(self, msg):
+        """Still guard: the judge ends the run after 60 s still on /odom (wall clock)."""
+        try:
+            tw = msg.twist.twist
+            values = (tw.linear.x, tw.linear.y, tw.angular.z)
+            if not all(math.isfinite(v) for v in values):
+                self.still_since = None
+                return
+            now = self.wall_now()
+            self.odom_at = now
+            still = (abs(tw.linear.x) < self.p['still_linear_mps']
+                     and abs(tw.linear.y) < self.p['still_linear_mps']
+                     and abs(tw.angular.z) < self.p['still_angular_rads'])
+            if not still:
+                self.still_since = None
+                self.still_rescued = False
+            elif self.still_since is None:
+                self.still_since = now
+        except Exception:
+            self.get_logger().error(f'Error en on_odom:\n{traceback.format_exc()}',
+                                    throttle_duration_sec=5.0)
+
+    def wall_now(self):
+        """Wall clock for the still guard and cancel timeouts (tests replace it)."""
+        return time.monotonic()
+
+    def still_for(self):
+        """Wall seconds the robot has been still on /odom; 0 if moving or /odom is stale."""
+        now = self.wall_now()
+        if self.still_since is None or self.odom_at is None or now - self.odom_at > 1.0:
+            return 0.0
+        return now - self.still_since
+
+    def cancel_current(self, reason):
+        """Cancel the goal in progress (stuck path). Returns False if it can't be sent."""
+        try:
+            self.current_goal.cancel_goal_async()
+        except Exception as e:
+            self.get_logger().warning(f'Navigation cancellation unavailable: {e}')
+            return False
+        self.stuck_canceling = True
+        self.cancel_sent_at = self.wall_now()
+        self.get_logger().warning(f'Cancelo el viaje: {reason}')
+        return True
+
+    def check_pending_cancel(self):
+        """A cancel whose result never comes (seen when planner_server died): give the goal
+        up as failed after cancel_timeout_s, so mission sends the next one (Nav2 preempts)."""
+        if self.nav_state != 'moving' or self.cancel_sent_at is None:
+            return
+        if self.wall_now() - self.cancel_sent_at < self.p['cancel_timeout_s']:
+            return
+        self.get_logger().warning(f'No result {self.p["cancel_timeout_s"]:.0f} s after the cancel: '
+                                  'I take the trip as failed')
+        self.goal_seq += 1          # a late result of that goal is ignored
+        self.current_goal = None
+        self.cancel_sent_at = None
+        self.stuck_canceling = False
+        self.inspection_canceling = False
+        self.canceling = False
+        self.nav_state = 'failed'
+
+    def check_still(self):
+        """Wall-clock guard against the 60 s still rule, across goals and states."""
+        if self.state not in ('exploring', 'returning', 'checking') or not self.goal_ever_accepted:
+            return
+        still = self.still_for()
+        if still >= self.p['still_finish_s']:
+            self.get_logger().warning(f'Robot still for {still:.0f} s (wall clock): final reports '
+                                      'and /done before the 60 s rule ends the run')
+            self.check_reports(self.p['min_observations_final'], self.p['max_deviation_final_m'])
+            self.change_state('stopping')
+            return
+        if (still >= self.p['still_rescue_s'] and not self.still_rescued
+                and self.nav_state == 'moving' and self.cancel_sent_at is None):
+            self.still_rescued = True
+            self.cancel_current(f'robot still for {still:.0f} s (wall clock)')
 
     def al_recibir_mapa(self, mapa):
         if self.mapa is None:
@@ -307,6 +407,12 @@ class Mision(Node):
         goal = NavigateToPose.Goal()
         goal.pose = pose
         goal.behavior_tree = tree
+        self.goal_seq += 1
+        seq = self.goal_seq
+        self.goal_rejected = False
+        self.cancel_sent_at = None
+        self.current_goal = None
+        self.canceling = False
         self.inspection_cancel_goal = None
         self.inspection_canceling = False
         self.nav_state = "sending"
@@ -319,7 +425,7 @@ class Mision(Node):
         self.stuck_canceling = False
         try:
             future = self.navegacion.send_goal_async(goal, feedback_callback=self.on_feedback)
-            future.add_done_callback(self.on_goal_response)
+            future.add_done_callback(lambda f, s=seq: self.on_goal_response(f, s))
         except Exception as e:
             self.get_logger().error(f'Navigation goal send failed: {e}; stopping')
             self.change_state('stopping')
@@ -349,12 +455,14 @@ class Mision(Node):
         goal = self.current_goal
         self.inspection_cancel_goal = goal
         self.inspection_canceling = True
+        self.cancel_sent_at = self.wall_now()
         try:
             future = goal.cancel_goal_async()
             future.add_done_callback(lambda result: self.on_inspection_cancel_response(result, goal))
             self.get_logger().info('Cancelling inspection: candidate already reported')
         except Exception as e:
             self.inspection_canceling = False
+            self.cancel_sent_at = None
             self.get_logger().warning(f'Inspection cancellation unavailable: {e}')
 
     def on_inspection_cancel_response(self, future, goal):
@@ -364,9 +472,11 @@ class Mision(Node):
         try:
             if not future.result().goals_canceling:
                 self.inspection_canceling = False
+                self.cancel_sent_at = None
                 self.get_logger().warning('Inspection cancellation rejected; waiting for navigation')
         except Exception as e:
             self.inspection_canceling = False
+            self.cancel_sent_at = None
             self.get_logger().warning(f'Inspection cancellation response unavailable: {e}')
 
     def check_stuck(self):
@@ -400,9 +510,7 @@ class Mision(Node):
         elif self.state != 'returning' and self.recoveries >= self.p['max_recoveries']:
             reason = f'Nav2 lleva {self.recoveries} recuperaciones'
         if reason is not None:
-            self.current_goal.cancel_goal_async()
-            self.stuck_canceling = True
-            self.get_logger().warning(f'Cancelo el viaje: {reason}')
+            self.cancel_current(reason)
 
     def check_goal_near_box(self):
         if self.state != 'exploring':
@@ -438,33 +546,40 @@ class Mision(Node):
                                 f'quedó ocupado en el costmap')
             self.current_point = None
 
-    def handle_on_goal_response(self, future):
+    def handle_on_goal_response(self, future, seq=None):
         goal_handle = future.result()
-        if self.state in ('stopping', 'finishing', 'finished'):
+        if self.state in ('stopping', 'finishing', 'finished') or (seq is not None and seq != self.goal_seq):
+            # Late answer to a goal mission already gave up (or the run is ending): cancel it.
             if goal_handle.accepted:
                 goal_handle.cancel_goal_async()
             return
         if not goal_handle.accepted:
             self.extra.result('rejected')
+            self.goal_rejected = True
             self.nav_state = 'failed'
-            self.get_logger().warn('Fallo el objetivo')
+            self.get_logger().warn('Fallo el objetivo: Nav2 lo rechazó')
             return
         self.extra.accepted()
+        self.accept_timeouts = 0
+        self.goal_ever_accepted = True
         self.current_goal = goal_handle
         self.nav_state = 'moving'
-        goal_handle.get_result_async().add_done_callback(self.on_goal_result)
+        goal_handle.get_result_async().add_done_callback(lambda f, s=seq: self.on_goal_result(f, s))
 
-    def on_goal_response(self, future):
+    def on_goal_response(self, future, seq=None):
         try:
-            self.handle_on_goal_response(future)
+            self.handle_on_goal_response(future, seq)
         except Exception:
             self.nav_state = 'failed'
             if self.state not in ('stopping', 'finishing', 'finished'):
                 self.change_state('stopping')
             self.get_logger().error(f'Error en on_goal_response:\n{traceback.format_exc()}', throttle_duration_sec=5.0)
 
-    def handle_on_goal_result(self, future):
+    def handle_on_goal_result(self, future, seq=None):
+        if seq is not None and seq != self.goal_seq:
+            return      # result of a goal mission already gave up
         self.inspection_canceling = False
+        self.cancel_sent_at = None
         status = future.result().status
         outcome = ('arrived' if status == GoalStatus.STATUS_SUCCEEDED else
                    'cancelled' if status == GoalStatus.STATUS_CANCELED else 'failed')
@@ -476,11 +591,12 @@ class Mision(Node):
             self.nav_state = 'failed'
             self.get_logger().info(f'Status failed (recuperaciones: {self.recoveries})')
 
-    def on_goal_result(self, future):
+    def on_goal_result(self, future, seq=None):
         try:
-            self.handle_on_goal_result(future)
+            self.handle_on_goal_result(future, seq)
         except Exception:
-            self.nav_state = 'failed'
+            if seq is None or seq == self.goal_seq:
+                self.nav_state = 'failed'
             self.get_logger().error(f'Error en on_goal_result:\n{traceback.format_exc()}', throttle_duration_sec=5.0)
 
     def handle_on_feedback(self, msg):
@@ -530,9 +646,17 @@ class Mision(Node):
                      and math.isfinite(limit) and 0 < limit < 60)
             if (not valid or self.goal_start_time is None
                     or self.seconds_since_t0() - self.goal_start_time >= limit):
-                self.get_logger().error('Navigation acceptance timed out or has invalid timing; stopping')
-                self.change_state('stopping')
-                return
+                self.accept_timeouts += 1
+                if not valid or self.accept_timeouts >= self.p['goal_accept_max_timeouts']:
+                    self.get_logger().error('Navigation acceptance timed out or has invalid timing; stopping')
+                    self.change_state('stopping')
+                    return
+                # One slow answer does not end the run: give this goal up (a late acceptance
+                # is cancelled in handle_on_goal_response) and go on.
+                self.get_logger().warning(f'Navigation acceptance timed out '
+                                          f'({self.accept_timeouts} in a row): trip failed')
+                self.goal_seq += 1
+                self.nav_state = 'failed'
         if not self.start_locked:
             pose = self.current_pose()
             if pose is not None:
@@ -555,6 +679,10 @@ class Mision(Node):
             self.update_search_history()
         # Después del arranque: sin localización lista, una candidata podría quedar mal ubicada.
         self.check_reports(self.p['min_observations'], self.p['max_deviation_m'])
+        self.check_pending_cancel()
+        self.check_still()
+        if self.state == 'stopping':
+            return
         self.cancel_reported_inspection()
         self.check_stuck()
         self.check_goal_near_box()
@@ -587,6 +715,10 @@ class Mision(Node):
         if self.nav_state == 'sending' or self.nav_state == 'moving':
             return
         if self.nav_state == 'arrived' or self.nav_state == 'failed':
+            if self.goal_rejected and self.current_point is not None:
+                # Nav2 refused the goal (e.g. bt_navigator coming back up): not a visit.
+                self.get_logger().info('Goal rejected: the plan point stays pending')
+                self.current_point = None
             if self.current_point is not None:
                 x = self.current_point.pose.position.x
                 y = self.current_point.pose.position.y
@@ -618,6 +750,10 @@ class Mision(Node):
             self.current_point = None
             self.nav_state = 'idle'
             self.settle_until = self.seconds_since_t0() + self.p['settle_s']
+            if self.goal_rejected:
+                # Wait a bit before the next goal instead of retrying at 10 Hz.
+                self.settle_until = max(self.settle_until, self.seconds_since_t0() + 1.0)
+                self.goal_rejected = False
         if self.look_until is not None and self.look_at_inspection():
             return
         if self.settle_until is not None and self.seconds_since_t0() < self.settle_until:
@@ -726,6 +862,7 @@ class Mision(Node):
             if not self.canceling and not self.inspection_canceling and not self.stuck_canceling:
                 self.current_goal.cancel_goal_async()
                 self.canceling = True
+                self.cancel_sent_at = self.wall_now()
                 self.get_logger().info("Cancelando objetivo...")
             return
         if not self.return_sent:
@@ -877,8 +1014,12 @@ class Mision(Node):
             reachable = self.grid.reachable_from(x_robot, y_robot, self.p['visit_transit_radius_m'],
                                                 self.p['visit_free_threshold'])
         except ValueError as e:
-            self.get_logger().info(f'No calculo zona alcanzable: {e}. Inspecciono más tarde',
-                                    throttle_duration_sec=5.0)
+            # Counted as a failed try, like "no place to look from": otherwise this candidate
+            # stays pending and blocks the return until return_time_s.
+            _, attempts = self.failed_inspections.get(c.id, (0, 0))
+            self.failed_inspections[c.id] = (c.observaciones, attempts + 1)
+            self.get_logger().info(f'No calculo zona alcanzable: {e} (intento {attempts + 1} de '
+                                    f'{self.p["visit_max_attempts"]})', throttle_duration_sec=5.0)
             return False
         view = viewpoint_for(self.mapa, c.centro.x, c.centro.y, x_robot, y_robot, self.p['visit_distance_m'], 
                             self.p['visit_clearance_m'], self.p['visit_angles'], self.p['visit_min_shift_m'],

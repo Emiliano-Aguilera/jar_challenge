@@ -267,3 +267,16 @@ mision:
     return_max_legs: 10               # legs per run; then straight to the start, as before
     return_max_failed_legs: 2         # failed legs in a row before going straight to the start
     return_snap_m: 0.3                # start or robot this close to a wall still count (m)
+    # Still guard, on the wall clock like the judge's 60 s rule. Still = /odom below these
+    # speeds (half the judge's 0.02 m/s and 0.05 rad/s, so mission never calls still what
+    # the judge calls moving). After still_rescue_s still: cancel the trip in progress.
+    # After still_finish_s: last reports round and /done (the run would end anyway).
+    still_linear_mps: 0.01
+    still_angular_rads: 0.025
+    still_rescue_s: 30.0
+    still_finish_s: 45.0
+    # A cancel with no result after this long (s): the trip counts as failed and mission
+    # goes on (seen when planner_server died: the robot stood still until the 60 s rule).
+    cancel_timeout_s: 10.0
+    # Goal acceptance timeouts (goal_accept_timeout_s) in a row before the terminal stop.
+    goal_accept_max_timeouts: 3
