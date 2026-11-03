@@ -175,12 +175,15 @@ class Cobertura(Node):
     def _start_changed(self, pose, camera):
         # Changes smaller than half a sampling step stay within this plan's
         # spatial/angular discretization. Bigger corrections need a fresh plan.
+        # The robot's heading is not checked: it only changes the cost of the first turn,
+        # and mission turns in place every idle_spin_s while it waits for this plan, so a
+        # planning time over ~10 s would discard every plan and never publish one.
+        # (`camera` is the camera mount in base_footprint: a turn does not change it.)
         linear = self.p['candidate_spacing'] / 2
         angular = math.pi / self.p['heading_count']
         old, optical = self._planning_pose, self._planning_camera
         return (old is None or optical is None
                 or math.hypot(pose.x - old.x, pose.y - old.y) > linear
-                or abs(angle_difference(pose.yaw, old.yaw)) > angular
                 or math.hypot(camera.x - optical.x, camera.y - optical.y) > self._grid.resolution / 2
                 or abs(angle_difference(camera.yaw, optical.yaw)) > angular)
 
