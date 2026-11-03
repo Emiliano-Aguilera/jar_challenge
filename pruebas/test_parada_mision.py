@@ -321,6 +321,23 @@ def test_still_guard_waits_for_a_first_accepted_goal(mission, monkeypatch):
     assert node.state == 'exploring'
 
 
+def test_lost_acceptance_keeps_the_plan_point(mission, monkeypatch):
+    node, clock, _ = mission
+    point = node.make_pose(1.0, 1.0, 0.0)
+    node.plan = SimpleNamespace(poses=[point])
+    nav = FreshNavigation()
+    monkeypatch.setattr(node, 'navegacion', nav)
+    node.step_logic()
+    assert len(nav.responses) == 1
+    clock.seconds += node.p['goal_accept_timeout_s'] + 0.1
+    node.step_logic()                       # acceptance timed out: trip failed
+    node.step_logic()
+    assert node.visited == []
+    clock.seconds += 1.1
+    node.step_logic()
+    assert len(nav.responses) == 2          # the same point is tried again
+
+
 def test_rejected_goal_keeps_the_plan_point(mission, monkeypatch):
     node, clock, _ = mission
     point = node.make_pose(1.0, 1.0, 0.0)

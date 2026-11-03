@@ -100,9 +100,9 @@ class Mision(Node):
                                             'extra_turn_speed_rads': 0.7,
                                             'extra_camera_frame': 'cam_1_color_optical_frame',
                                             # Still guard (wall clock, like the judge's 60 s rule):
-                                            # still = /odom below these (half the judge's 0.02 / 0.05).
-                                            'still_linear_mps': 0.01,
-                                            'still_angular_rads': 0.025,
+                                            # still = /odom at or below these (the judge's rule).
+                                            'still_linear_mps': 0.02,
+                                            'still_angular_rads': 0.05,
                                             'still_rescue_s': 30.0,   # cancel the trip in progress
                                             'still_finish_s': 45.0,   # final reports round (once)
                                             'cancel_timeout_s': 10.0,  # a cancel with no result: move on
@@ -221,9 +221,9 @@ class Mision(Node):
                 return
             now = self.wall_now()
             self.odom_at = now
-            still = (abs(tw.linear.x) < self.p['still_linear_mps']
-                     and abs(tw.linear.y) < self.p['still_linear_mps']
-                     and abs(tw.angular.z) < self.p['still_angular_rads'])
+            # Same test as the practice judge: moving above 0.02 m/s (x-y speed) or 0.05 rad/s.
+            still = (math.hypot(tw.linear.x, tw.linear.y) <= self.p['still_linear_mps']
+                     and abs(tw.angular.z) <= self.p['still_angular_rads'])
             if not still:
                 self.still_since = None
                 self.still_rescued = False
@@ -666,6 +666,7 @@ class Mision(Node):
                 self.get_logger().warning(f'Navigation acceptance timed out '
                                           f'({self.accept_timeouts} in a row): trip failed')
                 self.goal_seq += 1
+                self.goal_rejected = True   # Nav2 never took it: the plan point stays pending
                 self.nav_state = 'failed'
         if not self.start_locked:
             pose = self.current_pose()
@@ -724,8 +725,9 @@ class Mision(Node):
             return
         if self.nav_state == 'arrived' or self.nav_state == 'failed':
             if self.goal_rejected and self.current_point is not None:
-                # Nav2 refused the goal (e.g. bt_navigator coming back up): not a visit.
-                self.get_logger().info('Goal rejected: the plan point stays pending')
+                # Nav2 refused the goal or never answered (e.g. bt_navigator coming back up):
+                # not a visit.
+                self.get_logger().info('Goal not taken by Nav2: the plan point stays pending')
                 self.current_point = None
             if self.current_point is not None:
                 x = self.current_point.pose.position.x
