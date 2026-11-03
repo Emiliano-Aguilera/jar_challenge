@@ -72,15 +72,19 @@ def generate_launch_description():
     # Only parada publishes /cmd_vel; Nav2 cannot bypass its terminal inhibit.
     al_smoother = [('cmd_vel', 'cmd_vel_nav')]
 
-    def nodo(paquete, ejecutable, nombre, remapeos=(), extra=None):
+    def nodo(paquete, ejecutable, nombre, remapeos=(), extra=None, **opciones):
         return Node(package=paquete, executable=ejecutable, name=nombre, output='screen',
-                    parameters=comunes + ([extra] if extra else []), remappings=list(remapeos))
+                    parameters=comunes + ([extra] if extra else []), remappings=list(remapeos),
+                    **opciones)
 
     # Siempre arrancan: en pruebas.launch.py usan la TF fija en vez de AMCL.
     navegacion = [
         nodo('nav2_controller', 'controller_server', 'controller_server', al_smoother,
              extra=limites_controller),
-        nodo('nav2_planner', 'planner_server', 'planner_server'),
+        # respawn: when planner_server's TF view freezes, localizacion restarts it (vigia_planner.py),
+        # but the cleanup hangs and the process dies (segfault, 3 of 3 server runs on 2026-11-02).
+        # The new process starts unconfigured; localizacion configures and activates it again.
+        nodo('nav2_planner', 'planner_server', 'planner_server', respawn=True, respawn_delay=1.0),
         nodo('nav2_behaviors', 'behavior_server', 'behavior_server', al_smoother),
         nodo('nav2_velocity_smoother', 'velocity_smoother', 'velocity_smoother', [
             ('cmd_vel', 'cmd_vel_nav'),

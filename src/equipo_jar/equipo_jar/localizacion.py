@@ -77,16 +77,51 @@ class Arranque:
         self.vence = 0.0
         self.ultimo_estado = None
         self.bajando = set()    # nodes going down to unconfigured before configuring again
+        self.consulta = None    # (nombre, future, vence) of revisar's state check
 
     def reiniciar(self, nombre):
         """Take an active node down to unconfigured and back up. False if busy or unknown."""
         if nombre not in self.clientes or self.faltan:
             return False
+        self.consulta = None
         self.bajando.add(nombre)
         self.faltan.append(nombre)
         self.ultimo_estado = None
         self.paso()
         return True
+
+    def revisar(self, nombre):
+        """Check that a node that should be active still is; if not, bring it up again.
+
+        A node with respawn (navegacion.launch.py) that crashed comes back unconfigured, and
+        nothing else would configure it. Call it periodically: one call asks the state, a later
+        one reads the answer. Does nothing while a start-up or restart is in progress.
+        """
+        if self.faltan or nombre not in self.clientes:
+            return
+        if self.consulta is not None:
+            consultado, futuro, vence = self.consulta
+            if not futuro.done():
+                if time.monotonic() < vence:
+                    return
+                self.clientes[consultado][0].remove_pending_request(futuro)   # dead: ask again
+                self.consulta = None
+                return
+            self.consulta = None
+            try:
+                estado = futuro.result().current_state
+            except Exception:  # noqa: BLE001  (a failed call says nothing about the node)
+                return
+            if estado.id != State.PRIMARY_STATE_ACTIVE:
+                self.log.warning(f'{consultado}: {estado.label}, should be active: bringing it up again')
+                self.faltan.append(consultado)
+                self.ultimo_estado = None
+                self.paso()
+            return
+        cliente = self.clientes[nombre][0]
+        if cliente.service_is_ready():
+            self.consulta = (nombre, cliente.call_async(GetState.Request()),
+                             time.monotonic() + self.plazo_s)
 
     def paso(self):
         if not self.faltan:
@@ -212,6 +247,9 @@ class Localizacion(Node):
             self, (['amcl'] if self.usar_amcl else []) + [n for n in nodos_nav2 if n], plazo)
         # Reloj de pared: el arranque no depende de /clock.
         self.create_timer(0.5, self.arranque.paso, clock=Clock(clock_type=ClockType.STEADY_TIME))
+        # planner_server has respawn (navegacion.launch.py): if it crashed, bring the new one up.
+        self.create_timer(1.0, lambda: self.arranque.revisar('planner_server'),
+                          clock=Clock(clock_type=ClockType.STEADY_TIME))
 
         self.mapa_recibido = False
         self.mapa = None
