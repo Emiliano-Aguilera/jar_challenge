@@ -57,17 +57,32 @@ class OdometriaImu(Node):
         self.create_subscription(Odometry, '/odom', self.al_recibir_odom, 50)
         self.create_subscription(Imu, '/imu/data', self.al_recibir_imu, 50)
         self.create_timer(5.0, self.informar)
+        self.descartados = 0
+
+    def descartar(self, valores):
+        # One NaN would stay in the integrated heading for the rest of the run.
+        if all(math.isfinite(v) for v in valores):
+            return False
+        self.descartados += 1
+        if self.descartados == 1 or self.descartados % 100 == 0:
+            self.get_logger().warning(
+                f'{self.descartados} /odom or /imu/data messages with NaN/inf dropped')
+        return True
 
     def al_recibir_imu(self, msg):
-        self.publicar(self.rumbo.con_imu(
-            segundos(msg.header.stamp), msg.angular_velocity.z, yaw_de(msg.orientation)))
+        t, gz, yaw = segundos(msg.header.stamp), msg.angular_velocity.z, yaw_de(msg.orientation)
+        if self.descartar((t, gz, yaw)):
+            return
+        self.publicar(self.rumbo.con_imu(t, gz, yaw))
 
     def al_recibir_odom(self, msg):
-        self.frame_odom = msg.header.frame_id or 'odom'
         pose = msg.pose.pose
-        self.publicar(self.rumbo.con_odom(
-            segundos(msg.header.stamp), pose.position.x, pose.position.y,
-            yaw_de(pose.orientation), msg.twist.twist.angular.z))
+        valores = (segundos(msg.header.stamp), pose.position.x, pose.position.y,
+                   yaw_de(pose.orientation), msg.twist.twist.angular.z)
+        if self.descartar(valores):
+            return
+        self.frame_odom = msg.header.frame_id or 'odom'
+        self.publicar(self.rumbo.con_odom(*valores))
 
     def publicar(self, transformadas):
         if not transformadas:
