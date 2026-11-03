@@ -102,6 +102,11 @@ def correr(clase_nodo, args=None):
         rclpy.spin(nodo)
     except (KeyboardInterrupt, ExternalShutdownException):
         pass    # Ctrl+C / end of the run: Humble raises the second one on SIGINT
+    except Exception:
+        if rclpy.ok():
+            raise
+        # Also the end of the run: the context was shut down mid-spin ("failed to
+        # initialize wait set: the given context is not valid").
     finally:
         nodo.destroy_node()
         if rclpy.ok():
