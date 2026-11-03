@@ -1,4 +1,6 @@
-"""Nav2 start-up and the check after it: a respawned node is brought back to active."""
+"""Nav2 start-up and revisar_todos: every respawned Nav2 node is brought back to active.
+
+The planner_server-only cases are in pruebas/test_vigia_planner.py."""
 from types import SimpleNamespace
 
 import pytest
@@ -75,60 +77,58 @@ def bring_up(get, change):
     answer(get, State.PRIMARY_STATE_ACTIVE)
 
 
-def started(revisar_s=0.5):
+def started(names=('planner_server',)):
     node = FakeNode()
-    arranque = Arranque(node, ['planner_server'], 5.0, revisar_s)
-    get = node.clients['/planner_server/get_state']
-    change = node.clients['/planner_server/change_state']
-    arranque.tick()
-    bring_up(get, change)
-    assert arranque.arrancado and not arranque.faltan
-    return node, arranque, get, change
+    arranque = Arranque(node, list(names), 5.0)
+    for name in names:
+        arranque.paso()
+        bring_up(node.clients[f'/{name}/get_state'], node.clients[f'/{name}/change_state'])
+    assert not arranque.faltan
+    return node, arranque
 
 
 def test_start_up_configures_and_activates():
-    _, _, _, change = started()
+    node, _ = started()
+    change = node.clients['/planner_server/change_state']
     assert [r.transition.id for r, _ in change.calls] == [
         Transition.TRANSITION_CONFIGURE, Transition.TRANSITION_ACTIVATE]
 
 
-def test_a_respawned_node_is_brought_back_to_active():
-    node, arranque, get, change = started()
-    arranque.t_revision -= 1.0
-    arranque.tick()                      # periodic check asks the state
-    answer(get, State.PRIMARY_STATE_UNCONFIGURED)
-    arranque.tick()                      # found down: start-up again
-    assert arranque.faltan == ['planner_server']
-    assert arranque.recuperados == 1 and node.warnings
+def test_every_node_is_checked_in_turn():
+    names = ('amcl', 'controller_server', 'planner_server')
+    node, arranque = started(names)
+    asked = []
+    for _ in range(2 * len(names)):
+        arranque.revisar_todos()              # ask one node
+        name = arranque.consulta[0]
+        asked.append(name)
+        answer(node.clients[f'/{name}/get_state'], State.PRIMARY_STATE_ACTIVE)
+        arranque.revisar_todos()              # read its answer
+    assert asked == list(names) * 2
+    assert not arranque.faltan and not node.warnings
+
+
+def test_a_respawned_controller_is_brought_back_to_active():
+    names = ('controller_server', 'planner_server')
+    node, arranque = started(names)
+    get = node.clients['/controller_server/get_state']
+    change = node.clients['/controller_server/change_state']
+    arranque.revisar_todos()
+    assert arranque.consulta[0] == 'controller_server'
+    answer(get, State.PRIMARY_STATE_UNCONFIGURED)   # the launch started a new process
+    arranque.revisar_todos()
+    assert arranque.faltan == ['controller_server'] and node.warnings
     bring_up(get, change)
     assert not arranque.faltan
     assert [r.transition.id for r, _ in change.calls][-2:] == [
         Transition.TRANSITION_CONFIGURE, Transition.TRANSITION_ACTIVATE]
 
 
-def test_an_active_node_is_left_alone():
-    _, arranque, get, change = started()
-    calls = len(change.calls)
-    for _ in range(5):
-        arranque.t_revision -= 1.0
-        arranque.tick()
-        answer(get, State.PRIMARY_STATE_ACTIVE)
-        arranque.tick()
-    assert not arranque.faltan and len(change.calls) == calls
-
-
-def test_a_dead_process_is_skipped_until_it_answers():
-    _, arranque, get, _ = started()
-    get.ready = False
-    calls = len(get.calls)
-    arranque.t_revision -= 1.0
-    arranque.tick()
-    assert len(get.calls) == calls and arranque.revision is None
-
-
-def test_the_check_can_be_turned_off():
-    _, arranque, get, _ = started(revisar_s=0.0)
-    calls = len(get.calls)
-    arranque.t_revision -= 10.0
-    arranque.tick()
-    assert len(get.calls) == calls
+def test_a_dead_process_is_skipped():
+    names = ('controller_server', 'planner_server')
+    node, arranque = started(names)
+    node.clients['/controller_server/get_state'].ready = False
+    arranque.revisar_todos()                  # controller: not ready, nothing asked
+    assert arranque.consulta is None
+    arranque.revisar_todos()                  # next one is asked
+    assert arranque.consulta[0] == 'planner_server'
