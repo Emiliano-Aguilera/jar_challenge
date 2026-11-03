@@ -474,6 +474,7 @@ class Localizacion(Node):
             self.pub_lista.publish(Bool(data=lista))
 
     def tick(self):
+        self._prueba_caida()
         self.publicar_lista()
         if self.faltan < 0:
             pedir = self.correccion.pedir_actualizacion() or self.pedidos_vigia > 0
@@ -505,6 +506,28 @@ class Localizacion(Node):
                 self.terminar_arranque(
                     f'AMCL hizo solo {self.p["actualizaciones_quieto"] - self.faltan} de '
                     f'{self.p["actualizaciones_quieto"]} actualizaciones al inicio; sigo igual')
+
+    def _prueba_caida(self):
+        # TEST BRANCH ONLY: kill planner_server (SIGSEGV) 60 s and 150 s after /map.
+        import os
+        import signal
+        if self.t_mapa is None:
+            return
+        hechas = getattr(self, '_caidas', 0)
+        if hechas >= 2 or time.monotonic() - self.t_mapa < (60.0, 150.0)[hechas]:
+            return
+        self._caidas = hechas + 1
+        for pid in os.listdir('/proc'):
+            if not pid.isdigit():
+                continue
+            try:
+                with open(f'/proc/{pid}/cmdline', 'rb') as f:
+                    cmd = f.read().decode(errors='ignore')
+            except OSError:
+                continue
+            if 'nav2_planner' in cmd and 'planner_server' in cmd:
+                os.kill(int(pid), signal.SIGSEGV)
+                self.get_logger().warning(f'TEST: killed planner_server pid {pid}')
 
     def vigilar(self, forzar=False):
         """Score the last still sweep at AMCL's pose; fix AMCL if lost, fine-tune it if not."""
