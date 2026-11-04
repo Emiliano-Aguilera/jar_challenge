@@ -16,7 +16,7 @@ cobertura:
     # through those doorways and the run lost 450 s in 14 blocked goals (300 vs 400 points, no
     # return). With the mission unable to give up on a region, the transit clearance must stay
     # at what MPPI passes reliably. Kept at 0.18.
-    robot_radius: 0.18
+    robot_radius: 0.15                # test: 0.15 + 0.03 plans through doorways from 0.38 m (real map: the 0.41 m door to the upper zone)
     safety_margin: 0.03
     #PARAM: bounded initial planning-anchor shift from a known-free pose (m; 0 disables).
     start_max_shift_m: 0.20
