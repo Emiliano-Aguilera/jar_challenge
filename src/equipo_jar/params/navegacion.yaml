@@ -13,8 +13,8 @@ limites:
     # Final: 0.35 (was 0.5). The real robot answers commands ~0.4 s late: at 0.5 m/s it runs 20 cm
     # past what MPPI planned. Qualy run 2 touched walls 16 times at 0.25-0.44 m/s. Grupo_de_Lie
     # used 0.35 m/s and a 4 cm margin and touched nothing (docs/team/ajuste/README.md).
-    lineal_max_ms: 0.35               # forward and sideways
-    reversa_max_ms: 0.25
+    lineal_max_ms: 0.5                # sim variant D: as in run 2
+    reversa_max_ms: 0.35
     giro_max_rads: 1.0
     margen_giro_smoother: 1.0         # smoother turn limit = giro_max_rads x this
 
