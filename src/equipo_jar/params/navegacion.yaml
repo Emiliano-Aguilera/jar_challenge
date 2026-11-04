@@ -316,7 +316,7 @@ local_costmap:
           # odometry is off in turns: 1 s of old scans drew ghost walls after each turn (qualy run 2:
           # 3.5x more MPPI failures, 3 in 4 right after a turn, each one a Spin/BackUp near a wall).
           # 0.3 s still keeps a thin cone through one missed scan. The global costmap keeps 1.0.
-          observation_persistence: 0.3
+          observation_persistence: 1.0      # sim variant C: as in run 2
           inf_is_valid: false
       # El costo sube solo cerca de los obstáculos: MPPI entra en huecos angostos sin
       # dudar. El camino ya viene por el medio por la inflación del global.
