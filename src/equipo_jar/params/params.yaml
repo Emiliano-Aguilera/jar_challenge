@@ -9,12 +9,14 @@
 # posicion_ (docs/team/INTERFACES.md).
 cobertura:
   ros__parameters:
-    # robot_radius + safety_margin is the transit clearance. With 0.18 + 0.03 coverage only plans
-    # through passages of 0.42 m or wider: in the qualy arena a third of the map, behind 0.3-0.4 m
-    # openings, was never planned (2 of 4 victims). Nav2 plans from 0.24 m and MPPI passes 0.35 m,
-    # so 0.13 + 0.03 (passages from 0.32 m) matches what the robot drives. The turning clearance
-    # at viewpoints is view_clearance, unchanged.
-    robot_radius: 0.13
+    # robot_radius + safety_margin is the transit clearance: coverage plans only through passages
+    # of 2 x that width (0.42 m today). In the qualy arena a third of the map, behind ~0.4 m
+    # openings, was never planned (2 of 4 victims). Tried 0.13 (passages from 0.32 m) on the
+    # server (tars_qualy_foto, 0.38 m doorways): the plan covered everything, but Nav2 never got
+    # through those doorways and the run lost 450 s in 14 blocked goals (300 vs 400 points, no
+    # return). With the mission unable to give up on a region, the transit clearance must stay
+    # at what MPPI passes reliably. Kept at 0.18.
+    robot_radius: 0.18
     safety_margin: 0.03
     #PARAM: bounded initial planning-anchor shift from a known-free pose (m; 0 disables).
     start_max_shift_m: 0.20
