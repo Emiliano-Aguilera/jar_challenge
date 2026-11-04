@@ -30,9 +30,9 @@ cobertura:
     #PARAM: minimum observation clearance, including the padded turning envelope (m, >= 0).
     # Final: 0.27 (was 0.24). Turning in place sweeps the rear corners 0.207 m from the center, so
     # 0.24 left ~3 cm. On the real qualy map: -1 % visible samples, plan ~40 s shorter.
-    view_clearance: 0.27
+    view_clearance: 0.30              # sim variant E
     #PARAM: prefer this clearance; tighter views only recover otherwise unseen targets (m, >= 0).
-    view_preferred_clearance: 0.30
+    view_preferred_clearance: 0.33    # sim variant E
     candidate_spacing: 0.45
     target_spacing: 0.15
     view_range: 2.0
