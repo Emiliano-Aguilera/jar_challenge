@@ -291,7 +291,7 @@ local_costmap:
       width: 3
       height: 3
       resolution: 0.05
-      footprint_padding: 0.04         # margen sobre el rectángulo del chasis (footprint: lo arma
+      footprint_padding: 0.02         # margen sobre el rectángulo del chasis (footprint: lo arma
                                       # navegacion.launch.py con las medidas del URDF)
       transform_tolerance: 0.5
       plugins: [obstacle_layer, inflation_layer]
@@ -316,7 +316,7 @@ local_costmap:
       inflation_layer:
         plugin: nav2_costmap_2d::InflationLayer
         inflation_radius: 0.30          # mínimo: lo que cubre el rectángulo (0.23 m con el margen)
-        cost_scaling_factor: 5.0        # costo que baja más despacio: MPPI deja más lugar a los conos
+        cost_scaling_factor: 10.0
 
 global_costmap:
   global_costmap:
