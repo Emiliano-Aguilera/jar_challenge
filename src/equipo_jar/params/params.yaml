@@ -9,7 +9,10 @@
 # posicion_ (docs/team/INTERFACES.md).
 cobertura:
   ros__parameters:
-    robot_radius: 0.18
+    #PARAM: transit radius = robot_radius + safety_margin. With 0.21 every doorway under 0.46 m
+    #       in /map was closed: run 1 never planned the upper part of the arena. 0.16 opens
+    #       doorways from 0.34 m (Nav2 plans through 0.30 m). Views keep view_clearance.
+    robot_radius: 0.13
     safety_margin: 0.03
     #PARAM: bounded initial planning-anchor shift from a known-free pose (m; 0 disables).
     start_max_shift_m: 0.20
@@ -27,7 +30,9 @@ cobertura:
     view_range: 2.0
     fov_degrees: 61.0
     heading_count: 8
-    travel_speed: 0.25
+    #PARAM: travel speed in the plan's time model, m/s. Real trips in run 1: ~4 s fixed + 2.8 s/m.
+    #       Lower: the plan finishes the headings of a spot before leaving it (fewer trips).
+    travel_speed: 0.15
     turn_speed: 0.7
     observation_time: 1.0
     max_views: 80
@@ -246,7 +251,9 @@ mision:
     visit_transit_radius_m: 0.15
     visit_free_threshold: 25
     settle_s: 0.0
-    max_recoveries: 10
+    # Cancel a trip after this many Nav2 recoveries (not on the way back). Run 1: every trip
+    # with <= 3 arrived; the three that reached 10 were stuck 37-66 s each behind a cone.
+    max_recoveries: 5
     return_tolerance_m: 0.05
     return_max_tries: 3
     return_still_s: 2.0
