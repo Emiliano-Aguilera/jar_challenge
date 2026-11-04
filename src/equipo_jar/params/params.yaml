@@ -9,8 +9,11 @@
 # posicion_ (docs/team/INTERFACES.md).
 cobertura:
   ros__parameters:
-    robot_radius: 0.18
-    safety_margin: 0.03
+    # Transit clearance = robot_radius + safety_margin. With 0.21 the plan skipped every area
+    # behind a 0.38 m doorway (qualification: half the maze). The chassis half-width is 0.10 m and
+    # Nav2 plans with 0.12 m; views keep their own view_clearance.
+    robot_radius: 0.14
+    safety_margin: 0.0
     #PARAM: bounded initial planning-anchor shift from a known-free pose (m; 0 disables).
     start_max_shift_m: 0.20
     #PARAM: first recovered goal must be at least this far from actual TF (m).
