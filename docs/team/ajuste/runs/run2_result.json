@@ -1,0 +1,115 @@
+{
+  "termino_por": "inmovil",
+  "mapa_publicado": true,
+  "reportes": [
+    {
+      "t": 56.71,
+      "x": 2.2984184785800235,
+      "y": 0.9905588471942038
+    },
+    {
+      "t": 119.11,
+      "x": 0.012286630121809815,
+      "y": 6.698400917033312
+    },
+    {
+      "t": 146.71,
+      "x": 2.8233726315046854,
+      "y": 5.59555943052052
+    }
+  ],
+  "reportes_mal_formados": [],
+  "antes_del_mapa": {
+    "cmd_vel_no_nulo": 0,
+    "reportes": 0
+  },
+  "violaciones": [],
+  "puntaje": {
+    "por_victima": [
+      {
+        "indice": 0,
+        "indice_reporte": null,
+        "distancia": null,
+        "puntos": 0
+      },
+      {
+        "indice": 1,
+        "indice_reporte": 0,
+        "distancia": 0.06047264053179785,
+        "puntos": 100
+      },
+      {
+        "indice": 2,
+        "indice_reporte": 2,
+        "distancia": 0.09874430859544377,
+        "puntos": 100
+      },
+      {
+        "indice": 3,
+        "indice_reporte": 1,
+        "distancia": 0.023135800006863223,
+        "puntos": 100
+      }
+    ],
+    "reportes_contados": 3,
+    "reportes_ignorados": 0,
+    "puntos_victimas": 300,
+    "bono_rapido": false,
+    "bono_regreso": false,
+    "penalizacion_colisiones": 0,
+    "penalizacion_salida": 0,
+    "total": 300,
+    "anulada": false,
+    "tiempo_ultimo_reporte_que_puntua": 146.71
+  },
+  "resumen": "total 300 | víctimas [V1:0 V2:100 V3:100 V4:100]",
+  "eventos": [
+    {
+      "t": null,
+      "evento": "juez_listo",
+      "victimas": 4,
+      "equipo": "TARS"
+    },
+    {
+      "t": 0.0,
+      "evento": "mapa_publicado",
+      "equipo": "TARS"
+    },
+    {
+      "t": 56.71,
+      "evento": "reporte",
+      "x": 2.298,
+      "y": 0.991,
+      "valido": true,
+      "equipo": "TARS"
+    },
+    {
+      "t": 119.11,
+      "evento": "reporte",
+      "x": 0.012,
+      "y": 6.698,
+      "valido": true,
+      "equipo": "TARS"
+    },
+    {
+      "t": 146.71,
+      "evento": "reporte",
+      "x": 2.823,
+      "y": 5.596,
+      "valido": true,
+      "equipo": "TARS"
+    },
+    {
+      "t": 581.6,
+      "evento": "robot_inmovil",
+      "segundos": 60.0,
+      "equipo": "TARS"
+    }
+  ],
+  "equipo": "TARS",
+  "duracion_s": 581.6,
+  "tiempo_total_s": 581.6,
+  "tiempo_ultimo_reporte_que_puntua_s": 146.71,
+  "movimiento_despues_de_done": 0,
+  "medidas_con_ground_truth": false
+}

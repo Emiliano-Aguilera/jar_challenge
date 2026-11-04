@@ -1,0 +1,2115 @@
+13:19:41    -    ===== run start 2026-11-04 13:19:41 =====
+13:19:41    -    ----- params/navegacion.yaml -----
+13:19:41    -    # Localización (AMCL) y navegación (Nav2) para el X3. ROS 2 Humble.
+13:19:41    -    # Solo valores generales: nada del mapa, ninguna coordenada.
+13:19:41    -    # El mapa llega solo del juez por /map. No hay map_server.
+13:19:41    -    # Los nombres de los parámetros de amcl son los de Nav2: no se pueden traducir.
+13:19:41    -    
+13:19:41    -    # Speed limits: set them only here. navegacion.launch.py copies them into MPPI (vx_max,
+13:19:41    -    # vy_max, vx_min, wz_max) and the velocity smoother (max/min_velocity). If the robot has
+13:19:41    -    # its own lower limit (factory), put that limit here: MPPI plans with these numbers, and
+13:19:41    -    # a robot slower than planned turns late and stops late. JAR driver limits: 0.5 m/s per axis,
+13:19:41    -    # 1.0 rad/s (physical_rosmaster #72).
+13:19:41    -    limites:
+13:19:41    -      ros__parameters:
+13:19:41    -        lineal_max_ms: 0.5                # forward and sideways
+13:19:41    -        reversa_max_ms: 0.35
+13:19:41    -        giro_max_rads: 1.0
+13:19:41    -        margen_giro_smoother: 1.0         # smoother turn limit = giro_max_rads x this
+13:19:41    -    
+13:19:41    -    parada:
+13:19:41    -      ros__parameters:
+13:19:41    -        command_max_age_s: 0.3
+13:19:41    -        odom_max_age_s: 0.5
+13:19:41    -        still_time_s: 0.5
+13:19:41    -        still_linear_mps: 0.01
+13:19:41    -        still_angular_rads: 0.02
+13:19:41    -        # After the stop request, confirm anyway once zero has been sent this long (s), unless fresh
+13:19:41    -        # /odom still shows motion. Without it, /odom stamped by an unsynced robot clock would block
+13:19:41    -        # /done (-100).
+13:19:41    -        confirm_timeout_s: 3.0
+13:19:41    -        # Confirm even if fresh /odom still shows motion after this long (s): odometry noisy at rest
+13:19:41    -        # must not block /done forever.
+13:19:41    -        confirm_max_s: 10.0
+13:19:41    -    
+13:19:41    -    # Run log (registro.py): every node's log in $JAR_LOG_DIR/log.txt or <workspace>/logs_jar/log.txt.
+13:19:41    -    registro:
+13:19:41    -      ros__parameters:
+13:19:41    -        max_bytes: 20000000               # stop writing here; the organizers keep up to 25 MB
+13:19:41    -        nivel_minimo: 20                  # 20 INFO, 30 WARN
+13:19:41    -        repetidas_s: 5.0                  # the same line within this is counted, not written
+13:19:41    -        pose_cada_s: 1.0                  # AMCL pose line every this many s
+13:19:41    -    
+13:19:41    -    amcl:
+13:19:41    -      ros__parameters:
+13:19:41    -        global_frame_id: map
+13:19:41    -        # Keep the IMU heading: the organizers warn that rotation still has substantial error.
+13:19:41    -        # Their encoder fix (physical_rosmaster #70) removes the need for distance scaling.
+13:19:41    -        odom_frame_id: odom_fused
+13:19:41    -        base_frame_id: base_footprint
+13:19:41    -        scan_topic: /scan                 # amcl se suscribe con SensorDataQoS (best effort)
+13:19:41    -        map_topic: /map                   # reliable + transient local, como el juez
+13:19:41    -        first_map_only: true
+13:19:41    -        tf_broadcast: true
+13:19:41    -        transform_tolerance: 0.5          # el LiDAR tiene ~136 ms de latencia
+13:19:41    -        robot_model_type: nav2_amcl::OmniMotionModel   # mecanum
+13:19:41    -        alpha1: 0.2
+13:19:41    -        alpha2: 0.2
+13:19:41    -        alpha3: 0.2
+13:19:41    -        # In OmniMotionModel alpha4 is the x/y noise added per radian turned. With 0.2 an
+13:19:41    -        # in-place 90° turn spread the particles ~0.2 m per axis, across walls into the next
+13:19:41    -        # corridor (practice run: AMCL 0.54 m off, inside a wall). 0.01: ~0.05 m.
+13:19:41    -        alpha4: 0.01
+13:19:41    -        alpha5: 0.2                       # solo lo usa el modelo omni
+13:19:41    -        laser_model_type: likelihood_field
+13:19:41    -        laser_min_range: 0.10
+13:19:41    -        laser_max_range: 12.0
+13:19:41    -        max_beams: 120                    # de 1080 rayos
+13:19:41    -        laser_likelihood_max_dist: 2.0
+13:19:41    -        sigma_hit: 0.1                    # 0.2 (Nav2) borroneaba un pasillo entero: ~0.10 m de error
+13:19:41    -        z_hit: 0.5
+13:19:41    -        z_rand: 0.5
+13:19:41    -        z_max: 0.05
+13:19:41    -        z_short: 0.05
+13:19:41    -        lambda_short: 0.1
+13:19:41    -        do_beamskip: false
+13:19:41    -        min_particles: 500
+13:19:41    -        max_particles: 3000
+13:19:41    -        pf_err: 0.05
+13:19:41    -        pf_z: 0.99
+13:19:41    -        resample_interval: 1
+13:19:41    -        update_min_d: 0.05                # actualizar seguido: mapa chico, robot lento
+13:19:41    -        update_min_a: 0.1
+13:19:41    -        recovery_alpha_fast: 0.0
+13:19:41    -        recovery_alpha_slow: 0.0
+13:19:41    -        save_pose_rate: 0.5
+13:19:41    -        # El nodo localizacion manda la pose de inicio con margen de error después de /map.
+13:19:41    -        # set_initial_pose solo usaría covarianza cero.
+13:19:41    -        set_initial_pose: false
+13:19:41    -    
+13:19:41    -    odometria_imu:
+13:19:41    -      ros__parameters:
+13:19:41    -        frame_fusionado: odom_fused       # = amcl odom_frame_id
+13:19:41    -        fuente_rumbo: giroscopo           # giroscopo, orientacion, or ruedas (off: odom_fused = odom)
+13:19:41    -        signo_giroscopo: 0                # 0: learned from the wheels (the real gyro is inverted)
+13:19:41    -        imu_vieja_s: 0.5                  # s without IMU before a step uses the wheels' heading
+13:19:41    -        signo_wz_minimo_rads: 0.2         # the sign is learned only while the wheels turn this fast
+13:19:41    -        signo_giro_minimo_rad: 0.5        # wheel rotation needed to decide the sign
+13:19:41    -        signo_correlacion_minima: 0.7     # |correlation| gyro vs wheels needed (bag: 0.95)
+13:19:41    -        # Distance: the wheels' steps times a scale. 0 = learned as IMU turn / wheels turn.
+13:19:41    -        # Before the encoder fix, the week-10 bag needed ~0.80; 1.0 disables this workaround.
+13:19:41    -        escala_avance: 1.0               # corrected driver: no local distance scaling
+13:19:41    -        escala_giro_minimo_rad: 1.0       # wheel turning before the learned scale is used
+13:19:41    -        escala_minima: 0.7                # learned scale kept within these
+13:19:41    -        escala_maxima: 1.1
+13:19:41    -    
+13:19:41    -    localizacion:
+13:19:41    -      ros__parameters:
+13:19:41    -        x_inicial: 0.0
+13:19:41    -        y_inicial: 0.0
+13:19:41    -        yaw_inicial: 0.0
+13:19:41    -        desvio_xy_inicial: 0.20           # spread sent with the guess (only if the LiDAR match fails)
+13:19:41    -        desvio_yaw_inicial: 0.30
+13:19:41    -        # Start pose from one LiDAR sweep matched against /map, all headings (pose_inicial.py).
+13:19:41    -        # Practice maps, robot up to 0.25 m off and any heading: ~1-2 cm, < 1.5°. false: the guess.
+13:19:41    -        buscar_pose_inicial: true
+13:19:41    -        radio_busqueda_m: 0.5             # positions searched around the guess
+13:19:41    -        paso_busqueda_m: 0.05             # coarse grid, then two finer ones
+13:19:41    -        paso_yaw_busqueda_rad: 0.035      # 2°
+13:19:41    -        sigma_busqueda_m: 0.05            # a point this far from a wall scores ~0.6
+13:19:41    -        rumbo_cercano_rad: 0.8            # a heading farther than this from yaw_inicial must
+13:19:41    -        margen_otro_rumbo: 0.10           # score 10 % better to win (symmetric spots)
+13:19:41    -        puntaje_minimo_busqueda: 0.5      # practice maps 0.8-0.9, real bag 0.88
+13:19:41    -        desvio_xy_encontrada: 0.05        # spread sent to AMCL with the matched pose
+13:19:41    -        desvio_yaw_encontrada: 0.05
+13:19:41    -        espera_scan_s: 3.0                # no scan or LiDAR TF this long after /map: use the guess
+13:19:41    -        # Watch AMCL while still (vigia.py): score the sweep at AMCL's pose, 0..1 (right: 0.8-0.9;
+13:19:41    -        # real bag at the reference pose: median 0.71, 0.1 m off 0.33). Below vigia_puntaje_bajo,
+13:19:41    -        # search nearby; move AMCL only to a pose seen vigia_confirmaciones times at the same spot.
+13:19:41    -        vigia_periodo_s: 2.0
+13:19:41    -        vigia_puntaje_bajo: 0.5
+13:19:41    -        vigia_puntaje_bueno: 0.7          # the new pose must score at least this
+13:19:41    -        vigia_mejora_minima: 0.2          # and this much more than AMCL's pose
+13:19:41    -        vigia_distancia_minima_m: 0.10    # and be this far from it (or 0.1 rad)
+13:19:41    -        vigia_coincidencia_m: 0.05
+13:19:41    -        vigia_confirmaciones: 2
+13:19:41    -        vigia_radio_m: 0.5
+13:19:41    -        vigia_rango_yaw_rad: 0.35
+13:19:41    -        # /odom below both counts as still for the lost check and the fine-tuning. Raise them if
+13:19:41    -        # the real /odom is noisy at rest, or those checks never run (docs/team/ON_SITE.md).
+13:19:41    -        quieto_lineal_ms: 0.02
+13:19:41    -        quieto_angular_rads: 0.05
+13:19:41    -        # Fine-tune AMCL while still: if the score is fine, move AMCL to the best pose within
+13:19:41    -        # afinar_radio_m when the fit is good and sharp (a plain corridor slides: no fix).
+13:19:41    -        afinar_quieto: true
+13:19:41    -        afinar_radio_m: 0.15
+13:19:41    -        afinar_rango_yaw_rad: 0.1
+13:19:41    -        afinar_puntaje_minimo: 0.75
+13:19:41    -        afinar_nitidez_minima: 0.03       # score drop 5 cm / 2° away from the best pose
+13:19:41    -        afinar_distancia_minima_m: 0.015  # move AMCL only if this far (or 0.015 rad)
+13:19:41    -        desvio_xy_afinada: 0.02           # spread sent to AMCL with the fine-tuned pose
+13:19:41    -        desvio_yaw_afinada: 0.02
+13:19:41    -        actualizaciones_quieto: 10        # 0 = none: ready as soon as AMCL takes the start pose
+13:19:41    -        # Keep the existing heading updates: the encoder fix does not eliminate rotation error.
+13:19:41    -        # Recalibrate with the new bag before reducing these updates. 0 = off.
+13:19:41    -        actualizaciones_giro: 10
+13:19:41    -        giro_minimo_rad: 0.3              # signed rotation of one turn that needs a fix
+13:19:41    -        girando_rads: 0.3                 # above this the robot is turning, not just correcting
+13:19:41    -        max_correccion_s: 4.0             # stop waiting this long after the turn ends
+13:19:41    -        max_duda_s: 15.0                  # stop waiting this long after the doubt starts
+13:19:41    -        # Planner watch (vigia_planner.py): planner_server's TF view can freeze, so its paths start
+13:19:41    -        # where the robot was and MPPI ends up rejecting them all ("0 poses"). If this many paths
+13:19:41    -        # in a row start this far from the robot, restart planner_server. <= 0 m = off.
+13:19:41    -        vigia_planner_distancia_m: 0.5
+13:19:41    -        vigia_planner_veces: 3
+13:19:41    -        vigia_planner_espera_s: 30.0      # at most one restart this often
+13:19:41    -        vigia_planner_tf_max_s: 1.0       # our own TF must have advanced within this time
+13:19:41    -        plazo_arranque_s: 5.0             # s sin respuesta de un nodo de Nav2 antes de volver a preguntar
+13:19:41    -        # Check of the Nav2 nodes after start-up, one step this often (s; <= 0 = off; read at
+13:19:41    -        # start). A Nav2 process that died is started again by the launch (respawn) and found
+13:19:41    -        # here not active: this brings it back up. Each node is asked about every ~6 s.
+13:19:41    -        revisar_nav2_s: 0.5
+13:19:41    -    
+13:19:41    -    # ---------------------------------------------------------------------------
+13:19:41    -    # Navegación (Nav2): planner (camino), controller (seguirlo), behaviors
+13:19:41    -    # (destrabarse), bt_navigator (el que recibe navigate_to_pose) y smoother
+13:19:41    -    # (único publicador de /cmd_vel).
+13:19:41    -    
+13:19:41    -    bt_navigator:
+13:19:41    -      ros__parameters:
+13:19:41    -        global_frame: map
+13:19:41    -        robot_base_frame: base_footprint
+13:19:41    -        odom_topic: /odom
+13:19:41    -        bt_loop_duration: 10
+13:19:41    -        default_server_timeout: 20
+13:19:41    -        # default_nav_to_pose_bt_xml is set by navegacion.launch.py (behavior_trees/navegar.xml:
+13:19:41    -        # Humble's tree with goal_checker_id, needed with two goal checkers). No plugin_lib_names:
+13:19:41    -        # Humble's defaults are used; the full list has more than 12 items and CI rejects it.
+13:19:41    -    
+13:19:41    -    controller_server:
+13:19:41    -      ros__parameters:
+13:19:41    -        controller_frequency: 20.0
+13:19:41    -        min_x_velocity_threshold: 0.001
+13:19:41    -        min_y_velocity_threshold: 0.001   # el ejemplo de Nav2 usa 0.5: anularía el movimiento lateral
+13:19:41    -        min_theta_velocity_threshold: 0.001
+13:19:41    -        failure_tolerance: 0.3
+13:19:41    -        progress_checker_plugin: progress_checker
+13:19:41    -        # general: every goal. precise: only the trip back to the start (vuelta_precisa.xml).
+13:19:41    -        goal_checker_plugins: [general_goal_checker, precise_goal_checker]
+13:19:41    -        controller_plugins: [FollowPath]
+13:19:41    -        progress_checker:                 # girar también cuenta: el giro final en el objetivo no
+13:19:41    -          plugin: nav2_controller::PoseProgressChecker   # mueve el robot y antes abortaba a los 5 s
+13:19:41    -          required_movement_radius: 0.3
+13:19:41    -          required_movement_angle: 0.5
+13:19:41    -          movement_time_allowance: 5.0     # trabado antes: Nav2 prueba sus recoveries
+13:19:41    -        general_goal_checker:
+13:19:41    -          plugin: nav2_controller::SimpleGoalChecker
+13:19:41    -          stateful: true                  # primero llega a la posición, después gira
+13:19:41    -          xy_goal_tolerance: 0.10
+13:19:41    -          yaw_goal_tolerance: 0.25
+13:19:41    -        precise_goal_checker:             # return bonus: 4 wheels inside 0.25 m -> position error < 0.10 m
+13:19:41    -          plugin: nav2_controller::SimpleGoalChecker
+13:19:41    -          stateful: true
+13:19:41    -          xy_goal_tolerance: 0.05         # AMCL itself is ~0.05 m off: tighter does not help
+13:19:41    -          yaw_goal_tolerance: 6.28        # any heading: the wheels are symmetric around the center
+13:19:41    -        FollowPath:
+13:19:41    -          plugin: nav2_mppi_controller::MPPIController
+13:19:41    -          motion_model: Omni              # mecanum: también se mueve de costado
+13:19:41    -          time_steps: 40                  # 40 x 0.05 s = mira 2 s hacia adelante
+13:19:41    -          model_dt: 0.05
+13:19:41    -          batch_size: 1000                # trayectorias que imagina por ciclo (2000 saturaba la PC)
+13:19:41    -          iteration_count: 1
+13:19:41    -          vx_std: 0.2
+13:19:41    -          vy_std: 0.2
+13:19:41    -          wz_std: 0.8                     # con 0.4 giraba a ~0.7 rad/s (180° en 4.5 s)
+13:19:41    -          # vx_max, vx_min, vy_max, wz_max: from `limites` (top of this file)
+13:19:41    -          temperature: 0.3
+13:19:41    -          gamma: 0.015
+13:19:41    -          prune_distance: 1.7
+13:19:41    -          transform_tolerance: 0.3
+13:19:41    -          enforce_path_inversion: false
+13:19:41    -          critics: [ConstraintCritic, CostCritic, GoalCritic, GoalAngleCritic, PathAlignCritic,
+13:19:41    -                    PathFollowCritic, PathAngleCritic]
+13:19:41    -          ConstraintCritic:
+13:19:41    -            enabled: true
+13:19:41    -            cost_power: 1
+13:19:41    -            cost_weight: 4.0
+13:19:41    -          CostCritic:                     # obstáculos según el costmap: pasa mejor por huecos angostos
+13:19:41    -            enabled: true                 # que ObstaclesCritic (con ese se trababa en las prácticas)
+13:19:41    -            cost_power: 1
+13:19:41    -            cost_weight: 1.0              # bajo: en huecos angostos manda el camino (que ya va por el
+13:19:41    -                                          # medio). Chocar sigue prohibido: collision_cost no depende de esto
+13:19:41    -            critical_cost: 300.0
+13:19:41    -            consider_footprint: true      # cerca de obstáculos chequea el rectángulo, no un círculo
+13:19:41    -            collision_cost: 1000000.0
+13:19:41    -            near_goal_distance: 1.0
+13:19:41    -          # threshold_to_consider: distancia en línea recta al objetivo. Más cerca que eso
+13:19:41    -          # MPPI deja de seguir el camino y va derecho al objetivo. Con 1.0 m tiraba contra
+13:19:41    -          # la pared cuando el objetivo estaba del otro lado (vuelta en U en una práctica).
+13:19:41    -          # 0.4 m: menos que lo que separa dos poses a ambos lados de una pared.
+13:19:41    -          GoalCritic:
+13:19:41    -            enabled: true
+13:19:41    -            cost_power: 1
+13:19:41    -            cost_weight: 5.0
+13:19:41    -            threshold_to_consider: 0.4
+13:19:41    -          GoalAngleCritic:
+13:19:41    -            enabled: true
+13:19:41    -            cost_power: 1
+13:19:41    -            cost_weight: 3.0
+13:19:41    -            threshold_to_consider: 0.4
+13:19:41    -          PathAlignCritic:
+13:19:41    -            enabled: true
+13:19:41    -            cost_power: 1
+13:19:41    -            cost_weight: 14.0
+13:19:41    -            max_path_occupancy_ratio: 0.05
+13:19:41    -            trajectory_point_step: 3
+13:19:41    -            threshold_to_consider: 0.4
+13:19:41    -            offset_from_furthest: 20
+13:19:41    -            use_path_orientations: false
+13:19:41    -          PathFollowCritic:
+13:19:41    -            enabled: true
+13:19:41    -            cost_power: 1
+13:19:41    -            cost_weight: 5.0
+13:19:41    -            offset_from_furthest: 5
+13:19:41    -            threshold_to_consider: 0.4
+13:19:41    -          PathAngleCritic:
+13:19:41    -            enabled: true
+13:19:41    -            cost_power: 1
+13:19:41    -            cost_weight: 2.0
+13:19:41    -            offset_from_furthest: 4
+13:19:41    -            threshold_to_consider: 0.4
+13:19:41    -            max_angle_to_furthest: 0.35   # viaja con el eje largo sobre el camino: llega alineado a los
+13:19:41    -                                          # huecos (en uno de 0.35 m solo entran rumbos de ±20°)
+13:19:41    -            forward_preference: false     # de frente o de reversa, lo que esté más cerca
+13:19:41    -    
+13:19:41    -    local_costmap:
+13:19:41    -      local_costmap:
+13:19:41    -        ros__parameters:
+13:19:41    -          update_frequency: 7.0           # el LiDAR va a ~7.2 Hz
+13:19:41    -          publish_frequency: 2.0
+13:19:41    -          global_frame: odom
+13:19:41    -          robot_base_frame: base_footprint
+13:19:41    -          rolling_window: true
+13:19:41    -          width: 3
+13:19:41    -          height: 3
+13:19:41    -          resolution: 0.05
+13:19:41    -          footprint_padding: 0.02         # margen sobre el rectángulo del chasis (footprint: lo arma
+13:19:41    -                                          # navegacion.launch.py con las medidas del URDF)
+13:19:41    -          transform_tolerance: 0.5
+13:19:41    -          plugins: [obstacle_layer, inflation_layer]
+13:19:41    -          obstacle_layer:
+13:19:41    -            plugin: nav2_costmap_2d::ObstacleLayer
+13:19:41    -            enabled: true
+13:19:41    -            observation_sources: scan
+13:19:41    -            scan:
+13:19:41    -              topic: /scan
+13:19:41    -              data_type: LaserScan
+13:19:41    -              clearing: true
+13:19:41    -              marking: true
+13:19:41    -              max_obstacle_height: 2.0
+13:19:41    -              raytrace_max_range: 3.5
+13:19:41    -              obstacle_max_range: 3.0
+13:19:41    -              inf_is_valid: false
+13:19:41    -          # El costo sube solo cerca de los obstáculos: MPPI entra en huecos angostos sin
+13:19:41    -          # dudar. El camino ya viene por el medio por la inflación del global.
+13:19:41    -          inflation_layer:
+13:19:41    -            plugin: nav2_costmap_2d::InflationLayer
+13:19:41    -            inflation_radius: 0.30          # mínimo: lo que cubre el rectángulo (0.23 m con el margen)
+13:19:41    -            cost_scaling_factor: 10.0
+13:19:41    -    
+13:19:41    -    global_costmap:
+13:19:41    -      global_costmap:
+13:19:41    -        ros__parameters:
+13:19:41    -          update_frequency: 2.0
+13:19:41    -          publish_frequency: 1.0
+13:19:41    -          global_frame: map
+13:19:41    -          robot_base_frame: base_footprint
+13:19:41    -          resolution: 0.05
+13:19:41    -          footprint_padding: 0.02         # igual que el local. El planner trata al robot como un
+13:19:41    -                                          # círculo del medio ancho (0.12 m con el margen): los caminos van
+13:19:41    -                                          # por el medio igual, por la inflación
+13:19:41    -          track_unknown_space: true
+13:19:41    -          transform_tolerance: 0.5
+13:19:41    -          # Full grid on /global_costmap/costmap every publish (1 Hz, ~14 KB). Without it Nav2 sends
+13:19:41    -          # it once and then only costmap_updates: a reader of costmap would never see the boxes.
+13:19:41    -          always_send_full_costmap: true
+13:19:41    -          plugins: [static_layer, obstacle_layer, inflation_layer]
+13:19:41    -          static_layer:
+13:19:41    -            plugin: nav2_costmap_2d::StaticLayer
+13:19:41    -            map_topic: /map
+13:19:41    -            map_subscribe_transient_local: true
+13:19:41    -          obstacle_layer:                 # las cajas no están en /map: las marca el LiDAR
+13:19:41    -            plugin: nav2_costmap_2d::ObstacleLayer
+13:19:41    -            enabled: true
+13:19:41    -            observation_sources: scan
+13:19:41    -            scan:
+13:19:41    -              topic: /scan
+13:19:41    -              data_type: LaserScan
+13:19:41    -              clearing: true
+13:19:41    -              marking: true
+13:19:41    -              max_obstacle_height: 2.0
+13:19:41    -              raytrace_max_range: 3.5
+13:19:41    -              obstacle_max_range: 3.0
+13:19:41    -          inflation_layer:
+13:19:41    -            plugin: nav2_costmap_2d::InflationLayer
+13:19:41    -            inflation_radius: 0.45          # costo que baja despacio: caminos por el medio
+13:19:41    -            cost_scaling_factor: 3.0        # del pasillo y curvas abiertas en las puntas de pared
+13:19:41    -    
+13:19:41    -    planner_server:
+13:19:41    -      ros__parameters:
+13:19:41    -        expected_planner_frequency: 5.0
+13:19:41    -        planner_plugins: [GridBased]
+13:19:41    -        # Smac 2D (A* on the costmap). NavFn stops tracing its path after 4 x the costmap's longer
+13:19:41    -        # side in cells, a limit fixed in Humble's code (navfn_planner.cpp:398): on a ~7 m map that is
+13:19:41    -        # ~14 m of path, and a 28 m way back failed 3 times. Smac 2D has no such limit and blocks the
+13:19:41    -        # same cells as NavFn (cost >= 253: the center closer than 0.12 m to an obstacle).
+13:19:41    -        # The name stays GridBased, so the behavior trees do not change. To go back to NavFn:
+13:19:41    -        # plugin nav2_navfn_planner/NavfnPlanner, tolerance 0.05, use_astar false, allow_unknown false.
+13:19:41    -        GridBased:
+13:19:41    -          plugin: nav2_smac_planner/SmacPlanner2D
+13:19:41    -          # Goal in a blocked cell: plan to the closest free cell within this distance (m). Smaller
+13:19:41    -          # than xy_goal_tolerance (0.10), so the end of the path counts as arrival. With NavFn, 0.2
+13:19:41    -          # left the robot up to 0.28 m away (view over a box: 50 s stuck) and 0 rejected goals at
+13:19:41    -          # the edge (+9 s).
+13:19:41    -          tolerance: 0.05
+13:19:41    -          allow_unknown: false
+13:19:41    -          downsample_costmap: false
+13:19:41    -          # Weight of the costmap's inflation cost in the path length: paths keep to the middle of
+13:19:41    -          # corridors, as NavFn's did. 0 = shortest path along the walls.
+13:19:41    -          cost_travel_multiplier: 2.0
+13:19:41    -          max_iterations: 1000000
+13:19:41    -          max_on_approach_iterations: 1000
+13:19:41    -          max_planning_time: 1.0          # s; a 7 m map plans in a few ms
+13:19:41    -          use_final_approach_orientation: false
+13:19:41    -    
+13:19:41    -    behavior_server:
+13:19:41    -      ros__parameters:
+13:19:41    -        costmap_topic: local_costmap/costmap_raw
+13:19:41    -        footprint_topic: local_costmap/published_footprint
+13:19:41    -        cycle_frequency: 10.0             # el robot frena con 0.5 s sin /cmd_vel
+13:19:41    -        behavior_plugins: [spin, backup, wait]
+13:19:41    -        spin:
+13:19:41    -          plugin: nav2_behaviors/Spin
+13:19:41    -        backup:
+13:19:41    -          plugin: nav2_behaviors/BackUp
+13:19:41    -        wait:
+13:19:41    -          plugin: nav2_behaviors/Wait
+13:19:41    -        global_frame: odom
+13:19:41    -        robot_base_frame: base_footprint
+13:19:41    -        transform_tolerance: 0.3
+13:19:41    -        simulate_ahead_time: 1.0
+13:19:41    -        max_rotational_vel: 1.0
+13:19:41    -        min_rotational_vel: 0.5           # the real robot does not turn below ~0.5 rad/s from rest
+13:19:41    -        rotational_acc_lim: 3.2
+13:19:41    -    
+13:19:41    -    velocity_smoother:
+13:19:41    -      ros__parameters:
+13:19:41    -        smoothing_frequency: 20.0         # /cmd_vel a >= 10 Hz mientras se mueve
+13:19:41    -        scale_velocities: false
+13:19:41    -        feedback: OPEN_LOOP
+13:19:41    -        # max_velocity, min_velocity: from `limites` (top of this file)
+13:19:41    -        max_accel: [1.5, 1.5, 3.2]
+13:19:41    -        # Frenar rápido: al llegar, el controller manda cero y el smoother baja en rampa. Con -3.2
+13:19:41    -        # el giro final (~0.85 rad/s) tardaba 0.27 s en parar, y la misión manda /done 0.17-0.24 s
+13:19:41    -        # después: quedaba un /cmd_vel no nulo tras /done. Con -20 hasta el viejo máximo (1.9) para en
+13:19:41    -        # < 0.1 s. Lineal -2.5 (0.25 g): de la velocidad típica al llegar (< 0.15) en < 0.06 s.
+13:19:41    -        max_decel: [-2.5, -2.5, -20.0]
+13:19:41    -        deadband_velocity: [0.0, 0.0, 0.0]
+13:19:41    -        velocity_timeout: 1.0
+13:19:41    -        odom_topic: /odom
+13:19:41    -    ----- params/params.yaml -----
+13:19:41    -    # Parámetros del equipo (reglamento §9.1).
+13:19:41    -    #
+13:19:41    -    # Acá solo van valores GENERALES: umbrales, ganancias, límites de velocidad,
+13:19:41    -    # rangos de color. Nada que dependa del mapa de la competencia: nada de
+13:19:41    -    # coordenadas, rutas ni posiciones de víctimas. El CI (tools/verificar_params.py)
+13:19:41    -    # rechaza estos archivos si rompen la regla.
+13:19:41    -    #
+13:19:41    -    # Una sección por nodo. Los nombres no pueden contener victim, coord, spawn ni
+13:19:41    -    # posicion_ (docs/team/INTERFACES.md).
+13:19:41    -    cobertura:
+13:19:41    -      ros__parameters:
+13:19:41    -        robot_radius: 0.18
+13:19:41    -        safety_margin: 0.03
+13:19:41    -        #PARAM: bounded initial planning-anchor shift from a known-free pose (m; 0 disables).
+13:19:41    -        start_max_shift_m: 0.20
+13:19:41    -        #PARAM: first recovered goal must be at least this far from actual TF (m).
+13:19:41    -        # Keep above mission's turn_in_place_m (0.20); does not constrain Nav2's approach.
+13:19:41    -        start_min_goal_distance_m: 0.25
+13:19:41    -        #PARAM: retry a failed initial plan with current TF, even within the same cell (s, > 0).
+13:19:41    -        retry_interval_s: 2.0
+13:19:41    -        #PARAM: minimum observation clearance, including the padded turning envelope (m, >= 0).
+13:19:41    -        view_clearance: 0.24
+13:19:41    -        #PARAM: prefer this clearance; tighter views only recover otherwise unseen targets (m, >= 0).
+13:19:41    -        view_preferred_clearance: 0.30
+13:19:41    -        candidate_spacing: 0.45
+13:19:41    -        target_spacing: 0.15
+13:19:41    -        view_range: 2.0
+13:19:41    -        fov_degrees: 61.0
+13:19:41    -        heading_count: 8
+13:19:41    -        travel_speed: 0.25
+13:19:41    -        turn_speed: 0.7
+13:19:41    -        observation_time: 1.0
+13:19:41    -        max_views: 80
+13:19:41    -        max_positions: 256
+13:19:41    -        max_targets: 2048
+13:19:41    -        free_threshold: 25
+13:19:41    -        #PARAM: preserve sampled coverage at predicted clock checks (>= observation_time).
+13:19:41    -        order_check_interval_s: 60.0
+13:19:41    -        #PARAM: estimated delay before route start; does not control mission's clock (>= 0).
+13:19:41    -        order_start_delay_s: 8.0
+13:19:41    -        base_frame: base_footprint
+13:19:41    -        camera_frame: cam_1_color_optical_frame
+13:19:41    -        tf_max_age: 1.0
+13:19:41    -    
+13:19:41    -    # Detection: red in the camera + LiDAR range -> /jar/observaciones. All values apply live.
+13:19:41    -    # Ranges and reasoning for each one: vision.py and deteccion.py (#PARAM comments).
+13:19:41    -    deteccion:
+13:19:41    -      ros__parameters:
+13:19:41    -        # Red in OpenCV HSV (H in [0,180), S and V in [0,255]); two ranges because red wraps at 0.
+13:19:41    -        # Lists of 3 on purpose: the CI rejects numeric lists of 4 or more.
+13:19:41    -        #PARAM: first thing to retune under the venue's lighting.
+13:19:41    -        #       Upper H of range 1 = 8: brown cardboard sits at H 10-13 and passed at 10; boxes in two
+13:19:41    -        #       real bags have 99 % of pixels at H <= 2 and <= 8 (8 keeps 99.9 % and 99.25 %; 7 cuts more).
+13:19:41    -        hsv_red_low_1: [0, 100, 60]
+13:19:41    -        hsv_red_high_1: [8, 255, 255]
+13:19:41    -        hsv_red_low_2: [170, 100, 60]
+13:19:41    -        hsv_red_high_2: [180, 255, 255]
+13:19:41    -        #PARAM: morphology kernel (odd, >= 1; 1 disables). 3 at 320x240.
+13:19:41    -        morphology_kernel_px: 3
+13:19:41    -        #PARAM: min contour area, px (> 0). A 0.25 m box at 4 m is ~290 px here.
+13:19:41    -        min_area_px: 80
+13:19:41    -        #PARAM: width/height of the bounding box (0 < min < 1 <= max). Box face is 0.25 x 0.30.
+13:19:41    -        aspect_min: 0.4
+13:19:41    -        aspect_max: 1.8
+13:19:41    -        #PARAM: area / convex hull ((0, 1]). A box is convex.
+13:19:41    -        min_solidity: 0.85
+13:19:41    -        #PARAM: box side, m (> 0). Sim: 0.25. Real box TO BE CONFIRMED with the organizers.
+13:19:41    -        box_side_m: 0.25
+13:19:41    -        #PARAM: tolerance of the area-vs-distance check (> 1; 0 disables).
+13:19:41    -        max_area_factor: 3.0
+13:19:41    -        #PARAM: part of the blob's half-angle whose LiDAR beams are used ((0, 1]). 0.6 keeps the
+13:19:41    -        #       middle of the box and leaves out the edges, where a wall corner intrudes.
+13:19:41    -        central_fraction: 0.6
+13:19:41    -        #PARAM: range gap that separates two surfaces, m (> 0; ~box side).
+13:19:41    -        lidar_cluster_depth_m: 0.30
+13:19:41    -        #PARAM: minimum LiDAR beams on the box (>= 1).
+13:19:41    -        lidar_min_points: 3
+13:19:41    -        #PARAM: share of the central beams the chosen cluster must hold ((0.5, 1]).
+13:19:41    -        min_cluster_coverage: 0.6
+13:19:41    -        # --- Checks against false positives (a false report costs -100 and the -200 bonus) ---
+13:19:41    -        #PARAM: blob width / expected width of a box at the LiDAR distance (0 < min < 1 < max).
+13:19:41    -        #       Coarse sanity check: the central beams already fix the corner case (ratio ~0.5).
+13:19:41    -        #       Real boxes seen while passing a doorway at 0.8 m measured 0.53-0.60 (a practice
+13:19:41    -        #       recording replay); 0.45 keeps them. Raise it only if false boxes slip past the central beams.
+13:19:41    -        width_ratio_min: 0.45
+13:19:41    -        width_ratio_max: 1.8
+13:19:41    -        #PARAM: observations farther than this are dropped, m (> 0). Coverage looks from 2.0 m.
+13:19:41    -        max_range_m: 3.0
+13:19:41    -        #PARAM: drop a LiDAR hit that lies on a wall of /map (true/false). Off: the central beams
+13:19:41    -        #       already reject a wall corner in front of a box, and on the real bag this check
+13:19:41    -        #       dropped only correct views of boxes standing against walls.
+13:19:41    -        map_wall_check: false
+13:19:41    -        #PARAM: how close to the map's wall distance counts as "on the wall", m (> AMCL error).
+13:19:41    -        map_wall_tolerance_m: 0.15
+13:19:41    -        #PARAM: a mapped obstacle smaller than this is a drawn box, not a wall, m (> box side).
+13:19:41    -        map_box_extent_m: 0.40
+13:19:41    -        #PARAM: drop a LiDAR range that the depth cloud inside the blob contradicts (true/false).
+13:19:41    -        #       Off by default: in the simulator it rejected 16 % of correct observations (the cloud
+13:19:41    -        #       disagrees by 0.6-1.5 m beyond ~2.5 m and below 0.6 m) and never a false one, because
+13:19:41    -        #       the central beams catch those first. The real depth camera is worse. Extra guard only.
+13:19:41    -        cloud_check: false
+13:19:41    -        #PARAM: |cloud distance - LiDAR distance| above this is a contradiction, m (> cloud noise at 3 m).
+13:19:41    -        cloud_lidar_max_gap_m: 0.5
+13:19:41    -        #PARAM: use the depth cloud when the LiDAR finds nothing in the wedge (true/false).
+13:19:41    -        #       Off by default: subscribing pulls the whole cloud over the robot's Wi-Fi all run,
+13:19:41    -        #       and it has not been needed so far (0 of 247 observations from the cloud in the
+13:19:41    -        #       simulator; the LiDAR ranged 324 of 324 red blobs in the real week-10 bag, 0.4-1.3 m).
+13:19:41    -        #       With this and cloud_check off, no cloud subscription.
+13:19:41    -        #       Read at startup only.
+13:19:41    -        use_cloud_fallback: false
+13:19:41    -        #PARAM: max age of the cloud relative to the scan, s (> 0).
+13:19:41    -        cloud_max_age_s: 0.5
+13:19:41    -        #PARAM: blob edge not read from the cloud, px (>= 0).
+13:19:41    -        erosion_px: 2
+13:19:41    -        #PARAM: valid cloud distances, m (0 < min < max). The real sensor is valid from 0.6 m.
+13:19:41    -        z_min_m: 0.6
+13:19:41    -        z_max_m: 4.0
+13:19:41    -        #PARAM: minimum valid cloud points inside the blob (>= 1).
+13:19:41    -        min_3d_points: 15
+13:19:41    -        #PARAM: per-observation std handed to fusion: sigma = base + per_m * distance (both >= 0).
+13:19:41    -        obs_sigma_base_m: 0.05
+13:19:41    -        obs_sigma_per_m: 0.03
+13:19:41    -        #PARAM: image+scan pairs processed per second (> 0, <= camera rate).
+13:19:41    -        processing_rate_hz: 5.0
+13:19:41    -        #PARAM: max image-scan timestamp gap to pair them, s (> 0; LiDAR period is ~0.14 s).
+13:19:41    -        #       Read at startup only.
+13:19:41    -        sync_tolerance_s: 0.1
+13:19:41    -        #PARAM: messages held per topic while waiting for a partner (>= 1). Must cover the images
+13:19:41    -        #       (30 Hz) taken while a scan is in transit: 10 lost 80 % of pairs with scans 0.3 s
+13:19:41    -        #       late; 60 kept 99.5 % up to 1.5 s late (week-10 bag, delays injected). ~14 MB of
+13:19:41    -        #       images. Read at startup only.
+13:19:41    -        sync_queue_size: 60
+13:19:41    -        #PARAM: robot base frame in /tf (base_footprint on this robot).
+13:19:41    -        robot_frame: base_footprint
+13:19:41    -        #PARAM: frame used to bridge image time and scan time (odom: smooth, always available).
+13:19:41    -        fixed_frame: odom
+13:19:41    -        #PARAM: look up the camera-LiDAR transform at the time the LiDAR measured the middle of the blob
+13:19:41    -        #       (~0.13 s sweep, ray i at stamp + (n-1-i) * time_increment) instead of the scan stamp.
+13:19:41    -        #       No effect when time_increment is 0 (simulator).
+13:19:41    -        per_ray_time: true
+13:19:41    -        #PARAM: skip frames until localization has said its pose is trusted once
+13:19:41    -        #       (/jar/localizacion_lista true; true/false). Before that the start pose is still being
+13:19:41    -        #       fixed: a box seen from a wrong pose would give fusion a candidate in the wrong place,
+13:19:41    -        #       and a wrong candidate with >= 5 observations is never dropped. Nothing is lost: the
+13:19:41    -        #       robot does not move until mission sees the same flag. No flag published = no wait.
+13:19:41    -        wait_localization_start: true
+13:19:41    -        #PARAM: ...but at most this long after /map, s (> 0). Mission starts anyway after its own
+13:19:41    -        #       localization_wait_max_s (10 s): keep both equal so detection is never blind while
+13:19:41    -        #       the robot moves.
+13:19:41    -        localization_wait_max_s: 10.0
+13:19:41    -        #PARAM: also skip frames while the flag is false after a turn (true/false). Off: mission
+13:19:41    -        #       does not wait for the flag after trips, coverage looks 1.0 s at each view and the
+13:19:41    -        #       fix takes 1.2-1.7 s (sim), so detection would miss the view. With the IMU heading
+13:19:41    -        #       the error at stops is ~1.8 deg (0.05 m at 1.5 m, inside obs_sigma). Turn on if the
+13:19:41    -        #       real robot shows boxes landing off right after turns.
+13:19:41    -        skip_heading_doubt: false
+13:19:41    -        #PARAM: publish /jar/deteccion/debug (costs CPU; false in competition). Startup only.
+13:19:41    -        publish_debug: false
+13:19:41    -    
+13:19:41    -    # Fusion: /jar/observaciones -> /jar/candidatas with an honest covariance. All values apply live.
+13:19:41    -    # Ranges and reasoning: candidate_fusion.py (#PARAM comments).
+13:19:41    -    fusion:
+13:19:41    -      ros__parameters:
+13:19:41    -        #PARAM: radius to attach an observation to a candidate, m (0.15 < v < 0.5).
+13:19:41    -        association_dist_m: 0.4
+13:19:41    -        #PARAM: candidates closer than this merge, m (0 < v <= association_dist_m).
+13:19:41    -        merge_dist_m: 0.3
+13:19:41    -        #PARAM: robot displacement needed to lift the single-view floor, m (>= 0; 0 disables).
+13:19:41    -        min_baseline_m: 0.3
+13:19:41    -        #PARAM: covariance floor (std) while seen from one spot, m (> mission's max_desvio_m).
+13:19:41    -        single_view_sigma_m: 0.15
+13:19:41    -        #PARAM: seconds without observations before a weak candidate is dropped (> 0).
+13:19:41    -        stale_timeout_s: 20.0
+13:19:41    -        #PARAM: candidates with at least this many observations are never dropped (>= 1).
+13:19:41    -        min_obs_to_keep: 5
+13:19:41    -        #PARAM: robot poses kept per candidate for the baseline (>= 2).
+13:19:41    -        max_poses: 50
+13:19:41    -        #PARAM: robot base frame in /tf.
+13:19:41    -        robot_frame: base_footprint
+13:19:41    -        #PARAM: min seconds between "changed" publications (0 < v < 1).
+13:19:41    -        publish_min_period_s: 0.2
+13:19:41    -    
+13:19:41    -    mision:
+13:19:41    -      ros__parameters: 
+13:19:41    -        extra_search_enabled: false
+13:19:41    -        extra_history_max: 1200
+13:19:41    -        extra_history_interval_s: 1.0
+13:19:41    -        extra_history_shift_m: 0.10
+13:19:41    -        extra_history_turn_rad: 0.30
+13:19:41    -        extra_pose_max_age_s: 1.0
+13:19:41    -        return_estimate_speed_mps: 0.20
+13:19:41    -        return_estimate_factor: 1.5
+13:19:41    -        return_estimate_overhead_s: 8.0
+13:19:41    -        return_reserve_s: 45.0
+13:19:41    -        extra_look_s: 2.0
+13:19:41    -        extra_max_goals: 6
+13:19:41    -        extra_max_failed: 2
+13:19:41    -        extra_goal_timeout_s: 30.0
+13:19:41    -        extra_plan_timeout_s: 5.0
+13:19:41    -        extra_costmap_max_age_s: 2.5
+13:19:41    -        extra_failed_shift_m: 0.40
+13:19:41    -        extra_range_m: 2.0
+13:19:41    -        extra_fov_deg: 61.0
+13:19:41    -        extra_heading_count: 8
+13:19:41    -        extra_spacing_m: 0.45
+13:19:41    -        extra_target_spacing_m: 0.15
+13:19:41    -        extra_max_positions: 256
+13:19:41    -        extra_max_targets: 2048
+13:19:41    -        extra_max_views: 80
+13:19:41    -        extra_transit_radius_m: 0.21
+13:19:41    -        extra_view_clearance_m: 0.24
+13:19:41    -        extra_preferred_clearance_m: 0.30
+13:19:41    -        extra_turn_speed_rads: 0.7
+13:19:41    -        extra_camera_frame: cam_1_color_optical_frame
+13:19:41    -        min_observations: 5
+13:19:41    -        max_deviation_m: 0.10
+13:19:41    -        min_report_distance_m: 0.40
+13:19:41    -        same_point_distance_m: 0.02
+13:19:41    -        same_point_angle_rad: 0.1
+13:19:41    -        return_time_s: 480.0
+13:19:41    -        min_observations_final: 1
+13:19:41    -        max_deviation_final_m: 0.30
+13:19:41    -        finish_time_s: 570.0
+13:19:41    -        idle_spin_s: 10.0
+13:19:41    -        idle_spin_rad: 1.57
+13:19:41    -        visit_min_observations: 2
+13:19:41    -        visit_distance_m: 0.8
+13:19:41    -        visit_clearance_m: 0.25
+13:19:41    -        visit_angles: 12
+13:19:41    -        visit_min_shift_m: 0.4
+13:19:41    -        visit_box_margin_m: 0.25
+13:19:41    -        localization_wait_max_s: 10.0
+13:19:41    -        goal_timeout_s: 90.0
+13:19:41    -        goal_accept_timeout_s: 5.0
+13:19:41    -        stop_confirm_max_age_s: 0.5
+13:19:41    -        stuck_time_s: 20.0
+13:19:41    -        stuck_distance_m: 0.05
+13:19:41    -        stuck_angle_rad: 0.2
+13:19:41    -        stop_wait_s: 1.0
+13:19:41    -        done_limit_s: 590.0
+13:19:41    -        turn_in_place_m: 0.20
+13:19:41    -        visit_max_attempts: 3
+13:19:41    -        box_min_observations: 2
+13:19:41    -        box_clearance_m: 0.42
+13:19:41    -        box_clearance_sigmas: 1.0
+13:19:41    -        visit_transit_radius_m: 0.15
+13:19:41    -        visit_free_threshold: 25
+13:19:41    -        settle_s: 0.0
+13:19:41    -        max_recoveries: 10
+13:19:41    -        return_tolerance_m: 0.05
+13:19:41    -        return_max_tries: 3
+13:19:41    -        return_still_s: 2.0
+13:19:41    -        return_still_m: 0.01
+13:19:41    -        return_check_max_s: 10.0
+13:19:41    -        costmap_blocked_value: 99
+13:19:41    -        # After arriving at an inspection spot, wait this long (s) for fusion to confirm the
+13:19:41    -        # candidate. Still doubtful after it: one attempt, and the next view is another spot.
+13:19:41    -        inspection_wait_s: 2.0
+13:19:41    -        # No plan points nor doubtful candidates left: wait this long (s) before going back, so
+13:19:41    -        # perception and fusion can report a box seen only from the last plan point.
+13:19:41    -        final_look_s: 1.0
+13:19:41    -        # Trip back in legs (vuelta.py): Nav2's NavFn cannot plan paths longer than ~2x the map side.
+13:19:41    -        # Legs from the start if the way back on /map is longer than this (m; 0 = only after a
+13:19:41    -        # failed direct try).
+13:19:41    -        return_direct_max_m: 10.0
+13:19:41    -        return_leg_m: 5.0                 # length of each leg on /map (m)
+13:19:41    -        return_max_legs: 10               # legs per run; then straight to the start, as before
+13:19:41    -        return_max_failed_legs: 2         # failed legs in a row before going straight to the start
+13:19:41    -        return_snap_m: 0.3                # start or robot this close to a wall still count (m)
+13:19:41    -        # Still guard, on the wall clock like the judge's 60 s rule. Still = /odom x-y speed and
+13:19:41    -        # turn rate at or below these: the judge's own limits, so a slow creep the judge calls
+13:19:41    -        # still is still here too. After still_rescue_s still: cancel the trip in progress.
+13:19:41    -        # After still_finish_s: the end-of-run reports round, once (no /done: it may move again).
+13:19:41    -        # Counted from the first accepted goal, not from launch (the robot waits still for /map).
+13:19:41    -        still_linear_mps: 0.02
+13:19:41    -        still_angular_rads: 0.05
+13:19:41    -        still_rescue_s: 30.0
+13:19:41    -        still_finish_s: 45.0
+13:19:41    -        # A cancel with no result after this long (s): the trip counts as failed and mission
+13:19:41    -        # goes on (seen when planner_server died: the robot stood still until the 60 s rule).
+13:19:41    -        cancel_timeout_s: 10.0
+13:19:41    -        # Goal acceptance timeouts (goal_accept_timeout_s) in a row before the terminal stop.
+13:19:41    -        goal_accept_max_timeouts: 3
+13:19:41    -    ----- end of params -----
+13:19:41    -    INFO  [amcl] 
+	amcl lifecycle node launched. 
+	Waiting on external lifecycle transitions to activate
+	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+13:19:41    -    INFO  [amcl] Creating
+13:19:41    -    INFO  [bt_navigator] 
+	bt_navigator lifecycle node launched. 
+	Waiting on external lifecycle transitions to activate
+	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+13:19:41    -    INFO  [bt_navigator] Creating
+13:19:41    -    INFO  [planner_server] 
+	planner_server lifecycle node launched. 
+	Waiting on external lifecycle transitions to activate
+	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+13:19:41    -    INFO  [planner_server] Creating
+13:19:41    -    INFO  [velocity_smoother] 
+	velocity_smoother lifecycle node launched. 
+	Waiting on external lifecycle transitions to activate
+	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+13:19:41    -    INFO  [behavior_server] 
+	behavior_server lifecycle node launched. 
+	Waiting on external lifecycle transitions to activate
+	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+13:19:41    -    INFO  [global_costmap.global_costmap] 
+	global_costmap lifecycle node launched. 
+	Waiting on external lifecycle transitions to activate
+	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+13:19:41    -    INFO  [global_costmap.global_costmap] Creating Costmap
+13:19:41    -    INFO  [controller_server] 
+	controller_server lifecycle node launched. 
+	Waiting on external lifecycle transitions to activate
+	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+13:19:41    -    INFO  [controller_server] Creating controller server
+13:19:41    -    INFO  [local_costmap.local_costmap] 
+	local_costmap lifecycle node launched. 
+	Waiting on external lifecycle transitions to activate
+	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+13:19:41    -    INFO  [local_costmap.local_costmap] Creating Costmap
+13:19:41    -    INFO  [cobertura] Waiting for /map and localization TF.
+13:19:41    -    INFO  [rosbag2_recorder] Subscribed to topic '/cmd_vel'
+13:19:41    -    INFO  [fusion] Fusion ready: /jar/observaciones -> /jar/candidatas
+13:19:42    -    INFO  [rosbag2_recorder] Subscribed to topic '/done'
+13:19:42    -    INFO  [rosbag2_recorder] Subscribed to topic '/victimas'
+13:19:42    -    INFO  [rosbag2_recorder] All requested topics are subscribed. Stopping discovery...
+13:19:42    -    INFO  [mision] Hay que encontrar 4 víctimas. Esperando el mapa en /map...
+13:19:42    -    INFO  [localizacion] amcl: unconfigured
+13:19:42    -    INFO  [amcl] Configuring
+13:19:42    -    INFO  [amcl] initTransforms
+13:19:42    -    INFO  [amcl] initPubSub
+13:19:42    -    INFO  [amcl] Subscribed to map topic.
+13:19:42    -    INFO  [localizacion] amcl: inactive
+13:19:42    -    INFO  [amcl] Activating
+13:19:42    -    INFO  [amcl] Creating bond (amcl) to lifecycle manager.
+13:19:42    -    INFO  [localizacion] amcl: active
+13:19:42    -    INFO  [deteccion] Detection ready: red + LiDAR -> /jar/observaciones
+13:19:42    -    INFO  [localizacion] controller_server: unconfigured
+13:19:42    -    INFO  [controller_server] Configuring controller interface
+13:19:42    -    INFO  [controller_server] getting goal checker plugins..
+13:19:42    -    INFO  [controller_server] Controller frequency set to 20.0000Hz
+13:19:42    -    INFO  [local_costmap.local_costmap] Configuring
+13:19:42    -    INFO  [local_costmap.local_costmap] Using plugin "obstacle_layer"
+13:19:42    -    INFO  [local_costmap.local_costmap] Subscribed to Topics: scan
+13:19:42    -    INFO  [local_costmap.local_costmap] Initialized plugin "obstacle_layer"
+13:19:42    -    INFO  [local_costmap.local_costmap] Using plugin "inflation_layer"
+13:19:42    -    INFO  [local_costmap.local_costmap] Initialized plugin "inflation_layer"
+13:19:42    -    INFO  [controller_server] Created progress_checker : progress_checker of type nav2_controller::PoseProgressChecker
+13:19:42    -    INFO  [controller_server] Created goal checker : general_goal_checker of type nav2_controller::SimpleGoalChecker
+13:19:42    -    INFO  [controller_server] Created goal checker : precise_goal_checker of type nav2_controller::SimpleGoalChecker
+13:19:42    -    INFO  [controller_server] Controller Server has general_goal_checker precise_goal_checker  goal checkers available.
+13:19:42    -    INFO  [controller_server] Created controller : FollowPath of type nav2_mppi_controller::MPPIController
+13:19:42    -    INFO  [controller_server] Controller period is equal to model dt. Control sequence shifting is ON
+13:19:42    -    INFO  [controller_server] ConstraintCritic instantiated with 1 power and 4.000000 weight.
+13:19:42    -    INFO  [controller_server] Critic loaded : mppi::critics::ConstraintCritic
+13:19:42    -    INFO  [controller_server] InflationCostCritic instantiated with 1 power and 300.000000 / 0.003937 weights. Critic will collision check based on footprint cost.
+13:19:42    -    INFO  [controller_server] Critic loaded : mppi::critics::CostCritic
+13:19:42    -    INFO  [controller_server] GoalCritic instantiated with 1 power and 5.000000 weight.
+13:19:42    -    INFO  [controller_server] Critic loaded : mppi::critics::GoalCritic
+13:19:42    -    INFO  [controller_server] GoalAngleCritic instantiated with 1 power, 3.000000 weight, and 0.400000 angular threshold.
+13:19:42    -    INFO  [controller_server] Critic loaded : mppi::critics::GoalAngleCritic
+13:19:42    -    INFO  [controller_server] ReferenceTrajectoryCritic instantiated with 1 power and 14.000000 weight
+13:19:42    -    INFO  [controller_server] Critic loaded : mppi::critics::PathAlignCritic
+13:19:42    -    INFO  [controller_server] Critic loaded : mppi::critics::PathFollowCritic
+13:19:42    -    INFO  [controller_server] PathAngleCritic instantiated with 1 power and 2.000000 weight. Reversing allowed.
+13:19:42    -    INFO  [controller_server] Critic loaded : mppi::critics::PathAngleCritic
+13:19:42    -    INFO  [controller_server] Optimizer reset
+13:19:42    -    INFO  [controller_server] Controller Server has FollowPath  controllers available.
+13:19:42    -    INFO  [localizacion] controller_server: inactive
+13:19:42    -    INFO  [controller_server] Activating
+13:19:42    -    INFO  [local_costmap.local_costmap] Activating
+13:19:42    -    INFO  [local_costmap.local_costmap] Checking transform
+13:19:42    -    INFO  [local_costmap.local_costmap] Timed out waiting for transform from base_footprint to odom to become available, tf error: Invalid frame ID "odom" passed to canTransform argument target_frame - frame does not exist
+13:19:46    -    INFO  [local_costmap.local_costmap] start
+13:19:46    -    WARN  [controller_server] Parameter controller_server.verbose not found
+13:19:46    -    INFO  [controller_server] Creating bond (controller_server) to lifecycle manager.
+13:19:46    -    INFO  [localizacion] controller_server: active
+13:19:46    -    INFO  [localizacion] planner_server: unconfigured
+13:19:46    -    INFO  [planner_server] Configuring
+13:19:46    -    INFO  [global_costmap.global_costmap] Configuring
+13:19:46    -    INFO  [global_costmap.global_costmap] Using plugin "static_layer"
+13:19:46    -    INFO  [global_costmap.global_costmap] Subscribing to the map topic (/map) with transient local durability
+13:19:46    -    INFO  [global_costmap.global_costmap] Initialized plugin "static_layer"
+13:19:46    -    INFO  [global_costmap.global_costmap] Using plugin "obstacle_layer"
+13:19:47    -    INFO  [global_costmap.global_costmap] Subscribed to Topics: scan
+13:19:47    -    INFO  [global_costmap.global_costmap] Initialized plugin "obstacle_layer"
+13:19:47    -    INFO  [global_costmap.global_costmap] Using plugin "inflation_layer"
+13:19:47    -    INFO  [global_costmap.global_costmap] Initialized plugin "inflation_layer"
+13:19:47    -    INFO  [planner_server] Created global planner plugin GridBased of type nav2_smac_planner/SmacPlanner2D
+13:19:47    -    INFO  [planner_server] Configuring GridBased of type SmacPlanner2D
+13:19:47    -    INFO  [planner_server] Configured plugin GridBased of type SmacPlanner2D with tolerance 0.05, maximum iterations 1000000, max on approach iterations 1000, and not allowing unknown traversal.
+13:19:47    -    INFO  [planner_server] Planner Server has GridBased  planners available.
+13:19:47    -    INFO  [localizacion] planner_server: inactive
+13:19:47    -    INFO  [planner_server] Activating
+13:19:47    -    INFO  [global_costmap.global_costmap] Activating
+13:19:47    -    INFO  [global_costmap.global_costmap] Checking transform
+13:19:47    -    INFO  [global_costmap.global_costmap] Timed out waiting for transform from base_footprint to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+13:19:47    -    INFO  [amcl] Message Filter dropping message: frame 'laser_link' at time 1793809187.252 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+13:19:48    -    INFO  [local_costmap.local_costmap] Message Filter dropping message: frame 'laser_link' at time 1793809187.645 for reason 'the timestamp on the message is earlier than all the data in the transform cache'
+13:19:49    -    WARN  [amcl] Waiting for map....
+13:19:52    -    INFO  [localizacion] planner_server: sin respuesta en 5 s, vuelvo a preguntar
+13:19:52    -    INFO  [global_costmap.global_costmap] Timed out waiting for transform from base_footprint to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist [+10 same]
+13:19:55    -    WARN  [amcl] Waiting for map.... [+2 same]
+13:19:57    -    INFO  [global_costmap.global_costmap] Timed out waiting for transform from base_footprint to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist [+9 same]
+13:19:57    -    INFO  [localizacion] planner_server: sin respuesta en 5 s, vuelvo a preguntar
+13:19:58    -    INFO  [deteccion] last 10 s: published 0; rejected localizing=37
+13:20:01    -    WARN  [amcl] Waiting for map.... [+2 same]
+13:20:02    -    INFO  [global_costmap.global_costmap] Timed out waiting for transform from base_footprint to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist [+9 same]
+13:20:03    -    INFO  [localizacion] planner_server: sin respuesta en 5 s, vuelvo a preguntar
+13:20:08    -    WARN  [amcl] Waiting for map.... [+2 same]
+13:20:08    -    INFO  [global_costmap.global_costmap] Timed out waiting for transform from base_footprint to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist [+10 same]
+13:20:08    -    INFO  [deteccion] last 10 s: published 0; rejected localizing=39
+13:20:08    -    INFO  [localizacion] planner_server: sin respuesta en 5 s, vuelvo a preguntar
+13:20:13    -    INFO  [global_costmap.global_costmap] Timed out waiting for transform from base_footprint to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist [+9 same]
+13:20:14    -    INFO  [localizacion] planner_server: sin respuesta en 5 s, vuelvo a preguntar
+13:20:14    -    WARN  [amcl] Waiting for map.... [+2 same]
+13:20:18    -    INFO  [deteccion] last 10 s: published 0; rejected localizing=39
+13:20:18    -    INFO  [global_costmap.global_costmap] Timed out waiting for transform from base_footprint to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist [+10 same]
+13:20:19    -    INFO  [localizacion] planner_server: sin respuesta en 5 s, vuelvo a preguntar
+13:20:20    -    WARN  [amcl] Waiting for map.... [+2 same]
+13:20:23    -    INFO  [global_costmap.global_costmap] Timed out waiting for transform from base_footprint to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist [+9 same]
+13:20:25    -    INFO  [localizacion] planner_server: sin respuesta en 5 s, vuelvo a preguntar
+13:20:26    -    WARN  [amcl] Waiting for map.... [+2 same]
+13:20:28    -    INFO  [deteccion] last 10 s: published 0; rejected localizing=39
+13:20:29    -    INFO  [global_costmap.global_costmap] Timed out waiting for transform from base_footprint to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist [+10 same]
+13:20:30    -    INFO  [localizacion] planner_server: sin respuesta en 5 s, vuelvo a preguntar
+13:20:33    -    WARN  [amcl] Waiting for map.... [+2 same]
+13:20:34    -    INFO  [global_costmap.global_costmap] Timed out waiting for transform from base_footprint to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist [+9 same]
+13:20:36    -    INFO  [localizacion] planner_server: sin respuesta en 5 s, vuelvo a preguntar
+13:20:38    -    INFO  [deteccion] last 10 s: published 0; rejected localizing=39
+13:20:39    -    INFO  [global_costmap.global_costmap] Timed out waiting for transform from base_footprint to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist [+9 same]
+13:20:39    -    WARN  [amcl] Waiting for map.... [+2 same]
+13:20:41    -    INFO  [localizacion] planner_server: sin respuesta en 5 s, vuelvo a preguntar
+13:20:44    -    INFO  [global_costmap.global_costmap] Timed out waiting for transform from base_footprint to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist [+10 same]
+13:20:45    -    WARN  [amcl] Waiting for map.... [+2 same]
+13:20:47    -    INFO  [localizacion] planner_server: sin respuesta en 5 s, vuelvo a preguntar
+13:20:48    -    INFO  [deteccion] last 10 s: published 0; rejected localizing=39
+13:20:49    -    INFO  [global_costmap.global_costmap] Timed out waiting for transform from base_footprint to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist [+9 same]
+13:20:51    -    WARN  [amcl] Waiting for map.... [+2 same]
+13:20:52    -    INFO  [localizacion] planner_server: sin respuesta en 5 s, vuelvo a preguntar
+13:20:54    -    INFO  [global_costmap.global_costmap] Timed out waiting for transform from base_footprint to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist [+9 same]
+13:20:58    -    WARN  [amcl] Waiting for map.... [+2 same]
+13:20:58    -    INFO  [localizacion] planner_server: sin respuesta en 5 s, vuelvo a preguntar
+13:20:59    -    INFO  [deteccion] last 10 s: published 0; rejected localizing=39
+13:21:00    -    INFO  [global_costmap.global_costmap] Timed out waiting for transform from base_footprint to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist [+10 same]
+13:21:03    -    INFO  [localizacion] planner_server: sin respuesta en 5 s, vuelvo a preguntar
+13:21:04    -    WARN  [amcl] Waiting for map.... [+2 same]
+13:21:05    -    INFO  [global_costmap.global_costmap] Timed out waiting for transform from base_footprint to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist [+9 same]
+13:21:09    -    INFO  [deteccion] last 10 s: published 0; rejected localizing=39
+13:21:09    -    INFO  [localizacion] planner_server: sin respuesta en 5 s, vuelvo a preguntar
+13:21:10    -    WARN  [amcl] Waiting for map.... [+2 same]
+13:21:10    -    INFO  [global_costmap.global_costmap] Timed out waiting for transform from base_footprint to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist [+10 same]
+13:21:14    -    INFO  [localizacion] planner_server: sin respuesta en 5 s, vuelvo a preguntar
+13:21:15    -    INFO  [global_costmap.global_costmap] Timed out waiting for transform from base_footprint to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist [+9 same]
+13:21:16    -    WARN  [amcl] Waiting for map.... [+2 same]
+13:21:19    -    INFO  [deteccion] last 10 s: published 0; rejected localizing=39
+13:21:20    -    INFO  [localizacion] planner_server: sin respuesta en 5 s, vuelvo a preguntar
+13:21:21     0.0 MAP 174x383 res 0.020 origin (-0.55, -0.57)
+13:21:21     0.0 INFO  [amcl] Received a 174 X 383 map @ 0.020 m/pix
+13:21:21     0.0 INFO  [global_costmap.global_costmap] StaticLayer: Resizing costmap to 174 X 383 at 0.020000 m/pix
+13:21:21     0.0 INFO  [deteccion] Map received: 174x383
+13:21:21     0.0 INFO  [juez_mock] Mapa publicado en /map: empieza la corrida
+13:21:21     0.0 INFO  [mision] Mapa recibido: 174x383 celdas, resolución 0.020 m
+13:21:21     0.0 INFO  [cobertura] Map received: 174 x 383.
+13:21:21     0.0 INFO  [mision] Estado: <waiting_for_map> -> <exploring>
+13:21:21     0.1 INFO  [global_costmap.global_costmap] Timed out waiting for transform from base_footprint to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist [+10 same]
+13:21:21     0.1 INFO  [amcl] createLaserObject
+13:21:21     0.2 INFO  [cobertura] Waiting for valid TF: "map" passed to lookupTransform argument target_frame does not exist. 
+13:21:22     1.4 INFO  [localizacion] Start pose from the LiDAR: x=0.000 y=0.050 yaw=-0.033 (score 0.99, 0.98 at the guess, 342 points, 1.2 s)
+13:21:22     1.4 INFO  [localizacion] pose de inicio enviada a AMCL
+13:21:22     1.4 INFO  [amcl] initialPoseReceived
+13:21:22     1.4 WARN  [amcl] Failed to transform initial pose in time (Lookup would require extrapolation into the future.  Requested time 1793809282.530812 but the latest data is at time 1793809282.475924, when looking up transform from frame [base_footprint] to frame [odom_fused])
+13:21:22     1.4 INFO  [amcl] Setting pose (1793809282.530890): 0.000 0.050 -0.033
+13:21:22     1.4 WARN  [amcl] Failed to transform initial pose in time (Lookup would require extrapolation into the future.  Requested time 1793809282.531567 but the latest data is at time 1793809282.475924, when looking up transform from frame [base_footprint] to frame [odom_fused])
+13:21:22     1.4 INFO  [amcl] Setting pose (1793809282.531587): 0.000 0.050 -0.033
+13:21:22     1.4 POSE 0.003 0.049 -0.033 sd_xy 0.046 0.046
+13:21:22     1.5 INFO  [amcl] Requesting no-motion update
+13:21:22     1.6 INFO  [global_costmap.global_costmap] Timed out waiting for transform from base_footprint to map to become available, tf error: Lookup would require extrapolation into the past.  Requested time 1793809282.675629 but the earliest data is at time 1793809282.938999, when looking up transform from frame [base_footprint] to frame [map]
+13:21:22     1.8 INFO  [mision] Pose de inicio (provisoria): x=0.00 y=0.05 yaw=-0.03
+13:21:23     2.1 INFO  [global_costmap.global_costmap] start
+13:21:23     2.6 POSE 0.004 0.047 -0.023 sd_xy 0.031 0.041
+13:21:23     2.6 INFO  [planner_server] Activating plugin GridBased of type SmacPlanner2D
+13:21:23     2.6 INFO  [planner_server] Creating bond (planner_server) to lifecycle manager.
+13:21:23     2.6 INFO  [localizacion] planner_server: active
+13:21:23     2.7 INFO  [localizacion] behavior_server: unconfigured
+13:21:23     2.7 INFO  [behavior_server] Configuring
+13:21:23     2.7 INFO  [behavior_server] Creating behavior plugin spin of type nav2_behaviors/Spin
+13:21:23     2.7 INFO  [behavior_server] Configuring spin
+13:21:23     2.7 INFO  [behavior_server] Creating behavior plugin backup of type nav2_behaviors/BackUp
+13:21:23     2.7 INFO  [behavior_server] Configuring backup
+13:21:23     2.7 INFO  [behavior_server] Creating behavior plugin wait of type nav2_behaviors/Wait
+13:21:23     2.7 INFO  [behavior_server] Configuring wait
+13:21:23     2.8 INFO  [localizacion] behavior_server: inactive
+13:21:23     2.8 INFO  [behavior_server] Activating
+13:21:23     2.8 INFO  [behavior_server] Activating spin
+13:21:23     2.8 INFO  [behavior_server] Activating backup
+13:21:23     2.8 INFO  [behavior_server] Activating wait
+13:21:23     2.8 INFO  [behavior_server] Creating bond (behavior_server) to lifecycle manager.
+13:21:23     2.8 INFO  [localizacion] behavior_server: active
+13:21:24     3.2 INFO  [localizacion] velocity_smoother: unconfigured
+13:21:24     3.2 INFO  [velocity_smoother] Configuring velocity smoother
+13:21:24     3.2 INFO  [localizacion] velocity_smoother: inactive
+13:21:24     3.2 INFO  [velocity_smoother] Activating
+13:21:24     3.2 INFO  [velocity_smoother] Creating bond (velocity_smoother) to lifecycle manager.
+13:21:24     3.2 INFO  [localizacion] velocity_smoother: active
+13:21:24     3.4 INFO  [localizacion] AMCL acomodado
+13:21:24     3.5 INFO  [localizacion] Localization ready (/jar/localizacion_lista true)
+13:21:24     3.5 INFO  [deteccion] Localization ready: processing frames
+13:21:24     3.7 INFO  [localizacion] bt_navigator: unconfigured
+13:21:24     3.7 INFO  [bt_navigator] Configuring
+13:21:24     3.8 INFO  [localizacion] bt_navigator: inactive
+13:21:24     3.8 INFO  [bt_navigator] Activating
+13:21:25     4.0 INFO  [bt_navigator] Creating bond (bt_navigator) to lifecycle manager.
+13:21:25     4.0 INFO  [localizacion] bt_navigator: active
+13:21:25     4.0 INFO  [localizacion] Nav2 activo
+13:21:29     8.5 INFO  [deteccion] last 10 s: published 0; rejected localizing=20
+13:21:31    10.2 INFO  [cobertura] Initial plan: 57 views; predicted visibility 730/1056 sampled cells. Actual observation and navigation failures are not tracked yet.
+13:21:31    10.2 INFO  [cobertura] Grid estimate: 36.7 m, 49.5 rad, 274.7 s; 5.0 m to return. 326 samples outside the candidate model, 0 visible but deferred.
+13:21:31    10.3 INFO  [mision] Pose de inicio fija: x=0.00 y=0.04 yaw=-0.02
+13:21:31    10.3 INFO  [bt_navigator] Begin navigating from current location (0.00, 0.04) to (0.00, 0.04)
+13:21:31    10.3 INFO  [mision] Giro en el lugar: yaw=0.79 desde (0.00,0.04), punto del plan (-0.00,0.06)
+13:21:31    10.4 INFO  [controller_server] Received a goal, begin computing control effort.
+13:21:31    10.4 INFO  [controller_server] Optimizer reset [+1 same]
+13:21:31    10.6 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz
+13:21:32    11.4 INFO  [controller_server] Passing new path to controller.
+13:21:33    12.0 POSE 0.012 0.042 0.144 sd_xy 0.031 0.042
+13:21:33    12.3 INFO  [controller_server] Reached the goal!
+13:21:33    12.4 INFO  [bt_navigator] Goal succeeded
+13:21:33    12.4 INFO  [mision] Status succeded (recuperaciones: 0)
+13:21:33    12.4 INFO  [bt_navigator] Begin navigating from current location (0.02, 0.04) to (0.14, 0.42)
+13:21:33    12.4 INFO  [mision] Viaje al punto del plan: (0.14, 0.42, 0.0)
+13:21:34    13.1 INFO  [amcl] Requesting no-motion update [+9 same]
+13:21:34    13.3 POSE 0.034 0.039 1.131 sd_xy 0.041 0.040
+13:21:35    14.3 POSE 0.064 0.136 0.644 sd_xy 0.042 0.045
+13:21:36    15.4 POSE 0.312 0.315 -0.445 sd_xy 0.053 0.063
+13:21:36    15.8 INFO  [odometria_imu] gyro sign -1 (wheels vs gyro)
+13:21:36    15.8 INFO  [odometria_imu] 9 odom steps used the wheels heading (no IMU or gyro sign not known yet)
+13:21:37    15.9 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+19 same]
+13:21:37    16.4 POSE 0.412 0.398 -0.616 sd_xy 0.049 0.047
+13:21:37    16.6 INFO  [controller_server] Passing new path to controller. [+3 same]
+13:21:38    17.4 POSE 0.224 0.430 0.301 sd_xy 0.046 0.055
+13:21:39    18.1 INFO  [amcl] Requesting no-motion update [+8 same]
+13:21:39    18.6 INFO  [deteccion] last 10 s: published 0; rejected none
+13:21:39    18.6 POSE 0.103 0.275 0.695 sd_xy 0.042 0.053
+13:21:40    19.4 INFO  [controller_server] Reached the goal!
+13:21:40    19.5 INFO  [bt_navigator] Goal succeeded
+13:21:40    19.5 INFO  [mision] Status succeded (recuperaciones: 0)
+13:21:40    19.5 INFO  [bt_navigator] Begin navigating from current location (0.13, 0.33) to (1.04, 1.02)
+13:21:40    19.5 INFO  [mision] Viaje al punto del plan: (1.04, 1.02, 0.0)
+13:21:40    19.6 INFO  [controller_server] Received a goal, begin computing control effort. [+1 same]
+13:21:40    19.7 POSE 0.125 0.336 -0.133 sd_xy 0.045 0.047
+13:21:41    20.8 POSE 0.190 0.360 -0.513 sd_xy 0.037 0.039
+13:21:42    21.1 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+20 same]
+13:21:42    21.6 INFO  [controller_server] Passing new path to controller. [+3 same]
+13:21:43    21.9 POSE 0.320 0.532 0.353 sd_xy 0.053 0.051
+13:21:44    22.9 POSE 0.327 0.694 1.312 sd_xy 0.043 0.053
+13:21:44    23.3 INFO  [amcl] Requesting no-motion update [+9 same]
+13:21:45    24.0 POSE 0.325 0.748 1.547 sd_xy 0.038 0.039
+13:21:45    24.7 INFO  [controller_server] Optimizer reset
+13:21:45    24.8 ERROR [controller_server] Optimizer fail to compute path
+13:21:45    24.8 WARN  [controller_server] [follow_path] [ActionServer] Aborting handle.
+13:21:45    24.8 INFO  [local_costmap.local_costmap] Received request to clear entirely the local_costmap
+13:21:45    24.8 INFO  [controller_server] Received a goal, begin computing control effort.
+13:21:46    25.0 POSE 0.477 0.768 0.926 sd_xy 0.047 0.047
+13:21:46    25.1 INFO  [global_costmap.global_costmap] Received request to clear entirely the global_costmap
+13:21:47    26.1 POSE 0.523 0.827 0.686 sd_xy 0.045 0.040
+13:21:47    26.1 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+25 same]
+13:21:48    27.1 POSE 0.716 1.006 0.130 sd_xy 0.065 0.055
+13:21:48    27.1 INFO  [localizacion] Heading fix after a turn: 0 AMCL updates in 0.0 s (fixes 1, timed out 1)
+13:21:48    27.2 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:21:49    27.9 INFO  [controller_server] Reached the goal!
+13:21:49    28.0 INFO  [bt_navigator] Goal succeeded
+13:21:49    28.0 INFO  [mision] Status succeded (recuperaciones: 3)
+13:21:49    28.0 INFO  [bt_navigator] Begin navigating from current location (0.99, 1.04) to (1.60, 1.06)
+13:21:49    28.0 INFO  [mision] Viaje al punto del plan: (1.60, 1.06, 1.5707963267948963)
+13:21:49    28.1 POSE 0.984 1.042 -0.157 sd_xy 0.063 0.064
+13:21:49    28.8 INFO  [deteccion] last 10 s: published 0; rejected width=1
+13:21:50    29.2 POSE 1.103 1.048 -0.032 sd_xy 0.055 0.064
+13:21:51    30.2 POSE 1.316 1.085 0.075 sd_xy 0.055 0.060
+13:21:52    31.2 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+23 same]
+13:21:52    31.3 POSE 1.573 1.153 0.842 sd_xy 0.053 0.062
+13:21:53    32.2 INFO  [controller_server] Received a goal, begin computing control effort. [+2 same]
+13:21:53    32.3 POSE 1.681 1.096 1.662 sd_xy 0.048 0.055
+13:21:53    32.5 INFO  [amcl] Requesting no-motion update [+14 same]
+13:21:54    32.9 INFO  [mision] Status succeded (recuperaciones: 0)
+13:21:54    32.9 INFO  [bt_navigator] Begin navigating from current location (1.68, 1.05) to (1.80, 1.50)
+13:21:54    32.9 INFO  [mision] Viaje al punto del plan: (1.80, 1.50, 1.5707963267948963)
+13:21:54    33.4 POSE 1.683 1.050 1.743 sd_xy 0.038 0.040
+13:21:55    34.0 INFO  [controller_server] Passing new path to controller. [+3 same]
+13:21:55    34.6 POSE 1.733 1.175 1.241 sd_xy 0.045 0.049
+13:21:56    35.4 INFO  [controller_server] Reached the goal! [+2 same]
+13:21:56    35.5 INFO  [bt_navigator] Goal succeeded [+1 same]
+13:21:56    35.5 INFO  [mision] Giro en el lugar: yaw=2.36 desde (1.80,1.44), punto del plan (1.80,1.50)
+13:21:56    35.5 INFO  [bt_navigator] Begin navigating from current location (1.80, 1.44) to (1.80, 1.44)
+13:21:56    35.6 POSE 1.796 1.421 1.513 sd_xy 0.057 0.063
+13:21:57    36.3 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+17 same]
+13:21:57    36.6 POSE 1.796 1.464 1.756 sd_xy 0.043 0.050
+13:21:57    36.7 INFO  [localizacion] Heading fix after a turn: 10 AMCL updates in 2.1 s (fixes 2, timed out 1)
+13:21:58    37.1 INFO  [mision] Viaje al punto del plan: (1.04, 1.02, 2.356194490192345)
+13:21:58    37.1 INFO  [bt_navigator] Begin navigating from current location (1.80, 1.45) to (1.04, 1.02)
+13:21:58    37.7 INFO  [amcl] Requesting no-motion update [+20 same]
+13:21:58    37.8 POSE 1.803 1.435 2.388 sd_xy 0.035 0.040
+13:22:00    39.0 INFO  [deteccion] last 10 s: published 0; rejected none
+13:22:00    39.0 POSE 1.649 1.185 -2.919 sd_xy 0.063 0.064
+13:22:00    39.2 INFO  [controller_server] Passing new path to controller. [+3 same]
+13:22:01    40.0 POSE 1.435 1.013 -2.881 sd_xy 0.067 0.063
+13:22:02    41.1 POSE 1.175 1.112 2.676 sd_xy 0.067 0.060
+13:22:02    41.3 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+17 same]
+13:22:02    41.6 INFO  [controller_server] Optimizer reset [+3 same]
+13:22:02    41.6 ERROR [controller_server] Optimizer fail to compute path [+1 same]
+13:22:02    41.6 WARN  [controller_server] [follow_path] [ActionServer] Aborting handle. [+1 same]
+13:22:02    41.7 INFO  [local_costmap.local_costmap] Received request to clear entirely the local_costmap [+1 same]
+13:22:02    41.7 INFO  [controller_server] Received a goal, begin computing control effort. [+3 same]
+13:22:03    42.2 POSE 1.017 1.166 2.187 sd_xy 0.055 0.052
+13:22:03    42.7 INFO  [amcl] Requesting no-motion update [+11 same]
+13:22:04    42.8 INFO  [controller_server] Reached the goal! [+1 same]
+13:22:04    42.9 INFO  [bt_navigator] Goal succeeded [+1 same]
+13:22:04    42.9 INFO  [mision] Status succeded (recuperaciones: 1)
+13:22:04    42.9 INFO  [bt_navigator] Begin navigating from current location (1.04, 1.07) to (1.04, 1.07)
+13:22:04    42.9 INFO  [mision] Giro en el lugar: yaw=-2.36 desde (1.04,1.07), punto del plan (1.04,1.02)
+13:22:04    43.2 POSE 1.049 1.057 2.387 sd_xy 0.044 0.043
+13:22:05    43.9 INFO  [localizacion] Heading fix after a turn: 10 AMCL updates in 2.1 s (fixes 3, timed out 1)
+13:22:05    44.4 POSE 1.069 1.035 2.816 sd_xy 0.043 0.044
+13:22:06    45.0 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:22:06    45.4 INFO  [mision] Status succeded (recuperaciones: 0) [+2 same]
+13:22:06    45.4 POSE 1.053 1.063 -2.433 sd_xy 0.036 0.043
+13:22:06    45.4 INFO  [bt_navigator] Begin navigating from current location (1.05, 1.05) to (1.05, 1.05)
+13:22:06    45.4 INFO  [mision] Giro en el lugar: yaw=-1.57 desde (1.05,1.05), punto del plan (1.04,1.02)
+13:22:07    46.4 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+18 same]
+13:22:07    46.5 POSE 1.036 1.060 -2.141 sd_xy 0.034 0.042
+13:22:08    46.9 INFO  [bt_navigator] Begin navigating from current location (1.04, 1.06) to (1.80, 1.50)
+13:22:08    46.9 INFO  [mision] Viaje al punto del plan: (1.80, 1.50, -1.5707963267948968)
+13:22:08    47.0 INFO  [controller_server] Received a goal, begin computing control effort. [+2 same]
+13:22:08    47.6 POSE 1.046 1.059 -1.673 sd_xy 0.031 0.038
+13:22:09    47.9 INFO  [amcl] Requesting no-motion update [+14 same]
+13:22:09    48.7 POSE 1.132 0.998 -2.314 sd_xy 0.040 0.042
+13:22:10    49.2 INFO  [deteccion] last 10 s: published 0; rejected width=4
+13:22:10    49.3 INFO  [controller_server] Optimizer reset [+1 same]
+13:22:10    49.3 ERROR [controller_server] Optimizer fail to compute path
+13:22:10    49.4 WARN  [controller_server] [follow_path] [ActionServer] Aborting handle.
+13:22:10    49.4 INFO  [local_costmap.local_costmap] Received request to clear entirely the local_costmap
+13:22:11    49.9 POSE 1.426 1.042 -2.774 sd_xy 0.058 0.059
+13:22:11    50.0 INFO  [controller_server] Passing new path to controller. [+3 same]
+13:22:12    51.0 POSE 1.466 1.136 -2.293 sd_xy 0.053 0.052
+13:22:12    51.5 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+29 same]
+13:22:13    52.2 POSE 1.606 1.402 -1.699 sd_xy 0.059 0.067
+13:22:13    52.7 INFO  [controller_server] Reached the goal! [+2 same]
+13:22:13    52.8 INFO  [bt_navigator] Goal succeeded [+2 same]
+13:22:13    52.8 INFO  [mision] Status succeded (recuperaciones: 1)
+13:22:13    52.8 INFO  [mision] Viaje al punto del plan: (2.44, 2.70, -1.5707963267948968)
+13:22:13    52.8 INFO  [bt_navigator] Begin navigating from current location (1.75, 1.52) to (2.44, 2.70)
+13:22:14    52.9 INFO  [controller_server] Received a goal, begin computing control effort. [+1 same]
+13:22:14    53.1 INFO  [amcl] Requesting no-motion update [+16 same]
+13:22:14    53.3 POSE 1.764 1.525 -1.613 sd_xy 0.047 0.071
+13:22:14    53.7 INFO  [localizacion] Heading fix after a turn: 10 AMCL updates in 2.0 s (fixes 4, timed out 1)
+13:22:15    54.3 POSE 1.728 1.587 -1.360 sd_xy 0.045 0.058
+13:22:16    55.4 POSE 1.595 1.885 -1.381 sd_xy 0.062 0.077
+13:22:17    55.9 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:22:17    56.4 POSE 1.840 2.194 -1.927 sd_xy 0.073 0.089
+13:22:17    56.6 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+29 same]
+13:22:18    57.5 POSE 2.151 2.377 -2.279 sd_xy 0.067 0.107
+13:22:19    58.1 INFO  [amcl] Requesting no-motion update [+7 same]
+13:22:19    58.5 POSE 2.289 2.626 -1.744 sd_xy 0.057 0.096
+13:22:20    59.4 INFO  [deteccion] last 10 s: published 4; rejected no_range=1 width=4
+13:22:20    59.6 POSE 2.345 2.788 -1.299 sd_xy 0.042 0.103
+13:22:21    60.0 INFO  [controller_server] Reached the goal!
+13:22:21    60.0 INFO  [bt_navigator] Goal succeeded
+13:22:21    60.0 INFO  [mision] Status succeded (recuperaciones: 0) [+1 same]
+13:22:21    60.6 POSE 2.412 2.763 -1.488 sd_xy 0.035 0.084
+13:22:21    60.6 INFO  [mision] Voy a mirar la candidata id=1 desde (2.29,0.19)
+13:22:21    60.6 INFO  [bt_navigator] Begin navigating from current location (2.41, 2.77) to (2.29, 0.19)
+13:22:21    60.7 INFO  [controller_server] Received a goal, begin computing control effort.
+13:22:22    60.9 INFO  [localizacion] Localization check, last 30 s: 5 still sweeps, LiDAR-map score at AMCL pose median 0.99 min 0.97 (right: ~0.8-0.9)
+13:22:22    61.1 INFO  [localizacion] Heading fix after a turn: 10 AMCL updates in 1.9 s (fixes 5, timed out 1)
+13:22:22    61.7 POSE 2.394 2.740 -1.680 sd_xy 0.035 0.082
+13:22:22    61.7 INFO  [controller_server] Passing new path to controller. [+3 same]
+13:22:23    61.9 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+18 same]
+13:22:23    62.7 POSE 2.076 2.574 -2.641 sd_xy 0.056 0.097
+13:22:24    63.3 INFO  [amcl] Requesting no-motion update [+13 same]
+13:22:24    63.8 POSE 1.799 2.236 -2.083 sd_xy 0.071 0.092
+13:22:25    64.8 POSE 1.740 1.738 -1.562 sd_xy 0.057 0.073
+13:22:27    65.9 POSE 1.595 1.263 -1.834 sd_xy 0.075 0.080
+13:22:27    65.9 INFO  [localizacion] Heading fix after a turn: 10 AMCL updates in 1.5 s (fixes 6, timed out 1)
+13:22:28    66.8 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:22:28    66.9 POSE 1.816 0.842 -1.057 sd_xy 0.055 0.072
+13:22:28    67.1 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+25 same]
+13:22:29    68.0 POSE 2.084 0.515 -1.124 sd_xy 0.069 0.074
+13:22:29    68.3 INFO  [amcl] Requesting no-motion update [+13 same]
+13:22:30    69.0 POSE 2.142 0.262 -1.030 sd_xy 0.062 0.065
+13:22:30    69.7 INFO  [deteccion] last 10 s: published 11; rejected width=2
+13:22:31    70.1 POSE 2.290 0.118 -0.104 sd_xy 0.047 0.064
+13:22:32    71.1 POSE 2.357 0.186 0.809 sd_xy 0.040 0.060
+13:22:32    71.5 INFO  [controller_server] Reached the goal!
+13:22:32    71.6 INFO  [bt_navigator] Goal succeeded
+13:22:32    71.6 INFO  [mision] Status succeded (recuperaciones: 0)
+13:22:32    71.6 INFO  [mision] Llegué a mirar la candidata id=1: espero hasta 2.0 s a que se confirme
+13:22:33    72.2 POSE 2.332 0.221 1.478 sd_xy 0.033 0.049
+13:22:33    72.2 REPORT 2.231 0.999 frame map
+13:22:33    72.2 INFO  [mision] Reporte 1. id=1 x=2.23 y=1.00
+13:22:33    72.2 INFO  [juez_mock] [reporte #1] total 100 | víctimas [V1:0 V2:100 V3:0 V4:0]
+13:22:33    72.2 INFO  [mision] La inspección confirmó la candidata id=1
+13:22:33    72.2 INFO  [bt_navigator] Begin navigating from current location (2.33, 0.22) to (2.44, 2.70)
+13:22:33    72.2 INFO  [mision] Viaje al punto del plan: (2.44, 2.70, 1.5707963267948963)
+13:22:33    72.3 INFO  [controller_server] Received a goal, begin computing control effort.
+13:22:33    72.5 INFO  [localizacion] Fine-tune AMCL while still: 2.3 cm, 3.3° to (2.334, 0.197, 1.428), score 0.97 (fine-tunes 1)
+13:22:33    72.5 INFO  [amcl] initialPoseReceived [+1 same]
+13:22:33    72.5 WARN  [amcl] Failed to transform initial pose in time (Lookup would require extrapolation into the future.  Requested time 1793809353.650437 but the latest data is at time 1793809353.576100, when looking up transform from frame [base_footprint] to frame [odom_fused])
+13:22:33    72.5 INFO  [amcl] Setting pose (1793809353.650509): 2.334 0.197 1.428
+13:22:33    72.6 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+21 same]
+13:22:34    73.2 POSE 2.303 0.230 1.709 sd_xy 0.030 0.033
+13:22:34    73.3 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:22:35    73.9 INFO  [amcl] Requesting no-motion update [+10 same]
+13:22:35    74.4 POSE 1.978 0.481 2.213 sd_xy 0.061 0.063
+13:22:36    75.5 POSE 1.789 0.946 1.480 sd_xy 0.063 0.071
+13:22:37    76.5 POSE 1.755 1.464 1.203 sd_xy 0.056 0.085
+13:22:38    77.3 INFO  [localizacion] Heading fix after a turn: 10 AMCL updates in 1.3 s (fixes 7, timed out 1)
+13:22:38    77.6 POSE 1.744 1.958 0.863 sd_xy 0.062 0.073
+13:22:39    78.0 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+24 same]
+13:22:39    78.4 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:22:39    78.8 POSE 2.050 2.386 0.218 sd_xy 0.077 0.122
+13:22:40    79.1 INFO  [amcl] Requesting no-motion update [+13 same]
+13:22:40    79.8 POSE 2.227 2.566 0.611 sd_xy 0.053 0.114
+13:22:41    80.0 INFO  [deteccion] last 10 s: published 7; rejected none
+13:22:41    80.5 INFO  [controller_server] Reached the goal!
+13:22:41    80.6 INFO  [bt_navigator] Goal succeeded
+13:22:41    80.6 INFO  [mision] Status succeded (recuperaciones: 0)
+13:22:41    80.6 INFO  [bt_navigator] Begin navigating from current location (2.35, 2.73) to (2.04, 2.86)
+13:22:41    80.6 INFO  [mision] Viaje al punto del plan: (2.04, 2.86, 1.5707963267948963)
+13:22:41    80.7 INFO  [controller_server] Received a goal, begin computing control effort.
+13:22:42    81.0 POSE 2.363 2.749 1.543 sd_xy 0.046 0.100
+13:22:43    82.1 POSE 2.325 2.757 1.589 sd_xy 0.039 0.090
+13:22:44    82.9 INFO  [mision] Viaje al punto del plan: (1.50, 2.36, 2.356194490192345)
+13:22:44    82.9 INFO  [bt_navigator] Begin navigating from current location (2.09, 2.83) to (1.50, 2.36)
+13:22:44    82.9 INFO  [localizacion] Heading fix after a turn: 10 AMCL updates in 2.0 s (fixes 8, timed out 1)
+13:22:44    83.0 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+19 same]
+13:22:44    83.1 POSE 2.069 2.838 1.571 sd_xy 0.050 0.072
+13:22:45    84.0 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:22:45    84.2 POSE 2.028 2.801 1.456 sd_xy 0.050 0.075
+13:22:46    85.2 POSE 1.862 2.617 0.784 sd_xy 0.069 0.098
+13:22:46    85.7 INFO  [amcl] Requesting no-motion update [+12 same]
+13:22:47    86.4 POSE 1.639 2.315 0.702 sd_xy 0.064 0.079
+13:22:48    87.5 POSE 1.552 2.285 1.618 sd_xy 0.043 0.064
+13:22:49    87.9 INFO  [controller_server] Reached the goal! [+1 same]
+13:22:49    88.0 INFO  [bt_navigator] Goal succeeded [+1 same]
+13:22:49    88.0 INFO  [mision] Status succeded (recuperaciones: 0) [+1 same]
+13:22:49    88.0 INFO  [bt_navigator] Begin navigating from current location (1.49, 2.35) to (1.50, 2.35)
+13:22:49    88.0 INFO  [mision] Giro en el lugar: yaw=3.14 desde (1.50,2.35), punto del plan (1.50,2.36)
+13:22:49    88.1 INFO  [controller_server] Received a goal, begin computing control effort. [+1 same]
+13:22:49    88.3 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+15 same]
+13:22:49    88.7 POSE 1.492 2.368 2.372 sd_xy 0.046 0.052
+13:22:50    89.1 INFO  [controller_server] Passing new path to controller. [+3 same]
+13:22:50    89.4 INFO  [bt_navigator] Begin navigating from current location (1.56, 2.41) to (1.18, 3.80)
+13:22:50    89.4 INFO  [mision] Viaje al punto del plan: (1.18, 3.80, 2.356194490192345)
+13:22:50    89.8 POSE 1.560 2.411 2.996 sd_xy 0.039 0.049
+13:22:51    90.0 INFO  [deteccion] last 10 s: published 0; rejected none
+13:22:52    90.9 POSE 1.492 2.452 2.609 sd_xy 0.045 0.051
+13:22:52    91.7 INFO  [amcl] Requesting no-motion update [+13 same]
+13:22:53    91.9 POSE 1.350 2.751 1.891 sd_xy 0.059 0.064
+13:22:54    93.0 POSE 1.068 2.962 2.036 sd_xy 0.065 0.064
+13:22:54    93.4 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+23 same]
+13:22:54    93.7 INFO  [localizacion] Heading fix after a turn: 10 AMCL updates in 1.9 s (fixes 9, timed out 1)
+13:22:55    94.2 POSE 0.696 3.199 1.585 sd_xy 0.071 0.080
+13:22:55    94.6 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:22:56    95.2 POSE 0.990 3.401 0.491 sd_xy 0.064 0.058
+13:22:57    96.3 POSE 1.176 3.525 0.703 sd_xy 0.060 0.051
+13:22:58    97.3 POSE 1.183 3.770 1.649 sd_xy 0.057 0.053
+13:22:59    97.8 INFO  [controller_server] Reached the goal! [+1 same]
+13:22:59    97.9 INFO  [bt_navigator] Goal succeeded [+1 same]
+13:22:59    97.9 INFO  [mision] Status succeded (recuperaciones: 0) [+1 same]
+13:22:59    97.9 INFO  [bt_navigator] Begin navigating from current location (1.12, 3.84) to (1.36, 3.80)
+13:22:59    97.9 INFO  [mision] Viaje al punto del plan: (1.36, 3.80, 1.5707963267948963)
+13:22:59    98.0 INFO  [controller_server] Received a goal, begin computing control effort. [+1 same]
+13:22:59    98.1 INFO  [amcl] Requesting no-motion update [+13 same]
+13:22:59    98.4 POSE 1.112 3.846 2.306 sd_xy 0.049 0.048
+13:22:59    98.5 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+26 same]
+13:23:00    99.5 POSE 1.217 3.764 1.803 sd_xy 0.042 0.046
+13:23:01   100.0 INFO  [deteccion] last 10 s: published 0; rejected none
+13:23:01   100.7 POSE 1.388 3.721 1.321 sd_xy 0.044 0.046
+13:23:01   100.8 INFO  [mision] Viaje al punto del plan: (1.18, 3.80, 0.7853981633974484)
+13:23:01   100.8 INFO  [bt_navigator] Begin navigating from current location (1.42, 3.75) to (1.18, 3.80)
+13:23:02   101.8 POSE 1.407 3.766 1.364 sd_xy 0.038 0.036
+13:23:03   101.9 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:23:03   102.7 INFO  [mision] Viaje al punto del plan: (1.06, 4.02, 0.7853981633974484)
+13:23:03   102.7 INFO  [bt_navigator] Begin navigating from current location (1.24, 3.82) to (1.06, 4.02)
+13:23:04   103.0 POSE 1.231 3.821 0.686 sd_xy 0.051 0.054
+13:23:04   103.1 INFO  [amcl] Requesting no-motion update [+15 same]
+13:23:04   103.5 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+23 same]
+13:23:05   104.2 POSE 1.162 3.872 0.865 sd_xy 0.041 0.043
+13:23:05   104.5 INFO  [controller_server] Reached the goal! [+3 same]
+13:23:05   104.6 INFO  [bt_navigator] Goal succeeded [+2 same]
+13:23:05   104.6 INFO  [mision] Status succeded (recuperaciones: 0) [+2 same]
+13:23:05   104.6 INFO  [bt_navigator] Begin navigating from current location (1.09, 3.95) to (0.58, 4.22)
+13:23:05   104.6 INFO  [mision] Viaje al punto del plan: (0.58, 4.22, -0.7853981633974485)
+13:23:05   104.7 INFO  [controller_server] Received a goal, begin computing control effort. [+3 same]
+13:23:06   104.9 INFO  [localizacion] Heading fix after a turn: 10 AMCL updates in 2.0 s (fixes 10, timed out 1)
+13:23:06   105.7 POSE 1.058 4.006 0.693 sd_xy 0.049 0.047
+13:23:07   106.7 POSE 0.897 4.214 0.233 sd_xy 0.068 0.064
+13:23:08   107.7 INFO  [controller_server] Passing new path to controller. [+3 same]
+13:23:08   107.8 POSE 0.660 4.311 -0.632 sd_xy 0.072 0.055
+13:23:09   108.3 INFO  [amcl] Requesting no-motion update [+8 same]
+13:23:09   108.8 POSE 0.492 4.277 -0.959 sd_xy 0.054 0.043
+13:23:10   109.0 INFO  [bt_navigator] Begin navigating from current location (0.49, 4.25) to (0.49, 4.25)
+13:23:10   109.0 INFO  [mision] Giro en el lugar: yaw=-2.36 desde (0.49,4.25), punto del plan (0.58,4.22)
+13:23:10   109.2 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+23 same]
+13:23:11   110.0 INFO  [deteccion] last 10 s: published 0; rejected none
+13:23:11   110.0 POSE 0.483 4.237 -1.004 sd_xy 0.036 0.030
+13:23:11   110.3 INFO  [localizacion] Heading fix after a turn: 10 AMCL updates in 1.9 s (fixes 11, timed out 1)
+13:23:12   111.1 POSE 0.477 4.284 -1.924 sd_xy 0.040 0.038
+13:23:12   111.2 INFO  [controller_server] Reached the goal! [+2 same]
+13:23:12   111.2 INFO  [bt_navigator] Goal succeeded [+1 same]
+13:23:12   111.2 INFO  [mision] Status succeded (recuperaciones: 0) [+1 same]
+13:23:12   111.2 INFO  [bt_navigator] Begin navigating from current location (0.48, 4.29) to (0.14, 4.26)
+13:23:12   111.2 INFO  [mision] Viaje al punto del plan: (0.14, 4.26, -1.5707963267948968)
+13:23:12   111.3 INFO  [controller_server] Received a goal, begin computing control effort. [+2 same]
+13:23:13   112.3 POSE 0.455 4.278 -2.098 sd_xy 0.037 0.034
+13:23:14   113.3 POSE 0.272 4.212 -1.358 sd_xy 0.051 0.052
+13:23:14   113.3 INFO  [amcl] Requesting no-motion update [+14 same]
+13:23:14   113.3 INFO  [controller_server] Passing new path to controller. [+3 same]
+13:23:14   113.6 INFO  [bt_navigator] Begin navigating from current location (0.19, 4.21) to (0.19, 4.21)
+13:23:14   113.6 INFO  [mision] Giro en el lugar: yaw=0.00 desde (0.19,4.21), punto del plan (0.14,4.26)
+13:23:15   114.3 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+20 same]
+13:23:15   114.4 POSE 0.154 4.222 -1.437 sd_xy 0.035 0.044
+13:23:16   115.4 POSE 0.172 4.171 -0.688 sd_xy 0.040 0.044
+13:23:16   115.8 INFO  [bt_navigator] Begin navigating from current location (0.20, 4.16) to (0.20, 4.16)
+13:23:16   115.8 INFO  [mision] Giro en el lugar: yaw=0.79 desde (0.20,4.16), punto del plan (0.14,4.26)
+13:23:17   116.5 POSE 0.205 4.159 -0.097 sd_xy 0.037 0.037
+13:23:18   117.4 INFO  [controller_server] Reached the goal! [+2 same]
+13:23:18   117.5 INFO  [bt_navigator] Goal succeeded [+2 same]
+13:23:18   117.5 INFO  [mision] Status succeded (recuperaciones: 0) [+2 same]
+13:23:18   117.5 POSE 0.220 4.156 0.576 sd_xy 0.033 0.034
+13:23:18   117.5 INFO  [bt_navigator] Begin navigating from current location (0.22, 4.16) to (0.58, 4.22)
+13:23:18   117.5 INFO  [mision] Viaje al punto del plan: (0.58, 4.22, 1.5707963267948963)
+13:23:18   117.6 INFO  [controller_server] Received a goal, begin computing control effort. [+2 same]
+13:23:19   118.5 INFO  [amcl] Requesting no-motion update [+16 same]
+13:23:19   118.6 POSE 0.249 4.173 0.926 sd_xy 0.035 0.032
+13:23:19   118.6 INFO  [controller_server] Passing new path to controller. [+3 same]
+13:23:20   119.6 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+18 same]
+13:23:20   119.8 POSE 0.428 4.287 1.848 sd_xy 0.045 0.054
+13:23:21   120.0 INFO  [deteccion] last 10 s: published 0; rejected none
+13:23:21   120.2 INFO  [bt_navigator] Begin navigating from current location (0.53, 4.28) to (0.74, 4.20)
+13:23:21   120.2 INFO  [mision] Viaje al punto del plan: (0.74, 4.20, 1.5707963267948963)
+13:23:21   120.8 POSE 0.574 4.254 1.636 sd_xy 0.041 0.050
+13:23:22   121.5 INFO  [mision] Viaje al punto del plan: (0.92, 4.20, 2.356194490192345)
+13:23:22   121.5 INFO  [bt_navigator] Begin navigating from current location (0.64, 4.20) to (0.92, 4.20)
+13:23:22   121.7 INFO  [localizacion] Heading fix after a turn: 10 AMCL updates in 1.9 s (fixes 12, timed out 1)
+13:23:23   122.5 POSE 0.699 4.172 1.746 sd_xy 0.047 0.051
+13:23:24   123.4 INFO  [controller_server] Reached the goal! [+2 same]
+13:23:24   123.4 INFO  [bt_navigator] Goal succeeded [+2 same]
+13:23:24   123.4 INFO  [mision] Status succeded (recuperaciones: 0) [+2 same]
+13:23:24   123.4 INFO  [bt_navigator] Begin navigating from current location (0.83, 4.23) to (0.83, 4.23)
+13:23:24   123.4 INFO  [mision] Giro en el lugar: yaw=3.14 desde (0.83,4.23), punto del plan (0.92,4.20)
+13:23:24   123.5 INFO  [controller_server] Received a goal, begin computing control effort. [+2 same]
+13:23:24   123.6 POSE 0.851 4.232 2.474 sd_xy 0.059 0.051
+13:23:24   123.7 INFO  [amcl] Requesting no-motion update [+10 same]
+13:23:25   124.6 INFO  [controller_server] Passing new path to controller. [+3 same]
+13:23:25   124.6 POSE 0.880 4.242 2.680 sd_xy 0.042 0.036
+13:23:25   124.7 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+23 same]
+13:23:26   125.0 INFO  [bt_navigator] Begin navigating from current location (0.87, 4.25) to (1.18, 3.80)
+13:23:26   125.0 INFO  [mision] Viaje al punto del plan: (1.18, 3.80, -2.356194490192345)
+13:23:26   125.7 INFO  [localizacion] Localization check, last 30 s: 3 still sweeps, LiDAR-map score at AMCL pose median 0.92 min 0.90 (right: ~0.8-0.9)
+13:23:26   125.8 POSE 0.863 4.244 3.095 sd_xy 0.040 0.034
+13:23:28   126.9 POSE 0.939 4.085 2.688 sd_xy 0.053 0.053
+13:23:29   127.9 POSE 1.078 3.871 2.972 sd_xy 0.057 0.055
+13:23:29   128.7 INFO  [controller_server] Reached the goal! [+1 same]
+13:23:29   128.7 INFO  [bt_navigator] Goal succeeded [+1 same]
+13:23:29   128.7 INFO  [mision] Status succeded (recuperaciones: 0) [+1 same]
+13:23:29   128.7 INFO  [mision] Giro en el lugar: yaw=0.79 desde (1.23,3.84), punto del plan (1.36,3.80)
+13:23:29   128.7 INFO  [bt_navigator] Begin navigating from current location (1.23, 3.84) to (1.23, 3.84)
+13:23:29   128.8 INFO  [controller_server] Received a goal, begin computing control effort. [+1 same]
+13:23:30   128.9 INFO  [amcl] Requesting no-motion update [+14 same]
+13:23:30   129.0 POSE 1.247 3.830 -2.493 sd_xy 0.056 0.055
+13:23:30   129.7 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+17 same]
+13:23:30   129.8 INFO  [controller_server] Passing new path to controller. [+3 same]
+13:23:31   130.0 INFO  [deteccion] last 10 s: published 0; rejected none
+13:23:31   130.0 POSE 1.204 3.829 -2.159 sd_xy 0.052 0.048
+13:23:32   131.1 POSE 1.159 3.820 -1.114 sd_xy 0.040 0.042
+13:23:33   132.1 POSE 1.238 3.824 -0.074 sd_xy 0.047 0.045
+13:23:33   132.8 INFO  [mision] Viaje al punto del plan: (1.16, 1.96, 0.7853981633974484)
+13:23:33   132.8 INFO  [bt_navigator] Begin navigating from current location (1.27, 3.84) to (1.16, 1.96)
+13:23:34   133.2 POSE 1.272 3.837 0.793 sd_xy 0.043 0.040
+13:23:35   134.1 INFO  [amcl] Requesting no-motion update [+10 same]
+13:23:35   134.3 POSE 1.215 3.730 1.001 sd_xy 0.051 0.046
+13:23:35   134.8 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+26 same]
+13:23:36   134.9 INFO  [controller_server] Passing new path to controller. [+3 same]
+13:23:36   135.1 INFO  [localizacion] Heading fix after a turn: 10 AMCL updates in 2.0 s (fixes 13, timed out 1)
+13:23:36   135.3 POSE 1.045 3.441 1.286 sd_xy 0.070 0.068
+13:23:37   136.4 POSE 0.844 3.172 1.507 sd_xy 0.087 0.079
+13:23:38   137.5 POSE 1.023 2.845 2.142 sd_xy 0.092 0.080
+13:23:39   138.6 POSE 1.085 2.543 1.716 sd_xy 0.069 0.071
+13:23:40   139.3 INFO  [amcl] Requesting no-motion update [+10 same]
+13:23:40   139.7 POSE 0.971 2.233 1.629 sd_xy 0.078 0.070
+13:23:41   139.9 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+25 same]
+13:23:41   140.0 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:23:41   140.1 INFO  [deteccion] last 10 s: published 0; rejected width=1
+13:23:41   140.7 POSE 1.071 1.958 1.492 sd_xy 0.058 0.060
+13:23:43   141.9 POSE 1.148 1.824 0.660 sd_xy 0.054 0.069
+13:23:43   142.7 INFO  [controller_server] Reached the goal! [+1 same]
+13:23:43   142.8 INFO  [bt_navigator] Goal succeeded [+1 same]
+13:23:43   142.8 INFO  [mision] Status succeded (recuperaciones: 0) [+1 same]
+13:23:43   142.8 INFO  [bt_navigator] Begin navigating from current location (1.21, 1.89) to (1.21, 1.89)
+13:23:43   142.8 INFO  [mision] Giro en el lugar: yaw=0.00 desde (1.21,1.89), punto del plan (1.16,1.96)
+13:23:44   142.9 INFO  [controller_server] Received a goal, begin computing control effort. [+1 same]
+13:23:44   143.0 POSE 1.218 1.910 0.692 sd_xy 0.043 0.045
+13:23:45   144.0 POSE 1.212 1.891 0.493 sd_xy 0.041 0.039
+13:23:45   144.1 INFO  [localizacion] Heading fix after a turn: 10 AMCL updates in 2.0 s (fixes 14, timed out 1)
+13:23:45   144.3 INFO  [mision] Viaje al punto del plan: (0.10, 2.36, 1.5707963267948963)
+13:23:45   144.3 INFO  [bt_navigator] Begin navigating from current location (1.20, 1.88) to (0.10, 2.36)
+13:23:45   144.7 INFO  [amcl] Requesting no-motion update [+18 same]
+13:23:46   144.9 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+21 same]
+13:23:46   145.1 POSE 1.197 1.874 0.089 sd_xy 0.040 0.035
+13:23:46   145.4 INFO  [controller_server] Passing new path to controller. [+3 same]
+13:23:47   146.1 POSE 1.126 1.997 -0.505 sd_xy 0.053 0.052
+13:23:48   147.2 POSE 0.903 2.250 -0.503 sd_xy 0.065 0.053
+13:23:49   148.4 POSE 0.533 2.275 0.154 sd_xy 0.072 0.068
+13:23:50   149.5 POSE 0.266 2.297 0.776 sd_xy 0.072 0.061
+13:23:51   150.0 INFO  [controller_server] Reached the goal! [+1 same]
+13:23:51   150.1 INFO  [deteccion] last 10 s: published 0; rejected none
+13:23:51   150.1 INFO  [bt_navigator] Goal succeeded [+1 same]
+13:23:51   150.1 INFO  [mision] Status succeded (recuperaciones: 0) [+1 same]
+13:23:51   150.1 INFO  [mision] Giro en el lugar: yaw=2.36 desde (0.14,2.34), punto del plan (0.10,2.36)
+13:23:51   150.1 INFO  [bt_navigator] Begin navigating from current location (0.14, 2.34) to (0.14, 2.34)
+13:23:51   150.2 INFO  [controller_server] Received a goal, begin computing control effort. [+1 same]
+13:23:51   150.3 INFO  [amcl] Requesting no-motion update [+15 same]
+13:23:51   150.5 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+13 same]
+13:23:51   150.6 POSE 0.121 2.350 1.454 sd_xy 0.047 0.053
+13:23:52   151.2 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:23:52   151.7 POSE 0.152 2.366 2.081 sd_xy 0.045 0.050
+13:23:53   152.4 INFO  [bt_navigator] Begin navigating from current location (0.16, 2.37) to (0.78, 3.56)
+13:23:53   152.4 INFO  [mision] Voy a mirar la candidata id=2 desde (0.78,3.56)
+13:23:53   152.8 POSE 0.165 2.369 2.362 sd_xy 0.034 0.042
+13:23:55   154.0 POSE 0.279 2.380 3.043 sd_xy 0.044 0.046
+13:23:56   155.0 INFO  [controller_server] Optimizer reset [+1 same]
+13:23:56   155.0 ERROR [controller_server] Optimizer fail to compute path
+13:23:56   155.0 WARN  [controller_server] [follow_path] [ActionServer] Aborting handle.
+13:23:56   155.0 INFO  [local_costmap.local_costmap] Received request to clear entirely the local_costmap
+13:23:56   155.2 POSE 0.570 2.416 -2.479 sd_xy 0.062 0.060
+13:23:56   155.5 INFO  [amcl] Requesting no-motion update [+14 same]
+13:23:56   155.6 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+14 same]
+13:23:57   156.4 POSE 0.762 2.334 -2.592 sd_xy 0.057 0.050
+13:23:57   156.6 INFO  [controller_server] Passing new path to controller. [+3 same]
+13:23:58   157.1 INFO  [localizacion] Heading fix after a turn: 10 AMCL updates in 2.0 s (fixes 15, timed out 1)
+13:23:58   157.6 POSE 0.952 2.439 -2.098 sd_xy 0.064 0.066
+13:23:59   158.7 POSE 0.987 2.772 -1.146 sd_xy 0.060 0.062
+13:24:00   159.8 POSE 0.787 3.105 -1.056 sd_xy 0.074 0.065
+13:24:01   160.1 INFO  [deteccion] last 10 s: published 6; rejected none
+13:24:01   160.6 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+23 same]
+13:24:02   160.9 POSE 0.819 3.327 -2.017 sd_xy 0.056 0.055
+13:24:02   161.7 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:24:03   161.9 POSE 0.897 3.471 -2.836 sd_xy 0.056 0.045
+13:24:03   162.1 INFO  [amcl] Requesting no-motion update [+12 same]
+13:24:03   162.4 INFO  [controller_server] Reached the goal! [+1 same]
+13:24:03   162.4 INFO  [bt_navigator] Goal succeeded [+1 same]
+13:24:03   162.4 INFO  [mision] Status succeded (recuperaciones: 1)
+13:24:03   162.4 INFO  [mision] Llegué a mirar la candidata id=2: espero hasta 2.0 s a que se confirme
+13:24:04   163.0 POSE 0.822 3.531 -2.748 sd_xy 0.040 0.039
+13:24:04   163.3 INFO  [localizacion] Localization check, last 30 s: 3 still sweeps, LiDAR-map score at AMCL pose median 0.96 min 0.95 (right: ~0.8-0.9)
+13:24:05   164.1 POSE 0.826 3.531 -2.739 sd_xy 0.031 0.032
+13:24:05   164.1 INFO  [localizacion] Heading fix after a turn: 10 AMCL updates in 2.0 s (fixes 16, timed out 1)
+13:24:05   164.5 INFO  [mision] La inspección no confirmó la candidata id=2 (intento 1 de 3): la miro desde otro lugar
+13:24:06   165.1 INFO  [mision] Voy a mirar la candidata id=2 desde (0.09,2.36)
+13:24:06   165.1 INFO  [bt_navigator] Begin navigating from current location (0.83, 3.53) to (0.09, 2.36)
+13:24:06   165.1 INFO  [controller_server] Received a goal, begin computing control effort. [+2 same]
+13:24:06   165.2 INFO  [controller_server] Optimizer reset [+1 same]
+13:24:07   165.9 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+11 same]
+13:24:07   166.0 POSE 0.831 3.517 -2.625 sd_xy 0.033 0.034
+13:24:08   167.1 POSE 0.902 3.225 -1.676 sd_xy 0.058 0.061
+13:24:08   167.2 INFO  [controller_server] Passing new path to controller. [+1 same]
+13:24:08   167.5 INFO  [amcl] Requesting no-motion update [+9 same]
+13:24:09   168.1 POSE 0.980 2.953 -1.329 sd_xy 0.059 0.054
+13:24:10   169.2 POSE 1.027 2.685 -1.903 sd_xy 0.062 0.058
+13:24:11   170.1 INFO  [deteccion] last 10 s: published 0; rejected none
+13:24:11   170.2 POSE 0.762 2.386 -2.923 sd_xy 0.067 0.062
+13:24:12   171.0 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+27 same]
+13:24:12   171.4 POSE 0.446 2.375 2.867 sd_xy 0.073 0.058
+13:24:13   172.4 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:24:13   172.6 POSE 0.193 2.337 2.369 sd_xy 0.067 0.059
+13:24:14   173.1 INFO  [controller_server] Reached the goal!
+13:24:14   173.2 INFO  [bt_navigator] Goal succeeded
+13:24:14   173.2 INFO  [mision] Status succeded (recuperaciones: 0) [+1 same]
+13:24:14   173.2 INFO  [mision] Llegué a mirar la candidata id=2: espero hasta 2.0 s a que se confirme
+13:24:14   173.5 INFO  [amcl] Requesting no-motion update [+13 same]
+13:24:14   173.8 POSE 0.088 2.364 1.655 sd_xy 0.051 0.051
+13:24:16   174.9 POSE 0.091 2.353 1.663 sd_xy 0.039 0.045
+13:24:16   175.3 INFO  [mision] La inspección no confirmó la candidata id=2 (intento 2 de 3): la miro desde otro lugar
+13:24:16   175.7 INFO  [localizacion] Heading fix after a turn: 10 AMCL updates in 2.2 s (fixes 17, timed out 1)
+13:24:17   176.0 INFO  [mision] Candidata id: 2 x=0.10 y=3.18 obs=14. Sin lugar para mirarla (intento 3 de 3)
+13:24:17   176.0 INFO  [mision] Giro en el lugar: yaw=-2.36 desde (0.09,2.35), punto del plan (0.10,2.36)
+13:24:17   176.0 INFO  [bt_navigator] Begin navigating from current location (0.09, 2.35) to (0.09, 2.35)
+13:24:17   176.0 INFO  [controller_server] Received a goal, begin computing control effort.
+13:24:17   176.0 INFO  [controller_server] Optimizer reset
+13:24:17   176.0 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+9 same]
+13:24:18   177.1 POSE 0.097 2.340 1.835 sd_xy 0.034 0.040
+13:24:19   178.1 INFO  [controller_server] Passing new path to controller. [+1 same]
+13:24:19   178.2 POSE 0.090 2.351 2.819 sd_xy 0.037 0.040
+13:24:20   179.0 INFO  [controller_server] Reached the goal!
+13:24:20   179.0 INFO  [bt_navigator] Goal succeeded
+13:24:20   179.0 INFO  [mision] Status succeded (recuperaciones: 0)
+13:24:20   179.0 INFO  [mision] Giro en el lugar: yaw=-1.57 desde (0.07,2.36), punto del plan (0.10,2.36)
+13:24:20   179.0 INFO  [bt_navigator] Begin navigating from current location (0.07, 2.36) to (0.07, 2.36)
+13:24:20   179.3 INFO  [amcl] Requesting no-motion update [+10 same]
+13:24:20   179.3 POSE 0.077 2.365 -2.414 sd_xy 0.044 0.044
+13:24:21   180.1 INFO  [deteccion] last 10 s: published 16; rejected none
+13:24:21   180.4 POSE 0.064 2.346 -2.038 sd_xy 0.041 0.047
+13:24:21   180.7 INFO  [mision] Viaje al punto del plan: (1.16, 1.96, -1.5707963267948968)
+13:24:21   180.7 INFO  [bt_navigator] Begin navigating from current location (0.06, 2.34) to (1.16, 1.96)
+13:24:22   181.2 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+22 same]
+13:24:22   181.4 POSE 0.064 2.340 -1.514 sd_xy 0.041 0.044
+13:24:23   182.6 POSE 0.336 2.396 -0.466 sd_xy 0.067 0.059
+13:24:25   183.8 POSE 0.797 2.320 -0.413 sd_xy 0.080 0.075
+13:24:25   183.9 INFO  [controller_server] Passing new path to controller. [+3 same]
+13:24:26   185.0 POSE 0.941 2.041 -1.182 sd_xy 0.071 0.070
+13:24:27   185.9 INFO  [amcl] Requesting no-motion update [+13 same]
+13:24:27   186.2 POSE 1.071 1.884 -1.755 sd_xy 0.053 0.054
+13:24:27   186.3 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+25 same]
+13:24:27   186.5 INFO  [controller_server] Reached the goal! [+1 same]
+13:24:27   186.5 INFO  [bt_navigator] Goal succeeded [+1 same]
+13:24:27   186.5 INFO  [mision] Status succeded (recuperaciones: 0) [+1 same]
+13:24:27   186.5 INFO  [mision] Salteo el punto del plan (0.46,1.54): ocupado en el costmap
+13:24:27   186.6 INFO  [mision] Viaje al punto del plan: (-0.04, 1.66, -1.5707963267948968)
+13:24:27   186.6 INFO  [bt_navigator] Begin navigating from current location (1.13, 1.88) to (-0.04, 1.66)
+13:24:27   186.7 INFO  [controller_server] Received a goal, begin computing control effort. [+2 same]
+13:24:28   187.4 POSE 1.149 1.893 -1.566 sd_xy 0.041 0.047
+13:24:29   188.5 POSE 1.327 1.785 -1.044 sd_xy 0.055 0.061
+13:24:30   189.7 POSE 1.470 1.647 -1.242 sd_xy 0.048 0.055
+13:24:31   189.9 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:24:31   190.2 INFO  [deteccion] last 10 s: published 0; rejected none
+13:24:31   190.3 INFO  [localizacion] Heading fix after a turn: 10 AMCL updates in 1.9 s (fixes 18, timed out 1)
+13:24:32   191.0 POSE 1.535 1.614 -1.697 sd_xy 0.048 0.043
+13:24:32   191.4 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+22 same]
+13:24:33   192.3 POSE 1.692 1.459 -1.714 sd_xy 0.056 0.059
+13:24:34   193.3 POSE 1.556 1.186 -2.676 sd_xy 0.053 0.064
+13:24:35   194.5 POSE 1.029 1.156 2.748 sd_xy 0.078 0.074
+13:24:35   194.5 INFO  [amcl] Requesting no-motion update [+18 same]
+13:24:36   195.0 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:24:36   195.6 POSE 0.595 1.116 2.731 sd_xy 0.058 0.057
+13:24:37   196.1 INFO  [localizacion] Heading fix after a turn: 10 AMCL updates in 1.5 s (fixes 19, timed out 1)
+13:24:37   196.4 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+25 same]
+13:24:37   196.7 POSE 0.399 1.424 2.247 sd_xy 0.056 0.072
+13:24:38   197.7 POSE 0.259 1.622 2.760 sd_xy 0.062 0.065
+13:24:39   198.7 POSE 0.024 1.603 -2.428 sd_xy 0.047 0.062
+13:24:41   199.9 POSE -0.123 1.547 -1.452 sd_xy 0.044 0.067
+13:24:41   200.1 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:24:41   200.3 INFO  [amcl] Requesting no-motion update [+7 same]
+13:24:41   200.3 INFO  [deteccion] last 10 s: published 0; rejected width=2
+13:24:42   200.8 INFO  [controller_server] Reached the goal!
+13:24:42   200.9 INFO  [bt_navigator] Goal succeeded
+13:24:42   200.9 INFO  [mision] Status succeded (recuperaciones: 0)
+13:24:42   200.9 INFO  [mision] Giro en el lugar: yaw=-2.36 desde (-0.13,1.63), punto del plan (-0.04,1.66)
+13:24:42   200.9 INFO  [bt_navigator] Begin navigating from current location (-0.13, 1.63) to (-0.13, 1.63)
+13:24:42   201.0 INFO  [controller_server] Received a goal, begin computing control effort.
+13:24:42   201.0 POSE -0.124 1.641 -1.400 sd_xy 0.046 0.055
+13:24:43   201.9 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+26 same]
+13:24:43   202.1 POSE -0.113 1.649 -1.696 sd_xy 0.037 0.051
+13:24:43   202.5 INFO  [mision] Viaje al punto del plan: (0.60, 0.58, 3.141592653589793)
+13:24:43   202.5 INFO  [bt_navigator] Begin navigating from current location (-0.12, 1.64) to (0.60, 0.58)
+13:24:44   203.2 POSE -0.120 1.634 -2.255 sd_xy 0.033 0.045
+13:24:45   204.3 POSE 0.046 1.623 -3.060 sd_xy 0.038 0.053
+13:24:46   205.4 POSE 0.274 1.406 2.145 sd_xy 0.055 0.055
+13:24:46   205.7 INFO  [controller_server] Passing new path to controller. [+3 same]
+13:24:47   206.3 INFO  [amcl] Requesting no-motion update [+14 same]
+13:24:47   206.4 POSE 0.460 1.092 1.637 sd_xy 0.066 0.078
+13:24:48   207.1 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+26 same]
+13:24:48   207.6 POSE 0.482 0.785 1.704 sd_xy 0.059 0.056
+13:24:49   208.7 POSE 0.535 0.502 2.636 sd_xy 0.057 0.050
+13:24:50   209.7 POSE 0.631 0.492 -2.978 sd_xy 0.053 0.049
+13:24:51   209.8 INFO  [controller_server] Reached the goal! [+1 same]
+13:24:51   209.8 INFO  [controller_server] Received a goal, begin computing control effort. [+1 same]
+13:24:51   209.9 INFO  [bt_navigator] Goal succeeded [+1 same]
+13:24:51   209.9 INFO  [mision] Status succeded (recuperaciones: 0) [+1 same]
+13:24:51   209.9 INFO  [bt_navigator] Begin navigating from current location (0.63, 0.50) to (0.82, 0.12)
+13:24:51   209.9 INFO  [mision] Viaje al punto del plan: (0.82, 0.12, 0.0)
+13:24:51   210.4 INFO  [deteccion] last 10 s: published 0; rejected width=1
+13:24:51   210.8 POSE 0.608 0.497 -3.039 sd_xy 0.041 0.037
+13:24:52   211.1 INFO  [controller_server] Passing new path to controller. [+3 same]
+13:24:52   211.8 POSE 0.566 0.346 2.222 sd_xy 0.048 0.040
+13:24:53   212.1 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+21 same]
+13:24:53   212.1 INFO  [controller_server] Optimizer reset
+13:24:53   212.1 ERROR [controller_server] Optimizer fail to compute path
+13:24:53   212.1 WARN  [controller_server] [follow_path] [ActionServer] Aborting handle.
+13:24:53   212.1 INFO  [local_costmap.local_costmap] Received request to clear entirely the local_costmap
+13:24:53   212.3 INFO  [behavior_server] Running spin
+13:24:53   212.3 INFO  [behavior_server] Turning 1.57 for spin behavior.
+13:24:53   212.4 WARN  [behavior_server] Collision Ahead - Exiting Spin
+13:24:53   212.4 WARN  [behavior_server] spin failed
+13:24:53   212.4 WARN  [behavior_server] [spin] [ActionServer] Aborting handle.
+13:24:53   212.4 INFO  [behavior_server] Running wait
+13:24:53   212.5 INFO  [amcl] Requesting no-motion update [+14 same]
+13:24:53   212.7 INFO  [localizacion] Heading fix after a turn: 0 AMCL updates in 0.1 s (fixes 20, timed out 2)
+13:24:54   213.3 INFO  [localizacion] Localization check, last 30 s: 4 still sweeps, LiDAR-map score at AMCL pose median 0.97 min 0.95 (right: ~0.8-0.9)
+13:24:58   217.4 INFO  [behavior_server] wait completed successfully
+13:24:58   217.4 INFO  [controller_server] Received a goal, begin computing control effort. [+2 same]
+13:24:58   217.5 INFO  [controller_server] Optimizer reset [+3 same]
+13:24:58   217.6 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+1 same]
+13:24:59   218.3 POSE 0.632 0.180 1.550 sd_xy 0.049 0.052
+13:24:59   218.5 INFO  [controller_server] Passing new path to controller. [+1 same]
+13:25:00   219.4 POSE 0.828 0.065 0.566 sd_xy 0.050 0.055
+13:25:00   219.7 INFO  [controller_server] Reached the goal! [+1 same]
+13:25:00   219.8 INFO  [bt_navigator] Goal succeeded
+13:25:00   219.8 INFO  [mision] Status succeded (recuperaciones: 3)
+13:25:00   219.8 INFO  [bt_navigator] Begin navigating from current location (0.87, 0.02) to (2.36, 0.12)
+13:25:00   219.8 INFO  [mision] Viaje al punto del plan: (2.36, 0.12, -0.7853981633974485)
+13:25:01   220.1 INFO  [amcl] Requesting no-motion update
+13:25:01   220.4 INFO  [deteccion] last 10 s: published 0; rejected none
+13:25:01   220.4 POSE 0.873 0.009 0.075 sd_xy 0.040 0.042
+13:25:02   221.5 POSE 0.965 0.051 0.088 sd_xy 0.042 0.040
+13:25:03   222.3 INFO  [localizacion] Heading fix after a turn: 10 AMCL updates in 2.2 s (fixes 21, timed out 2)
+13:25:03   222.6 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+15 same]
+13:25:04   222.9 POSE 1.056 0.074 0.291 sd_xy 0.039 0.034
+13:25:05   224.0 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:25:05   224.1 POSE 1.022 0.080 0.171 sd_xy 0.042 0.036
+13:25:06   224.9 ERROR [controller_server] Failed to make progress
+13:25:06   224.9 WARN  [controller_server] [follow_path] [ActionServer] Aborting handle. [+1 same]
+13:25:06   224.9 INFO  [local_costmap.local_costmap] Received request to clear entirely the local_costmap
+13:25:06   224.9 INFO  [controller_server] Received a goal, begin computing control effort. [+1 same]
+13:25:07   226.2 POSE 1.007 0.096 0.188 sd_xy 0.041 0.038
+13:25:08   227.6 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+23 same]
+13:25:09   227.9 POSE 0.990 0.110 0.214 sd_xy 0.043 0.041
+13:25:09   228.7 INFO  [amcl] Requesting no-motion update [+10 same]
+13:25:10   229.0 POSE 0.994 0.069 -0.283 sd_xy 0.044 0.041
+13:25:10   229.2 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:25:11   230.0 POSE 1.003 0.066 -0.210 sd_xy 0.034 0.034
+13:25:11   230.1 ERROR [controller_server] Failed to make progress
+13:25:11   230.1 WARN  [controller_server] [follow_path] [ActionServer] Aborting handle.
+13:25:11   230.1 INFO  [behavior_server] Running backup
+13:25:11   230.1 INFO  [behavior_server] DriveOnHeading: no acceleration or deceleration limits set
+13:25:11   230.4 INFO  [deteccion] last 10 s: published 0; rejected none
+13:25:11   230.7 INFO  [localizacion] Heading fix after a turn: 10 AMCL updates in 2.0 s (fixes 22, timed out 2)
+13:25:12   231.2 POSE 0.969 0.091 0.073 sd_xy 0.040 0.039
+13:25:13   232.4 POSE 0.787 0.077 0.138 sd_xy 0.057 0.053
+13:25:14   232.9 INFO  [behavior_server] backup completed successfully
+13:25:14   232.9 INFO  [controller_server] Received a goal, begin computing control effort.
+13:25:14   232.9 INFO  [controller_server] Optimizer reset
+13:25:14   232.9 ERROR [controller_server] Optimizer fail to compute path [+1 same]
+13:25:14   233.0 INFO  [local_costmap.local_costmap] Received request to clear entirely the local_costmap
+13:25:14   233.0 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+10 same]
+13:25:14   233.2 INFO  [global_costmap.global_costmap] Received request to clear entirely the global_costmap
+13:25:14   233.6 WARN  [planner_server] Planner loop missed its desired rate of 5.0000 Hz. Current loop rate is 2.3040 Hz
+13:25:15   234.6 INFO  [controller_server] Passing new path to controller.
+13:25:15   234.7 POSE 0.728 0.074 0.075 sd_xy 0.062 0.062
+13:25:16   235.7 POSE 0.989 0.079 0.033 sd_xy 0.064 0.064
+13:25:18   236.9 POSE 1.100 0.055 -0.076 sd_xy 0.063 0.057
+13:25:19   238.1 POSE 1.051 0.027 -0.448 sd_xy 0.051 0.049
+13:25:19   238.1 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+21 same]
+13:25:20   239.3 POSE 0.938 0.066 -0.419 sd_xy 0.058 0.058
+13:25:20   239.8 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:25:21   240.5 INFO  [deteccion] last 10 s: published 0; rejected none
+13:25:22   240.8 POSE 1.028 0.059 -0.227 sd_xy 0.058 0.055
+13:25:24   243.3 ERROR [controller_server] Failed to make progress
+13:25:24   243.3 WARN  [controller_server] [follow_path] [ActionServer] Aborting handle. [+2 same]
+13:25:24   243.3 INFO  [local_costmap.local_costmap] Received request to clear entirely the local_costmap [+1 same]
+13:25:24   243.3 INFO  [controller_server] Received a goal, begin computing control effort. [+2 same]
+13:25:24   243.3 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+20 same]
+13:25:24   243.5 POSE 1.067 0.069 -0.360 sd_xy 0.055 0.052
+13:25:25   244.1 INFO  [localizacion] Localization check, last 30 s: 6 still sweeps, LiDAR-map score at AMCL pose median 0.95 min 0.94 (right: ~0.8-0.9)
+13:25:26   245.0 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:25:26   245.2 POSE 1.010 0.077 -0.444 sd_xy 0.059 0.058
+13:25:27   246.8 POSE 0.948 0.088 -0.429 sd_xy 0.054 0.057
+13:25:29   248.0 POSE 0.958 0.086 -0.106 sd_xy 0.052 0.045
+13:25:29   248.4 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+17 same]
+13:25:29   248.4 ERROR [controller_server] Failed to make progress
+13:25:29   248.4 WARN  [controller_server] [follow_path] [ActionServer] Aborting handle.
+13:25:29   248.4 INFO  [behavior_server] Running spin
+13:25:29   248.4 INFO  [behavior_server] Turning 1.57 for spin behavior.
+13:25:30   249.3 POSE 1.057 0.066 -0.067 sd_xy 0.057 0.052
+13:25:31   250.3 POSE 1.074 0.057 0.837 sd_xy 0.047 0.040
+13:25:31   250.5 INFO  [deteccion] last 10 s: published 0; rejected none
+13:25:32   251.0 INFO  [behavior_server] spin completed successfully
+13:25:32   251.0 INFO  [controller_server] Received a goal, begin computing control effort.
+13:25:32   251.0 INFO  [controller_server] Optimizer reset [+4 same]
+13:25:32   251.3 INFO  [amcl] Requesting no-motion update [+9 same]
+13:25:32   251.4 POSE 1.063 0.063 1.673 sd_xy 0.042 0.038
+13:25:33   252.2 INFO  [controller_server] Passing new path to controller. [+3 same]
+13:25:33   252.4 POSE 1.037 0.120 2.116 sd_xy 0.044 0.038
+13:25:34   253.5 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+11 same]
+13:25:34   253.6 POSE 0.981 0.151 3.098 sd_xy 0.047 0.044
+13:25:35   254.8 POSE 0.966 0.134 -3.000 sd_xy 0.042 0.038
+13:25:37   255.9 INFO  [localizacion] Heading fix after a turn: 10 AMCL updates in 1.9 s (fixes 23, timed out 2)
+13:25:37   256.1 POSE 0.975 0.105 2.923 sd_xy 0.041 0.036
+13:25:38   257.2 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:25:39   258.4 POSE 0.913 0.131 2.938 sd_xy 0.047 0.048
+13:25:39   258.6 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+22 same]
+13:25:39   258.6 ERROR [controller_server] Failed to make progress
+13:25:39   258.6 WARN  [controller_server] [follow_path] [ActionServer] Aborting handle.
+13:25:39   258.6 INFO  [local_costmap.local_costmap] Received request to clear entirely the local_costmap
+13:25:39   258.6 INFO  [controller_server] Received a goal, begin computing control effort.
+13:25:41   260.5 INFO  [deteccion] last 10 s: published 0; rejected none
+13:25:41   260.7 POSE 0.941 0.133 3.048 sd_xy 0.048 0.048
+13:25:43   262.4 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:25:44   263.0 POSE 1.011 0.094 -3.110 sd_xy 0.050 0.051
+13:25:44   263.6 ERROR [controller_server] Failed to make progress
+13:25:44   263.7 WARN  [controller_server] [follow_path] [ActionServer] Aborting handle.
+13:25:44   263.7 INFO  [behavior_server] Running wait
+13:25:49   268.7 INFO  [behavior_server] wait completed successfully
+13:25:49   268.7 INFO  [controller_server] Received a goal, begin computing control effort.
+13:25:49   268.7 INFO  [controller_server] Optimizer reset
+13:25:50   269.3 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+22 same]
+13:25:50   269.7 INFO  [controller_server] Passing new path to controller. [+1 same]
+13:25:51   270.5 INFO  [deteccion] last 10 s: published 0; rejected none
+13:25:52   271.3 POSE 0.988 0.095 2.920 sd_xy 0.050 0.045
+13:25:53   272.5 POSE 0.959 0.134 2.694 sd_xy 0.046 0.043
+13:25:54   273.7 ERROR [controller_server] Failed to make progress
+13:25:54   273.7 WARN  [controller_server] [follow_path] [ActionServer] Aborting handle.
+13:25:54   273.8 INFO  [local_costmap.local_costmap] Received request to clear entirely the local_costmap
+13:25:54   273.8 INFO  [controller_server] Received a goal, begin computing control effort.
+13:25:54   273.8 WARN  [mision] Cancelo el viaje: Nav2 lleva 10 recuperaciones
+13:25:55   273.9 ERROR [bt_navigator_navigate_to_pose_rclcpp_node] Failed to get result for follow_path in node halt!
+13:25:55   273.9 INFO  [bt_navigator] [navigate_to_pose] [ActionServer] Client requested to cancel the goal. Cancelling.
+13:25:55   273.9 INFO  [bt_navigator] Goal canceled
+13:25:55   273.9 INFO  [mision] Status failed (recuperaciones: 10)
+13:25:55   273.9 INFO  [controller_server] Goal was canceled. Stopping the robot.
+13:25:55   273.9 INFO  [controller_server] [follow_path] [ActionServer] Client requested to cancel the goal. Cancelling.
+13:25:55   273.9 INFO  [bt_navigator] Begin navigating from current location (0.95, 0.15) to (2.34, -0.12)
+13:25:55   273.9 INFO  [mision] Viaje al punto del plan: (2.34, -0.12, 0.7853981633974484)
+13:25:55   274.4 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+26 same]
+13:25:55   274.7 INFO  [localizacion] Localization check, last 30 s: 7 still sweeps, LiDAR-map score at AMCL pose median 0.95 min 0.95 (right: ~0.8-0.9)
+13:25:56   275.0 INFO  [controller_server] Passing new path to controller. [+3 same]
+13:25:56   275.6 POSE 0.954 0.170 2.727 sd_xy 0.048 0.042
+13:25:59   278.4 POSE 0.950 0.159 2.615 sd_xy 0.047 0.041
+13:26:00   279.0 ERROR [controller_server] Failed to make progress
+13:26:00   279.0 WARN  [controller_server] [follow_path] [ActionServer] Aborting handle.
+13:26:00   279.0 INFO  [local_costmap.local_costmap] Received request to clear entirely the local_costmap
+13:26:00   279.0 INFO  [controller_server] Received a goal, begin computing control effort. [+1 same]
+13:26:00   279.5 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+23 same]
+13:26:01   280.1 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:26:01   280.2 POSE 0.941 0.173 2.649 sd_xy 0.049 0.042
+13:26:01   280.5 INFO  [deteccion] last 10 s: published 0; rejected none
+13:26:02   280.9 INFO  [amcl] Requesting no-motion update [+15 same]
+13:26:02   281.4 POSE 0.983 0.183 2.973 sd_xy 0.039 0.041
+13:26:03   281.9 INFO  [controller_server] Optimizer reset
+13:26:03   281.9 ERROR [controller_server] Optimizer fail to compute path [+1 same]
+13:26:03   281.9 INFO  [behavior_server] Running backup
+13:26:03   281.9 WARN  [behavior_server] Collision Ahead - Exiting DriveOnHeading
+13:26:03   281.9 WARN  [behavior_server] backup failed
+13:26:03   281.9 WARN  [behavior_server] [backup] [ActionServer] Aborting handle.
+13:26:03   282.0 INFO  [global_costmap.global_costmap] Received request to clear entirely the global_costmap
+13:26:03   282.6 POSE 1.101 0.119 2.913 sd_xy 0.046 0.044
+13:26:04   282.9 INFO  [localizacion] Heading fix after a turn: 10 AMCL updates in 2.0 s (fixes 24, timed out 2)
+13:26:04   283.8 POSE 1.040 0.124 2.824 sd_xy 0.049 0.047
+13:26:06   284.9 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+32 same]
+13:26:06   285.3 INFO  [controller_server] Passing new path to controller. [+3 same]
+13:26:08   287.2 ERROR [controller_server] Failed to make progress
+13:26:08   287.2 WARN  [controller_server] [follow_path] [ActionServer] Aborting handle. [+1 same]
+13:26:08   287.2 INFO  [local_costmap.local_costmap] Received request to clear entirely the local_costmap [+1 same]
+13:26:08   287.2 INFO  [controller_server] Received a goal, begin computing control effort. [+1 same]
+13:26:10   289.7 POSE 0.930 0.142 2.865 sd_xy 0.053 0.055
+13:26:11   290.0 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+28 same]
+13:26:11   290.4 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:26:11   290.5 INFO  [deteccion] last 10 s: published 0; rejected none
+13:26:11   290.8 POSE 0.956 0.146 2.973 sd_xy 0.052 0.051
+13:26:13   292.0 POSE 1.022 0.137 2.974 sd_xy 0.059 0.053
+13:26:13   292.2 ERROR [controller_server] Failed to make progress
+13:26:13   292.2 WARN  [controller_server] [follow_path] [ActionServer] Aborting handle.
+13:26:13   292.2 INFO  [behavior_server] Running spin
+13:26:13   292.2 INFO  [behavior_server] Turning 1.57 for spin behavior.
+13:26:13   292.5 WARN  [behavior_server] Collision Ahead - Exiting Spin
+13:26:13   292.5 WARN  [behavior_server] spin failed
+13:26:13   292.5 WARN  [behavior_server] [spin] [ActionServer] Aborting handle.
+13:26:13   292.6 INFO  [behavior_server] Running wait
+13:26:18   297.6 INFO  [behavior_server] wait completed successfully
+13:26:18   297.6 INFO  [controller_server] Received a goal, begin computing control effort.
+13:26:18   297.6 INFO  [controller_server] Optimizer reset [+1 same]
+13:26:18   297.7 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+9 same]
+13:26:19   298.5 POSE 1.126 0.090 3.002 sd_xy 0.067 0.057
+13:26:19   298.7 INFO  [controller_server] Passing new path to controller. [+1 same]
+13:26:21   300.0 POSE 0.881 0.089 -3.052 sd_xy 0.063 0.062
+13:26:21   300.8 INFO  [deteccion] last 10 s: published 0; rejected none
+13:26:22   301.3 POSE 0.881 0.062 -2.823 sd_xy 0.054 0.055
+13:26:23   302.4 POSE 0.946 0.027 -2.794 sd_xy 0.060 0.057
+13:26:24   302.8 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+30 same]
+13:26:24   303.7 POSE 0.974 0.019 -3.131 sd_xy 0.053 0.049
+13:26:25   303.9 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:26:26   305.0 ERROR [controller_server] Failed to make progress
+13:26:26   305.0 WARN  [controller_server] [follow_path] [ActionServer] Aborting handle.
+13:26:26   305.0 INFO  [local_costmap.local_costmap] Received request to clear entirely the local_costmap
+13:26:26   305.0 INFO  [controller_server] Received a goal, begin computing control effort.
+13:26:26   305.2 POSE 0.916 0.044 2.830 sd_xy 0.047 0.045
+13:26:27   305.9 INFO  [localizacion] Localization check, last 30 s: 8 still sweeps, LiDAR-map score at AMCL pose median 0.95 min 0.93 (right: ~0.8-0.9)
+13:26:28   307.4 POSE 0.893 0.060 2.725 sd_xy 0.044 0.046
+13:26:29   308.6 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+22 same]
+13:26:29   308.7 POSE 0.897 0.096 2.882 sd_xy 0.049 0.047
+13:26:30   309.0 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:26:30   309.1 INFO  [amcl] Requesting no-motion update [+9 same]
+13:26:31   309.9 POSE 0.963 0.115 3.029 sd_xy 0.044 0.041
+13:26:31   310.0 ERROR [controller_server] Failed to make progress
+13:26:31   310.0 WARN  [controller_server] [follow_path] [ActionServer] Aborting handle.
+13:26:31   310.1 INFO  [behavior_server] Running backup
+13:26:31   310.4 WARN  [behavior_server] Collision Ahead - Exiting DriveOnHeading
+13:26:31   310.4 WARN  [behavior_server] backup failed
+13:26:31   310.4 WARN  [behavior_server] [backup] [ActionServer] Aborting handle.
+13:26:31   310.4 INFO  [local_costmap.local_costmap] Received request to clear entirely the local_costmap
+13:26:31   310.4 INFO  [global_costmap.global_costmap] Received request to clear entirely the global_costmap
+13:26:31   310.4 WARN  [mision] Cancelo el viaje: Nav2 lleva 11 recuperaciones
+13:26:31   310.5 ERROR [bt_navigator_navigate_to_pose_rclcpp_node] Failed to get result for compute_path_to_pose in node halt!
+13:26:31   310.5 INFO  [bt_navigator] [navigate_to_pose] [ActionServer] Client requested to cancel the goal. Cancelling.
+13:26:31   310.5 INFO  [bt_navigator] Goal canceled
+13:26:31   310.5 INFO  [mision] Status failed (recuperaciones: 11)
+13:26:31   310.5 INFO  [mision] Viaje al punto del plan: (2.38, 0.52, 0.7853981633974484)
+13:26:31   310.5 INFO  [bt_navigator] Begin navigating from current location (0.98, 0.11) to (2.38, 0.52)
+13:26:31   310.6 INFO  [controller_server] Received a goal, begin computing control effort.
+13:26:32   311.0 INFO  [deteccion] last 10 s: published 0; rejected none
+13:26:32   311.0 POSE 0.985 0.103 2.874 sd_xy 0.033 0.031
+13:26:32   311.1 INFO  [localizacion] Heading fix after a turn: 10 AMCL updates in 2.1 s (fixes 25, timed out 2)
+13:26:32   311.5 INFO  [localizacion] Fine-tune AMCL while still: 2.3 cm, 0.3° to (0.992, 0.081, 2.864), score 0.96 (fine-tunes 2)
+13:26:32   311.5 INFO  [amcl] initialPoseReceived
+13:26:32   311.5 WARN  [amcl] Failed to transform initial pose in time (Lookup would require extrapolation into the future.  Requested time 1793809592.659422 but the latest data is at time 1793809592.576335, when looking up transform from frame [base_footprint] to frame [odom_fused])
+13:26:32   311.5 INFO  [amcl] Setting pose (1793809592.659502): 0.992 0.081 2.864
+13:26:33   312.2 POSE 0.944 0.086 2.615 sd_xy 0.033 0.029
+13:26:34   313.5 POSE 0.918 0.099 2.635 sd_xy 0.035 0.033
+13:26:34   313.6 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+17 same]
+13:26:35   314.3 INFO  [amcl] Requesting no-motion update [+9 same]
+13:26:35   314.6 POSE 0.924 0.139 3.015 sd_xy 0.037 0.035
+13:26:35   314.8 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:26:36   315.6 ERROR [controller_server] Failed to make progress
+13:26:36   315.6 WARN  [controller_server] [follow_path] [ActionServer] Aborting handle.
+13:26:36   315.6 POSE 0.934 0.131 2.951 sd_xy 0.033 0.034
+13:26:36   315.7 INFO  [local_costmap.local_costmap] Received request to clear entirely the local_costmap
+13:26:36   315.7 INFO  [controller_server] Received a goal, begin computing control effort.
+13:26:37   316.5 INFO  [localizacion] Heading fix after a turn: 10 AMCL updates in 2.2 s (fixes 26, timed out 2)
+13:26:38   317.0 POSE 0.969 0.113 2.732 sd_xy 0.036 0.035
+13:26:39   318.7 POSE 0.983 0.105 2.638 sd_xy 0.043 0.035
+13:26:40   319.0 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+19 same]
+13:26:40   319.5 INFO  [amcl] Requesting no-motion update [+10 same]
+13:26:41   319.9 POSE 0.919 0.128 3.041 sd_xy 0.040 0.043
+13:26:41   320.0 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:26:41   320.8 ERROR [controller_server] Failed to make progress
+13:26:41   320.8 WARN  [controller_server] [follow_path] [ActionServer] Aborting handle.
+13:26:41   320.8 INFO  [behavior_server] Running spin
+13:26:41   320.8 INFO  [behavior_server] Turning 1.57 for spin behavior.
+13:26:42   321.0 POSE 0.918 0.112 2.934 sd_xy 0.036 0.033
+13:26:42   321.3 INFO  [deteccion] last 10 s: published 0; rejected none
+13:26:42   321.5 INFO  [localizacion] Heading fix after a turn: 10 AMCL updates in 2.1 s (fixes 27, timed out 2)
+13:26:43   322.1 POSE 0.912 0.084 -2.985 sd_xy 0.037 0.038
+13:26:44   323.1 POSE 0.917 0.068 -2.018 sd_xy 0.044 0.036
+13:26:44   323.5 INFO  [behavior_server] spin completed successfully
+13:26:44   323.5 INFO  [controller_server] Received a goal, begin computing control effort.
+13:26:44   323.5 INFO  [controller_server] Optimizer reset
+13:26:45   324.0 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+11 same]
+13:26:45   324.2 POSE 0.918 0.069 -1.436 sd_xy 0.040 0.035
+13:26:45   324.7 INFO  [amcl] Requesting no-motion update [+14 same]
+13:26:46   325.3 POSE 1.011 0.138 -0.686 sd_xy 0.045 0.045
+13:26:46   325.6 INFO  [controller_server] Passing new path to controller. [+1 same]
+13:26:47   326.3 POSE 0.959 0.201 0.073 sd_xy 0.039 0.044
+13:26:48   327.4 POSE 0.928 0.155 0.089 sd_xy 0.034 0.034
+13:26:49   328.3 INFO  [localizacion] Heading fix after a turn: 10 AMCL updates in 2.0 s (fixes 28, timed out 2)
+13:26:49   328.3 ERROR [controller_server] Optimizer fail to compute path
+13:26:49   328.3 WARN  [controller_server] [follow_path] [ActionServer] Aborting handle.
+13:26:49   328.4 INFO  [local_costmap.local_costmap] Received request to clear entirely the local_costmap
+13:26:50   329.2 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+16 same]
+13:26:51   330.0 POSE 0.982 0.059 -0.032 sd_xy 0.044 0.042
+13:26:51   330.7 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:26:52   331.1 INFO  [amcl] Requesting no-motion update [+10 same]
+13:26:52   331.2 POSE 1.059 0.077 0.469 sd_xy 0.041 0.043
+13:26:52   331.6 INFO  [deteccion] last 10 s: published 0; rejected none
+13:26:53   332.2 POSE 1.055 0.065 0.274 sd_xy 0.038 0.037
+13:26:54   333.3 POSE 0.985 0.057 -0.215 sd_xy 0.044 0.040
+13:26:55   334.4 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+21 same]
+13:26:55   334.5 POSE 1.064 0.065 0.129 sd_xy 0.042 0.039
+13:26:56   335.6 POSE 1.109 0.083 0.458 sd_xy 0.044 0.036
+13:26:57   336.0 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:26:57   336.3 INFO  [amcl] Requesting no-motion update [+19 same]
+13:26:57   336.8 POSE 0.988 0.032 -0.003 sd_xy 0.043 0.042
+13:26:59   338.0 POSE 0.956 0.035 -0.273 sd_xy 0.042 0.034
+13:26:59   338.6 INFO  [controller_server] Optimizer reset [+2 same]
+13:26:59   338.6 ERROR [controller_server] Optimizer fail to compute path
+13:26:59   338.6 WARN  [controller_server] [follow_path] [ActionServer] Aborting handle.
+13:26:59   338.6 INFO  [behavior_server] Running wait
+13:27:00   339.1 POSE 1.131 0.053 -0.156 sd_xy 0.045 0.038
+13:27:00   339.1 INFO  [localizacion] Heading fix after a turn: 10 AMCL updates in 2.0 s (fixes 29, timed out 2)
+13:27:00   339.7 INFO  [localizacion] Localization check, last 30 s: 4 still sweeps, LiDAR-map score at AMCL pose median 0.95 min 0.93 (right: ~0.8-0.9)
+13:27:02   341.8 INFO  [deteccion] last 10 s: published 0; rejected none
+13:27:04   343.6 INFO  [behavior_server] wait completed successfully
+13:27:04   343.7 INFO  [controller_server] Received a goal, begin computing control effort. [+1 same]
+13:27:04   343.7 INFO  [controller_server] Optimizer reset [+1 same]
+13:27:04   343.8 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+20 same]
+13:27:05   344.8 INFO  [controller_server] Passing new path to controller. [+2 same]
+13:27:06   345.1 POSE 1.104 0.073 -0.292 sd_xy 0.048 0.040
+13:27:08   346.9 POSE 0.980 0.128 -0.358 sd_xy 0.058 0.052
+13:27:09   348.3 POSE 1.011 0.101 -0.155 sd_xy 0.052 0.049
+13:27:09   348.7 ERROR [controller_server] Failed to make progress
+13:27:09   348.7 WARN  [controller_server] [follow_path] [ActionServer] Aborting handle.
+13:27:09   348.7 INFO  [local_costmap.local_costmap] Received request to clear entirely the local_costmap
+13:27:09   348.7 INFO  [controller_server] Received a goal, begin computing control effort.
+13:27:10   349.0 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+23 same]
+13:27:11   349.8 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:27:12   350.9 POSE 0.989 0.070 0.087 sd_xy 0.053 0.058
+13:27:13   352.1 INFO  [deteccion] last 10 s: published 0; rejected none
+13:27:14   353.1 POSE 0.974 0.060 0.255 sd_xy 0.054 0.054
+13:27:14   353.8 ERROR [controller_server] Failed to make progress
+13:27:14   353.8 WARN  [controller_server] [follow_path] [ActionServer] Aborting handle.
+13:27:14   353.8 INFO  [behavior_server] Running backup
+13:27:16   355.1 POSE 1.011 0.038 0.269 sd_xy 0.055 0.051
+13:27:17   356.3 POSE 0.843 -0.008 0.229 sd_xy 0.057 0.059
+13:27:18   356.9 INFO  [behavior_server] backup completed successfully
+13:27:18   356.9 INFO  [controller_server] Received a goal, begin computing control effort.
+13:27:18   356.9 INFO  [controller_server] Optimizer reset
+13:27:18   357.2 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+15 same]
+13:27:18   357.4 ERROR [controller_server] Optimizer fail to compute path
+13:27:18   357.4 INFO  [local_costmap.local_costmap] Received request to clear entirely the local_costmap
+13:27:19   358.0 INFO  [controller_server] Passing new path to controller. [+3 same]
+13:27:19   358.5 POSE 0.785 -0.034 0.230 sd_xy 0.057 0.054
+13:27:21   360.0 POSE 1.014 0.020 0.501 sd_xy 0.059 0.056
+13:27:22   361.1 POSE 1.063 0.030 0.185 sd_xy 0.058 0.052
+13:27:23   362.1 INFO  [amcl] Requesting no-motion update [+11 same]
+13:27:23   362.2 POSE 1.022 0.060 -0.360 sd_xy 0.058 0.049
+13:27:23   362.3 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+26 same]
+13:27:23   362.3 INFO  [deteccion] last 10 s: published 0; rejected none
+13:27:24   363.2 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:27:24   363.2 POSE 1.016 0.069 -0.369 sd_xy 0.050 0.040
+13:27:25   364.3 POSE 1.081 0.087 0.184 sd_xy 0.043 0.037
+13:27:26   365.3 POSE 1.058 0.075 0.448 sd_xy 0.038 0.037
+13:27:27   366.7 POSE 0.954 0.046 -0.144 sd_xy 0.045 0.044
+13:27:28   367.3 INFO  [amcl] Requesting no-motion update [+16 same]
+13:27:29   367.8 POSE 0.995 0.037 -0.103 sd_xy 0.036 0.039
+13:27:29   367.9 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+21 same]
+13:27:29   368.3 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:27:29   368.7 INFO  [localizacion] Heading fix after a turn: 10 AMCL updates in 2.1 s (fixes 30, timed out 2)
+13:27:30   369.0 POSE 1.107 0.035 0.302 sd_xy 0.039 0.039
+13:27:31   370.2 POSE 1.061 0.052 0.267 sd_xy 0.039 0.043
+13:27:32   371.3 POSE 0.979 0.062 -0.111 sd_xy 0.042 0.042
+13:27:32   371.4 ERROR [controller_server] Failed to make progress
+13:27:32   371.4 WARN  [controller_server] [follow_path] [ActionServer] Aborting handle. [+1 same]
+13:27:32   371.4 INFO  [local_costmap.local_costmap] Received request to clear entirely the local_costmap
+13:27:32   371.4 INFO  [global_costmap.global_costmap] Received request to clear entirely the global_costmap
+13:27:32   371.6 WARN  [planner_server] Planner loop missed its desired rate of 5.0000 Hz. Current loop rate is 4.8978 Hz
+13:27:32   371.6 INFO  [controller_server] Received a goal, begin computing control effort. [+1 same]
+13:27:33   372.1 INFO  [localizacion] Localization check, last 30 s: 5 still sweeps, LiDAR-map score at AMCL pose median 0.93 min 0.92 (right: ~0.8-0.9)
+13:27:33   372.4 POSE 0.970 0.060 -0.145 sd_xy 0.032 0.035
+13:27:33   372.5 INFO  [amcl] Requesting no-motion update [+13 same]
+13:27:33   372.6 INFO  [deteccion] last 10 s: published 0; rejected area=4
+13:27:34   372.9 INFO  [localizacion] Heading fix after a turn: 10 AMCL updates in 1.9 s (fixes 31, timed out 2)
+13:27:34   373.0 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+17 same]
+13:27:34   373.6 POSE 1.064 0.038 0.233 sd_xy 0.045 0.041
+13:27:34   373.7 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:27:36   375.3 POSE 1.064 0.044 0.206 sd_xy 0.041 0.043
+13:27:37   376.4 POSE 1.012 0.070 -0.152 sd_xy 0.040 0.043
+13:27:37   376.6 ERROR [controller_server] Failed to make progress
+13:27:37   376.6 WARN  [controller_server] [follow_path] [ActionServer] Aborting handle.
+13:27:37   376.7 INFO  [local_costmap.local_costmap] Received request to clear entirely the local_costmap
+13:27:37   376.7 INFO  [controller_server] Received a goal, begin computing control effort.
+13:27:37   376.7 WARN  [mision] Cancelo el viaje: Nav2 lleva 10 recuperaciones
+13:27:37   376.8 ERROR [bt_navigator_navigate_to_pose_rclcpp_node] Failed to get result for follow_path in node halt!
+13:27:37   376.8 INFO  [bt_navigator] [navigate_to_pose] [ActionServer] Client requested to cancel the goal. Cancelling.
+13:27:37   376.8 INFO  [bt_navigator] Goal canceled
+13:27:37   376.8 INFO  [mision] Status failed (recuperaciones: 10)
+13:27:37   376.8 INFO  [mision] Viaje al punto del plan: (1.80, 1.50, 3.141592653589793)
+13:27:37   376.8 INFO  [bt_navigator] Begin navigating from current location (0.99, 0.08) to (1.80, 1.50)
+13:27:38   376.8 INFO  [controller_server] Goal was canceled. Stopping the robot.
+13:27:38   376.8 INFO  [controller_server] [follow_path] [ActionServer] Client requested to cancel the goal. Cancelling.
+13:27:38   377.8 POSE 0.974 0.117 -0.017 sd_xy 0.048 0.048
+13:27:39   378.3 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+22 same]
+13:27:40   378.9 INFO  [amcl] Requesting no-motion update [+1 same]
+13:27:40   378.9 INFO  [controller_server] Passing new path to controller. [+3 same]
+13:27:40   379.0 POSE 0.869 0.447 1.003 sd_xy 0.064 0.070
+13:27:41   380.1 POSE 0.977 0.785 0.993 sd_xy 0.064 0.075
+13:27:42   381.1 POSE 1.339 1.044 0.482 sd_xy 0.063 0.066
+13:27:43   382.3 POSE 1.593 1.233 0.776 sd_xy 0.057 0.066
+13:27:43   382.8 INFO  [deteccion] last 10 s: published 0; rejected width=1
+13:27:44   383.4 POSE 1.673 1.425 1.761 sd_xy 0.054 0.064
+13:27:44   383.4 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+16 same]
+13:27:45   384.1 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:27:45   384.4 POSE 1.794 1.573 2.808 sd_xy 0.043 0.058
+13:27:45   384.5 INFO  [controller_server] Reached the goal!
+13:27:45   384.5 INFO  [bt_navigator] Goal succeeded
+13:27:45   384.5 INFO  [mision] Status succeded (recuperaciones: 0)
+13:27:45   384.5 INFO  [mision] Salteo el punto del plan (0.60,3.00): cerca de una caja
+13:27:45   384.5 INFO  [bt_navigator] Begin navigating from current location (1.81, 1.59) to (1.52, 4.10)
+13:27:45   384.5 INFO  [mision] Viaje al punto del plan: (1.52, 4.10, 0.7853981633974484)
+13:27:45   384.6 INFO  [controller_server] Received a goal, begin computing control effort. [+1 same]
+13:27:45   384.7 INFO  [amcl] Requesting no-motion update [+12 same]
+13:27:46   385.5 POSE 1.795 1.598 2.903 sd_xy 0.039 0.047
+13:27:47   386.5 POSE 1.714 1.830 1.837 sd_xy 0.053 0.057
+13:27:48   387.6 POSE 1.848 2.221 1.143 sd_xy 0.070 0.083
+13:27:49   388.5 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+16 same]
+13:27:49   388.6 POSE 2.022 2.683 1.560 sd_xy 0.054 0.104
+13:27:50   389.8 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:27:50   389.8 POSE 1.982 3.176 1.825 sd_xy 0.059 0.102
+13:27:51   389.9 INFO  [amcl] Requesting no-motion update [+16 same]
+13:27:51   390.7 INFO  [localizacion] Heading fix after a turn: 10 AMCL updates in 1.6 s (fixes 32, timed out 2)
+13:27:52   391.0 POSE 2.012 3.666 1.995 sd_xy 0.065 0.104
+13:27:53   392.1 POSE 1.882 3.905 2.545 sd_xy 0.071 0.083
+13:27:54   392.9 INFO  [deteccion] last 10 s: published 0; rejected none
+13:27:54   393.3 POSE 1.603 4.088 2.461 sd_xy 0.072 0.074
+13:27:54   393.7 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+21 same]
+13:27:55   394.3 POSE 1.470 4.191 1.586 sd_xy 0.044 0.068
+13:27:56   394.9 INFO  [controller_server] Reached the goal!
+13:27:56   394.9 INFO  [controller_server] Received a goal, begin computing control effort.
+13:27:56   394.9 INFO  [bt_navigator] Goal succeeded
+13:27:56   394.9 INFO  [mision] Status succeded (recuperaciones: 0)
+13:27:56   394.9 INFO  [mision] Giro en el lugar: yaw=1.57 desde (1.47,4.12), punto del plan (1.54,4.08)
+13:27:56   394.9 INFO  [bt_navigator] Begin navigating from current location (1.47, 4.11) to (1.47, 4.12)
+13:27:56   395.1 INFO  [amcl] Requesting no-motion update [+10 same]
+13:27:56   395.4 POSE 1.479 4.089 0.835 sd_xy 0.032 0.052
+13:27:57   396.0 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:27:57   396.4 POSE 1.499 4.105 1.344 sd_xy 0.034 0.048
+13:27:57   396.5 INFO  [mision] Giro en el lugar: yaw=2.36 desde (1.50,4.10), punto del plan (1.42,4.00)
+13:27:57   396.5 INFO  [bt_navigator] Begin navigating from current location (1.50, 4.10) to (1.50, 4.10)
+13:27:58   397.5 POSE 1.512 4.093 1.661 sd_xy 0.030 0.039
+13:27:59   398.0 INFO  [bt_navigator] Begin navigating from current location (1.53, 4.08) to (0.30, 4.36)
+13:27:59   398.0 INFO  [mision] Viaje al punto del plan: (0.30, 4.36, 1.5707963267948963)
+13:27:59   398.7 POSE 1.532 4.088 2.264 sd_xy 0.029 0.036
+13:28:00   399.5 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+27 same]
+13:28:00   399.7 POSE 1.422 3.999 2.803 sd_xy 0.048 0.053
+13:28:01   400.3 INFO  [amcl] Requesting no-motion update [+16 same]
+13:28:01   400.6 INFO  [controller_server] Optimizer reset [+2 same]
+13:28:01   400.6 ERROR [controller_server] Optimizer fail to compute path
+13:28:01   400.6 WARN  [controller_server] [follow_path] [ActionServer] Aborting handle.
+13:28:01   400.7 INFO  [local_costmap.local_costmap] Received request to clear entirely the local_costmap
+13:28:01   400.7 INFO  [controller_server] Received a goal, begin computing control effort. [+3 same]
+13:28:01   400.8 POSE 1.027 3.933 3.005 sd_xy 0.058 0.058
+13:28:02   401.2 INFO  [controller_server] Passing new path to controller. [+3 same]
+13:28:02   401.8 POSE 0.887 4.009 2.804 sd_xy 0.050 0.040
+13:28:03   401.9 INFO  [localizacion] Heading fix after a turn: 10 AMCL updates in 1.5 s (fixes 33, timed out 2)
+13:28:04   402.9 INFO  [deteccion] last 10 s: published 0; rejected none
+13:28:04   403.0 POSE 0.617 4.154 2.807 sd_xy 0.061 0.056
+13:28:05   404.1 POSE 0.448 4.276 2.318 sd_xy 0.067 0.053
+13:28:05   404.7 INFO  [controller_server] Reached the goal! [+3 same]
+13:28:05   404.7 INFO  [bt_navigator] Goal succeeded [+2 same]
+13:28:05   404.7 INFO  [mision] Status succeded (recuperaciones: 1)
+13:28:05   404.7 INFO  [mision] Viaje al punto del plan: (0.14, 4.36, 0.7853981633974484)
+13:28:05   404.7 INFO  [bt_navigator] Begin navigating from current location (0.34, 4.38) to (0.14, 4.36)
+13:28:06   404.8 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+23 same]
+13:28:06   405.2 POSE 0.340 4.394 1.577 sd_xy 0.051 0.039
+13:28:06   405.3 INFO  [amcl] Requesting no-motion update [+9 same]
+13:28:07   406.3 INFO  [mision] Status succeded (recuperaciones: 0) [+2 same]
+13:28:07   406.3 POSE 0.225 4.356 0.886 sd_xy 0.048 0.043
+13:28:07   406.3 INFO  [bt_navigator] Begin navigating from current location (0.19, 4.36) to (0.21, 4.36)
+13:28:07   406.3 INFO  [mision] Giro en el lugar: yaw=0.79 desde (0.21,4.36), punto del plan (0.08,4.36)
+13:28:07   406.4 INFO  [controller_server] Received a goal, begin computing control effort. [+1 same]
+13:28:07   406.5 INFO  [bt_navigator] Begin navigating from current location (0.17, 4.35) to (0.38, 4.36)
+13:28:07   406.5 INFO  [mision] Viaje al punto del plan: (0.38, 4.36, 0.7853981633974484)
+13:28:08   407.1 INFO  [localizacion] Localization check, last 30 s: 2 still sweeps, LiDAR-map score at AMCL pose median 0.97 min 0.95 (right: ~0.8-0.9)
+13:28:08   407.4 POSE 0.174 4.351 0.733 sd_xy 0.037 0.038
+13:28:08   407.6 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:28:09   408.4 POSE 0.265 4.353 0.770 sd_xy 0.038 0.035
+13:28:09   408.5 INFO  [bt_navigator] Begin navigating from current location (0.29, 4.35) to (1.00, 4.12)
+13:28:09   408.5 INFO  [mision] Viaje al punto del plan: (1.00, 4.12, 0.0)
+13:28:09   408.7 INFO  [localizacion] Heading fix after a turn: 10 AMCL updates in 2.0 s (fixes 34, timed out 2)
+13:28:10   409.5 POSE 0.348 4.328 0.604 sd_xy 0.047 0.046
+13:28:11   409.9 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+19 same]
+13:28:11   410.7 POSE 0.535 4.138 -0.266 sd_xy 0.062 0.055
+13:28:11   410.7 INFO  [amcl] Requesting no-motion update [+13 same]
+13:28:13   411.8 POSE 0.734 4.112 -0.103 sd_xy 0.062 0.048
+13:28:13   412.7 INFO  [controller_server] Passing new path to controller. [+3 same]
+13:28:14   412.9 INFO  [deteccion] last 10 s: published 0; rejected none
+13:28:14   413.0 POSE 0.912 4.188 0.117 sd_xy 0.044 0.038
+13:28:14   413.1 INFO  [controller_server] Reached the goal! [+3 same]
+13:28:14   413.2 INFO  [bt_navigator] Goal succeeded [+3 same]
+13:28:14   413.2 INFO  [mision] Status succeded (recuperaciones: 0) [+2 same]
+13:28:14   413.2 INFO  [mision] Viaje al punto del plan: (1.98, 3.86, 2.356194490192345)
+13:28:14   413.2 INFO  [bt_navigator] Begin navigating from current location (0.95, 4.19) to (1.98, 3.86)
+13:28:14   413.3 INFO  [controller_server] Received a goal, begin computing control effort. [+2 same]
+13:28:15   414.2 POSE 0.960 4.148 -0.036 sd_xy 0.043 0.031
+13:28:15   414.5 INFO  [localizacion] Heading fix after a turn: 10 AMCL updates in 2.0 s (fixes 35, timed out 2)
+13:28:16   415.4 POSE 1.167 3.928 -0.213 sd_xy 0.064 0.054
+13:28:16   415.5 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+20 same]
+13:28:17   416.6 POSE 1.532 3.961 -0.015 sd_xy 0.065 0.070
+13:28:18   417.7 POSE 1.698 4.011 0.014 sd_xy 0.058 0.066
+13:28:19   418.4 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:28:19   418.5 INFO  [controller_server] Optimizer reset [+1 same]
+13:28:19   418.5 ERROR [controller_server] Optimizer fail to compute path
+13:28:19   418.5 WARN  [controller_server] [follow_path] [ActionServer] Aborting handle.
+13:28:19   418.5 INFO  [local_costmap.local_costmap] Received request to clear entirely the local_costmap
+13:28:19   418.5 INFO  [controller_server] Received a goal, begin computing control effort.
+13:28:19   418.8 INFO  [behavior_server] Running spin
+13:28:19   418.8 INFO  [behavior_server] Turning 1.57 for spin behavior.
+13:28:19   418.8 POSE 1.954 4.037 0.472 sd_xy 0.068 0.071
+13:28:20   418.9 WARN  [behavior_server] Collision Ahead - Exiting Spin
+13:28:20   418.9 WARN  [behavior_server] spin failed
+13:28:20   418.9 WARN  [behavior_server] [spin] [ActionServer] Aborting handle.
+13:28:20   418.9 INFO  [behavior_server] Running wait
+13:28:20   418.9 INFO  [amcl] Requesting no-motion update [+17 same]
+13:28:21   420.0 POSE 1.962 4.041 0.502 sd_xy 0.043 0.041
+13:28:22   421.1 INFO  [localizacion] Heading fix after a turn: 10 AMCL updates in 2.1 s (fixes 36, timed out 2)
+13:28:24   422.9 INFO  [deteccion] last 10 s: published 0; rejected none
+13:28:25   423.9 INFO  [behavior_server] wait completed successfully
+13:28:25   423.9 INFO  [controller_server] Received a goal, begin computing control effort.
+13:28:25   424.0 INFO  [controller_server] Optimizer reset [+3 same]
+13:28:25   424.2 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+20 same]
+13:28:25   424.8 POSE 1.950 4.025 0.645 sd_xy 0.034 0.036
+13:28:26   425.0 INFO  [controller_server] Passing new path to controller.
+13:28:26   425.8 POSE 1.987 3.878 1.614 sd_xy 0.042 0.046
+13:28:27   426.3 INFO  [controller_server] Reached the goal!
+13:28:27   426.4 INFO  [bt_navigator] Goal succeeded
+13:28:27   426.4 INFO  [mision] Status succeded (recuperaciones: 3)
+13:28:27   426.4 INFO  [mision] Giro en el lugar: yaw=2.36 desde (2.02,3.83), punto del plan (2.00,3.92)
+13:28:27   426.4 INFO  [bt_navigator] Begin navigating from current location (2.02, 3.83) to (2.02, 3.83)
+13:28:27   426.5 INFO  [mision] Status succeded (recuperaciones: 0)
+13:28:27   426.7 INFO  [amcl] Requesting no-motion update [+10 same]
+13:28:28   427.0 POSE 2.013 3.819 2.351 sd_xy 0.036 0.038
+13:28:28   427.5 INFO  [localizacion] Fine-tune AMCL while still: 2.5 cm, 2.3° to (2.025, 3.841, 2.314), score 0.99 (fine-tunes 3)
+13:28:28   427.5 INFO  [amcl] initialPoseReceived
+13:28:28   427.5 WARN  [amcl] Failed to transform initial pose in time (Lookup would require extrapolation into the future.  Requested time 1793809708.644123 but the latest data is at time 1793809708.575788, when looking up transform from frame [base_footprint] to frame [odom_fused])
+13:28:28   427.5 INFO  [amcl] Setting pose (1793809708.644163): 2.025 3.841 2.314
+13:28:28   427.6 INFO  [mision] Vuelvo: no quedan puntos ni dudosas
+13:28:28   427.6 INFO  [mision] Estado: <exploring> -> <returning>
+13:28:29   427.9 INFO  [bt_navigator] Begin navigating from current location (2.02, 3.83) to (0.00, 0.04)
+13:28:29   428.2 POSE 2.024 3.841 2.313 sd_xy 0.019 0.020
+13:28:29   428.7 INFO  [localizacion] Heading fix after a turn: 10 AMCL updates in 1.9 s (fixes 37, timed out 2)
+13:28:30   429.3 POSE 2.019 3.741 1.869 sd_xy 0.034 0.039
+13:28:30   429.5 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+10 same]
+13:28:31   430.1 INFO  [controller_server] Passing new path to controller. [+2 same]
+13:28:31   430.5 POSE 1.929 3.389 1.465 sd_xy 0.054 0.077
+13:28:32   431.6 POSE 2.070 2.974 1.621 sd_xy 0.060 0.074
+13:28:32   431.7 INFO  [localizacion] Heading fix after a turn: 10 AMCL updates in 1.8 s (fixes 38, timed out 2)
+13:28:33   432.7 POSE 1.970 2.642 0.988 sd_xy 0.074 0.096
+13:28:34   433.0 INFO  [deteccion] last 10 s: published 0; rejected width=1
+13:28:34   433.1 INFO  [amcl] Requesting no-motion update [+18 same]
+13:28:34   433.8 POSE 1.836 2.230 0.856 sd_xy 0.072 0.102
+13:28:35   434.8 POSE 1.720 1.899 1.210 sd_xy 0.076 0.081
+13:28:36   435.1 INFO  [localizacion] Heading fix after a turn: 10 AMCL updates in 1.9 s (fixes 39, timed out 2)
+13:28:36   435.2 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+27 same]
+13:28:36   435.3 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:28:37   436.0 POSE 1.590 1.563 1.238 sd_xy 0.072 0.068
+13:28:38   437.1 POSE 1.610 1.280 1.301 sd_xy 0.063 0.080
+13:28:39   438.1 POSE 1.410 1.084 0.424 sd_xy 0.056 0.063
+13:28:39   438.5 INFO  [amcl] Requesting no-motion update [+9 same]
+13:28:40   439.2 POSE 1.111 1.040 0.448 sd_xy 0.058 0.064
+13:28:41   440.2 POSE 1.001 0.674 0.861 sd_xy 0.068 0.075
+13:28:41   440.4 INFO  [controller_server] Passing new path to controller. [+4 same]
+13:28:42   440.8 WARN  [controller_server] Control loop missed its desired rate of 20.0000Hz [+25 same]
+13:28:42   441.4 POSE 0.658 0.478 0.228 sd_xy 0.063 0.076
+13:28:43   442.6 POSE 0.260 0.412 0.455 sd_xy 0.062 0.074
+13:28:44   443.0 INFO  [deteccion] last 10 s: published 0; rejected none
+13:28:44   443.5 INFO  [amcl] Requesting no-motion update [+14 same]
+13:28:44   443.8 POSE 0.110 0.134 0.627 sd_xy 0.062 0.068
+13:28:45   444.1 INFO  [controller_server] Reached the goal! [+1 same]
+13:28:45   444.2 INFO  [bt_navigator] Goal succeeded [+1 same]
+13:28:45   444.2 INFO  [mision] Status succeded (recuperaciones: 0)
+13:28:45   444.2 INFO  [mision] Vuelta terminada: arrived
+13:28:45   444.2 INFO  [mision] Estado: <returning> -> <checking>
+13:28:46   445.0 POSE 0.011 0.058 0.077 sd_xy 0.042 0.049
+13:28:46   445.1 INFO  [localizacion] Localization check, last 30 s: 5 still sweeps, LiDAR-map score at AMCL pose median 0.96 min 0.94 (right: ~0.8-0.9)
+13:28:47   446.1 POSE 0.010 0.065 0.086 sd_xy 0.031 0.038
+13:28:47   446.4 INFO  [mision] Regreso 1: a 0.021 m de la largada
+13:28:47   446.4 INFO  [mision] Estado: <checking> -> <stopping>
+13:28:47   446.5 INFO  [localizacion] Heading fix after a turn: 10 AMCL updates in 2.0 s (fixes 40, timed out 2)
+13:28:48   447.5 REPORT 0.099 3.176 frame map
+13:28:48   447.5 INFO  [mision] Reporte 2. id=2 x=0.10 y=3.18
+13:28:48   447.5 INFO  [mision] Estado: <stopping> -> <finishing>
+13:28:48   447.5 INFO  [juez_mock] [reporte #2] total 200 | víctimas [V1:100 V2:100 V3:0 V4:0]
+13:28:48   447.6 DONE
+13:28:48   447.6 INFO  [mision] Estado: <finishing> -> <finished>
+13:28:48   447.6 INFO  [juez_mock] /done recibido
+13:28:54   453.1 INFO  [deteccion] last 10 s: published 0; rejected none
+13:29:04   463.1 INFO  [deteccion] last 10 s: published 0; rejected none
+13:29:14   473.2 INFO  [deteccion] last 10 s: published 0; rejected none
+13:29:17   476.7 INFO  [localizacion] Localization check, last 30 s: 15 still sweeps, LiDAR-map score at AMCL pose median 0.96 min 0.93 (right: ~0.8-0.9)
+13:29:24   483.2 INFO  [deteccion] last 10 s: published 0; rejected none
+13:29:34   493.2 INFO  [deteccion] last 10 s: published 0; rejected none
+13:29:44   503.3 INFO  [deteccion] last 10 s: published 0; rejected none
+13:29:49   508.0 INFO  [rosbag2_recorder] Event publisher thread: Exiting
+13:29:49   508.0 INFO  [rosbag2_recorder] Recording stopped
+13:29:49   508.7 INFO  [localizacion] Localization check, last 30 s: 15 still sweeps, LiDAR-map score at AMCL pose median 0.92 min 0.90 (right: ~0.8-0.9)
+13:29:54   513.3 INFO  [deteccion] last 10 s: published 0; rejected none
+13:30:04   523.3 INFO  [deteccion] last 10 s: published 0; rejected none
+13:30:14   533.3 INFO  [deteccion] last 10 s: published 0; rejected none
+13:30:22   540.9 INFO  [localizacion] Localization check, last 30 s: 15 still sweeps, LiDAR-map score at AMCL pose median 0.90 min 0.89 (right: ~0.8-0.9)
+13:30:24   543.3 INFO  [deteccion] last 10 s: published 0; rejected none
+13:30:34   553.4 INFO  [deteccion] last 10 s: published 0; rejected none
+13:30:44   563.4 INFO  [deteccion] last 10 s: published 0; rejected none
+13:30:54   572.9 INFO  [localizacion] Localization check, last 30 s: 15 still sweeps, LiDAR-map score at AMCL pose median 0.91 min 0.89 (right: ~0.8-0.9)
+13:30:54   573.4 INFO  [deteccion] last 10 s: published 0; rejected none
+13:31:04   583.4 INFO  [deteccion] last 10 s: published 0; rejected none
+13:31:14   593.7 INFO  [deteccion] last 10 s: published 0; rejected none
+13:31:25   603.9 INFO  [deteccion] last 10 s: published 0; rejected none
+13:31:25   604.5 INFO  [localizacion] Localization check, last 30 s: 15 still sweeps, LiDAR-map score at AMCL pose median 0.93 min 0.91 (right: ~0.8-0.9)
+13:31:35   614.2 INFO  [deteccion] last 10 s: published 0; rejected none
+13:31:45   624.2 INFO  [deteccion] last 10 s: published 0; rejected none
+13:31:55   634.4 INFO  [deteccion] last 10 s: published 0; rejected none
+13:31:57   635.9 INFO  [localizacion] Localization check, last 30 s: 15 still sweeps, LiDAR-map score at AMCL pose median 0.96 min 0.93 (right: ~0.8-0.9)
+13:32:05   644.7 INFO  [deteccion] last 10 s: published 0; rejected none
+13:32:16   655.0 INFO  [deteccion] last 10 s: published 0; rejected none
+13:32:26   665.2 INFO  [deteccion] last 10 s: published 0; rejected none
+13:32:29   667.9 INFO  [localizacion] Localization check, last 30 s: 15 still sweeps, LiDAR-map score at AMCL pose median 0.95 min 0.94 (right: ~0.8-0.9)
+13:32:36   675.5 INFO  [deteccion] last 10 s: published 0; rejected none
+13:32:46   685.7 INFO  [deteccion] last 10 s: published 0; rejected none
+13:32:57   695.9 INFO  [deteccion] last 10 s: published 0; rejected none
+13:33:00   699.5 INFO  [localizacion] Localization check, last 30 s: 15 still sweeps, LiDAR-map score at AMCL pose median 0.91 min 0.89 (right: ~0.8-0.9)
+13:33:07   706.2 INFO  [deteccion] last 10 s: published 0; rejected none
+13:33:17   716.4 INFO  [deteccion] last 10 s: published 0; rejected none
+13:33:21   720.5 POSE 0.009 0.064 -0.023 sd_xy 0.032 0.036
+13:33:27   726.4 INFO  [deteccion] last 10 s: published 0; rejected none
+13:33:32   731.3 INFO  [localizacion] Localization check, last 30 s: 15 still sweeps, LiDAR-map score at AMCL pose median 0.92 min 0.78 (right: ~0.8-0.9)
+13:33:37   736.7 INFO  [deteccion] last 10 s: published 0; rejected none
+13:33:48   746.9 INFO  [deteccion] last 10 s: published 0; rejected none
+13:33:58   757.2 INFO  [deteccion] last 10 s: published 0; rejected none
+13:34:04   763.3 INFO  [localizacion] Localization check, last 30 s: 15 still sweeps, LiDAR-map score at AMCL pose median 0.90 min 0.88 (right: ~0.8-0.9)
+13:34:08   767.4 INFO  [deteccion] last 10 s: published 0; rejected none
+13:34:18   777.6 INFO  [deteccion] last 10 s: published 0; rejected none
+13:34:29   787.9 INFO  [deteccion] last 10 s: published 0; rejected none
+13:34:36   795.3 INFO  [localizacion] Localization check, last 30 s: 15 still sweeps, LiDAR-map score at AMCL pose median 0.88 min 0.87 (right: ~0.8-0.9)
+13:34:39   798.1 INFO  [deteccion] last 10 s: published 0; rejected none
+13:34:41   800.2 ===== run end =====
