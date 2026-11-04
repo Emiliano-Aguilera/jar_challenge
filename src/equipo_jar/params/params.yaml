@@ -9,7 +9,12 @@
 # posicion_ (docs/team/INTERFACES.md).
 cobertura:
   ros__parameters:
-    robot_radius: 0.18
+    # robot_radius + safety_margin is the transit clearance. With 0.18 + 0.03 coverage only plans
+    # through passages of 0.42 m or wider: in the qualy arena a third of the map, behind 0.3-0.4 m
+    # openings, was never planned (2 of 4 victims). Nav2 plans from 0.24 m and MPPI passes 0.35 m,
+    # so 0.13 + 0.03 (passages from 0.32 m) matches what the robot drives. The turning clearance
+    # at viewpoints is view_clearance, unchanged.
+    robot_radius: 0.13
     safety_margin: 0.03
     #PARAM: bounded initial planning-anchor shift from a known-free pose (m; 0 disables).
     start_max_shift_m: 0.20
@@ -128,8 +133,9 @@ deteccion:
     #PARAM: messages held per topic while waiting for a partner (>= 1). Must cover the images
     #       (30 Hz) taken while a scan is in transit: 10 lost 80 % of pairs with scans 0.3 s
     #       late; 60 kept 99.5 % up to 1.5 s late (week-10 bag, delays injected). ~14 MB of
-    #       images. Read at startup only.
-    sync_queue_size: 60
+    #       images. 120: 4 s of images; other teams' qualy logs showed scans up to 2.8 s late
+    #       over the venue Wi-Fi. Read at startup only.
+    sync_queue_size: 120
     #PARAM: robot base frame in /tf (base_footprint on this robot).
     robot_frame: base_footprint
     #PARAM: frame used to bridge image time and scan time (odom: smooth, always available).
@@ -167,8 +173,11 @@ fusion:
     merge_dist_m: 0.3
     #PARAM: robot displacement needed to lift the single-view floor, m (>= 0; 0 disables).
     min_baseline_m: 0.3
-    #PARAM: covariance floor (std) while seen from one spot, m (> mission's max_desvio_m).
-    single_view_sigma_m: 0.15
+    #PARAM: covariance floor (std) while seen from one spot, m. Above mission's max_deviation_m
+    #       (0.10) a candidate never confirms from one spot and needs an inspection; 0.09 lets a
+    #       box seen >= min_observations times from one spot with a tight spread confirm. Qualy
+    #       run 1: both real boxes measured within 7 cm from one spot; the second waited 300 s.
+    single_view_sigma_m: 0.09
     #PARAM: seconds without observations before a weak candidate is dropped (> 0).
     stale_timeout_s: 20.0
     #PARAM: candidates with at least this many observations are never dropped (>= 1).
@@ -223,14 +232,14 @@ mision:
     finish_time_s: 570.0
     idle_spin_s: 10.0
     idle_spin_rad: 1.57
-    visit_min_observations: 2
+    visit_min_observations: 3
     visit_distance_m: 0.8
     visit_clearance_m: 0.25
     visit_angles: 12
     visit_min_shift_m: 0.4
-    visit_box_margin_m: 0.25
+    visit_box_margin_m: 0.15          # 0.25 hid a wall right next to the box: a blind inspection spot
     localization_wait_max_s: 10.0
-    goal_timeout_s: 90.0
+    goal_timeout_s: 45.0              # a trip longer than this is a blocked one (hans-die)
     goal_accept_timeout_s: 5.0
     stop_confirm_max_age_s: 0.5
     stuck_time_s: 20.0
@@ -246,7 +255,7 @@ mision:
     visit_transit_radius_m: 0.15
     visit_free_threshold: 25
     settle_s: 0.0
-    max_recoveries: 10
+    max_recoveries: 5                 # ~25 s per blocked goal; BackUp is Nav2's 4th recovery and must finish (hans-die)
     return_tolerance_m: 0.05
     return_max_tries: 3
     return_still_s: 2.0
