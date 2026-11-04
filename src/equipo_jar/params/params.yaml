@@ -246,7 +246,7 @@ mision:
     visit_transit_radius_m: 0.15
     visit_free_threshold: 25
     settle_s: 0.0
-    max_recoveries: 10
+    max_recoveries: 5
     return_tolerance_m: 0.05
     return_max_tries: 3
     return_still_s: 2.0
