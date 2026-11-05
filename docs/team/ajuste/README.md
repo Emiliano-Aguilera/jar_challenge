@@ -25,9 +25,10 @@ or "simulator". Re-run the scripts in `scripts/` instead of trusting a number yo
 - **Main causes (see "Why the robot touched walls"):** ~0.4 s command delay at up to 0.5 m/s;
   Spin/BackUp recoveries turning or backing into walls; ghost obstacles in the local costmap after
   turns that triggered those recoveries; view points only ~3 cm from walls when turning in place.
-- **Proposal for the final:** branch `mision/params-final` (`c160808`, on top of `cec2c37`). Keep
-  everything that worked; slow down to 0.35 m/s, local persistence 0.3 s, slower Spin that looks
-  further ahead, views 3 cm further from walls. Table below.
+- **Proposal for the final:** branch `mision/params-final` (`e1260cb`, on top of `cec2c37`). Keep
+  everything that worked; local persistence 0.3 s, slower Spin that looks further ahead, views 3 cm
+  further from walls. Speed stays at 0.5 m/s: in the simulator 0.35 cost the 5-minute bonus.
+  Table and simulator comparison below.
 
 ## The real qualification map
 
@@ -147,8 +148,9 @@ there are ~0.4–0.7 m wide. Causes, in decreasing order of how sure we are:
    center, so a turn sweeps them into a wall that the straight rectangle cleared.
 2. **Command delay at speed.** The real robot answers ~0.4 s late (measured in run 1). The maximum
    commanded speed in the 3 s before each contact was 0.11–0.44 m/s; at 0.4 m/s that is 16 cm past
-   what MPPI planned. MPPI does not slow down near walls: mean commanded speed 0.13 m/s with < 6 cm
-   of clearance, 0.14 m/s with > 15 cm. MPPI's `CostCritic` only forbids the rectangle touching a
+   what MPPI planned. But only 3 of the 16 came after commands above 0.35 m/s, so a lower speed cap
+   would have changed few of them. MPPI does not slow down near walls: mean commanded speed
+   0.13 m/s with < 6 cm of clearance, 0.14 m/s with > 15 cm. MPPI's `CostCritic` only forbids the rectangle touching a
    lethal cell, and its weight is low (1.0), so it does not push away from walls.
 3. **Ghost obstacles after turns (local costmap).** The local costmap is in the `odom` frame and the
    real odometry is off in turns. With `observation_persistence: 1.0`, 1 s of old scans is redrawn
@@ -174,43 +176,78 @@ diagonally near x ≈ 1.4.
 
 ## Proposal for the final
 
-Branch `mision/params-final` (`c160808`, parent `cec2c37`): only `params/`. Passes
-`tools/verificar_params.py`, `verificar_estructura.py` and `verificar_estatico.py`.
-Not yet run in the simulator or on the robot.
+Branch `mision/params-final` (`e1260cb`, parent `cec2c37`): only `params/`. Passes
+`tools/verificar_params.py`, `verificar_estructura.py` and `verificar_estatico.py`. Simulated
+(below), not tried on the robot.
 
 | Param | Run 2 → Final | Owner | Against | Cost / risk |
 | --- | --- | --- | --- | --- |
-| `limites.lineal_max_ms` | 0.5 → 0.35 | Hans | Cause 2 | Slower trips. Lie's value |
-| `limites.reversa_max_ms` | 0.35 → 0.25 | Hans | Cause 2 | — |
 | `local_costmap...observation_persistence` | 1.0 → 0.3 | Hans | Cause 3 | A cone missed for > 2 scans can flicker again. Global keeps 1.0, so the planner still routes around cones |
 | `behavior_server.max_rotational_vel` | 1.0 → 0.6 | Hans | Cause 1 | Spin takes ~2.6 s instead of ~1.6 s. Must stay above `min_rotational_vel` (0.5) |
 | `behavior_server.simulate_ahead_time` | 1.0 → 2.0 | Hans | Cause 1 | Spin/BackUp refuse more often (they stop instead of moving) |
 | `cobertura.view_clearance` | 0.24 → 0.27 | Marco | Cause 4 | Offline on the real map: 73 views (none closer than 0.27 m to a wall), 893/1056 visible (−1 %), real-time estimate ~355 s (−40 s), both upper victims still in view |
 
-Keep from run 2: everything in the run-2 table above.
+Keep from run 2: everything in the run-2 table above, including `limites.lineal_max_ms: 0.5` and
+`reversa_max_ms: 0.35`.
 
 Considered and not proposed:
+- `limites.lineal_max_ms` 0.5 → 0.35 (Lie's value): it was in the first version of the proposal
+  (`c160808`). Dropped after the simulator comparison: it lost the 5-minute bonus in 3 of 5
+  conos_pista runs, and only 3 of the 16 real contacts came after commands above 0.35 m/s.
 - `local_costmap.footprint_padding` 0.02 → 0.03: door model (`scripts/door_fit.py`) says a 0.44 m
   opening would fit ~30° of headings instead of ~42–57°; the qualification opening was ~0.45 m.
 - Coverage transit back to 0.21: the upper third was worth 2 victims. The new layout may have similar
   openings (the organizers reuse the panels).
-- MPPI `CostCritic.cost_weight` 1.0 → ~2–3 (keep away from walls): the most direct fix for cause 2,
-  but it changes how MPPI enters narrow openings (why Hans set it low). Only with a simulator check.
+- MPPI `CostCritic.cost_weight` 1.0 → ~2–3 (keep away from walls): changes how MPPI enters narrow
+  openings (why Hans set it low). Only with a simulator check.
 - Local costmap with 2.5 cm cells: more room in doorways, but 4× the cells on a laptop that already
   misses its 20 Hz.
 
 The door model (`scripts/door_fit.py`, rough): 0.3 s persistence gives the same or more room than
 1.0 s in doorways (0.44 m: ~42° → ~57° of headings that fit).
 
+## Simulator comparison (night of 2026-11-04)
+
+Each variant changes one thing from the first proposal `c160808` (B). Maps `tars_qualy_real`,
+`conos_pista`, `maze_3_6x6`, 600 s, start offset `0.15,-0.1,0.2`. B0 is B without the start offset.
+
+| Variant | Branch | conos_pista (score, end) | maze_3 | tars_qualy_real |
+| --- | --- | --- | --- | --- |
+| A: run 2 as delivered | `entrega-tars` (`cec2c37`) | 500 (272 s), 500 (337 s) | 600, 600 | 300, 300 |
+| B: proposal with 0.35 m/s | `mision/params-final` (`c160808`) | 300 (434 s), 300 (362 s) | 600, 600 | 300 (1 collision), 300 |
+| B0: B, start at 0,0,0 | same | 500 (323 s) | 600 | 300 |
+| C: B, local persistence 1.0 | `mision/final-persist1` | 300 (404 s) | 600 | 100 (time out, no return) |
+| D: B, speeds 0.5 / 0.35 | `mision/final-vel05` | 500 (253 s) | 600 | 300 (end at 256 s, see below) |
+| E: B, `view_clearance` 0.30 | `mision/final-vc030` | 500 (340 s) | 600 | 200 (return failed) |
+
+- **Speed:** with 0.35 m/s, conos_pista got the 5-minute bonus in 2 of 5 runs (B, B, B0, C, E); with
+  0.5 m/s in 3 of 3 (A, A, D). That bonus is worth 200. So the final keeps 0.5 (D's values).
+- **Local persistence 0.3:** no cone trouble in conos_pista (B: both victims, no collisions). C (1.0)
+  was not better.
+- **Spin/simulate changes** (in B–E): no new stalls compared with A.
+- **`view_clearance` 0.30:** no gain seen; E's failed return on tars_qualy_real looks unrelated
+  (the trip back got stuck). 0.27 stays.
+- **tars_qualy_real does not test the upper third:** the server draws its `/map` at 0.05 m, and
+  even at transit 0.18 coverage plans no view there (49 views in every variant). The doorways are
+  only tested on the real robot.
+- **D's early end:** the planner stopped answering for a while (101 "Timed out" lines), mission cut
+  35 trips in a row at `max_recoveries: 4`, the plan ran out and it went back at 256 s. Seen before
+  in `fusion/params-c2`. See "Known issues".
+- The simulator counts collisions with the true pose (`choques.json`): 1 in these 24 runs. It has no
+  command delay and no heading error in turns, so it cannot show the real contacts.
+
+`scripts/sim_table.py` rebuilds the per-run table from the downloaded runs.
+
 ## Testing before the final
 
 The simulator has no command delay and no heading error in turns, so it will not reproduce the
-contacts (0 collisions in every qualification-map run we checked). Use it only to check that nothing
-regresses: doorways still crossed, plan and reports as before, return OK.
+contacts. Use it only to check that nothing regresses: plan and reports as before, return OK.
 
 ```bash
-gh workflow run simular.yml -R Emiliano-Aguilera/jar_challenge \
-  -f rama=mision/params-final -f mapas=tars_qualy_real,conos_pista,maze_3_6x6 -f duracion=600
+gh workflow run simular.yml -R Emiliano-Aguilera/jar_challenge -f rama=mision/params-final \
+  -f mapas=tars_qualy_real,conos_pista,maze_3_6x6 -f duracion=600 -f largada=0.15,-0.1,0.2
+bash notes/AlsinaBautista/bajar_corrida.sh RUN_ID           # downloads to build/sim/RUN_ID
+python3 docs/team/ajuste/scripts/sim_table.py RUN_ID=label  # one line per run
 ```
 
 ## Facts about our stack learned here
@@ -235,6 +272,9 @@ gh workflow run simular.yml -R Emiliano-Aguilera/jar_challenge \
   recovery cap.
 - Nav2 plans through gaps from ~0.25–0.30 m (robot center > 0.12 m from both sides) even when
   coverage treats them as closed.
+- When the planner or the BT navigator stops answering for a few seconds, every trip fails at once
+  and `max_recoveries: 4` throws plan points away within seconds (35 in a row in variant D, 17 in
+  `fusion/params-c2`). A time-based guard would need code.
 
 ## Open questions
 
@@ -254,6 +294,7 @@ gh workflow run simular.yml -R Emiliano-Aguilera/jar_challenge \
 | `scripts/coverage_on_map.py` | Our coverage planner offline on a map, per params variant |
 | `scripts/contacts_on_map.py` | Rectangle-vs-wall contacts along the AMCL track of a log |
 | `scripts/door_fit.py` | Rough doorway model for MPPI's rectangle in the local costmap |
+| `scripts/sim_table.py` | One line per simulator run (score, victims, end, collisions, recovery counts) from `build/sim/` |
 
 From the repo root, after rebuilding the map (needs `numpy` and `pyyaml`; `scipy` only makes it faster):
 
