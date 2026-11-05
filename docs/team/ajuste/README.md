@@ -12,23 +12,23 @@ or "simulator". Re-run the scripts in `scripts/` instead of trusting a number yo
 | | Run 1 (13:19) | Run 2 (18:51) |
 | --- | --- | --- |
 | Commit | `265bfec` (frozen at 9:00) | `cec2c37` (same code, only `params/` changed) |
-| Score | 250: 2 victims + return − 1 collision | 300: 3 victims, no penalties loaded |
+| Score | 250: 2 victims + return − 1 collision | 300 as scored: 3 victims. ~8 collisions seen by the team were not loaded |
 | Victims (report time) | V2 72 s, V1 448 s | V2 57 s, V4 119 s, V3 147 s |
-| End | `/done` at 448 s, back at the start | stopped by the organizers at ~521 s ("breaking the maze"), no `/done` |
+| End | `/done` at 448 s, back at the start | it knocked a wall down and the organizers lifted it out at ~521 s, no `/done` |
 | Upper third of the arena | never planned | explored, both victims there found |
 | Rectangle on a `/map` wall | 1 % of poses, 2 contacts | 16 % of poses, 16 contacts |
 
 - **What worked:** coverage reaching the upper third (2 more victims), Hans's cone params (no more
   167 s stuck behind a cone), fast confirmations, shorter coverage route.
-- **What failed:** the robot touched and pushed walls, mostly in the upper third, and at the end got
-  pinned against a wall for ~90 s while Nav2's recoveries kept turning it.
+- **What failed:** the robot hit walls (~8 collisions counted by the team on site, none loaded by
+  the organizers), mostly in the upper third. At the end it got pinned against a wall for ~90 s
+  while Nav2's recoveries kept turning it, knocked a wall down and was lifted out of the arena.
 - **Main causes (see "Why the robot touched walls"):** ~0.4 s command delay at up to 0.5 m/s;
   Spin/BackUp recoveries turning or backing into walls; ghost obstacles in the local costmap after
   turns that triggered those recoveries; view points only ~3 cm from walls when turning in place.
-- **Proposal for the final:** branch `mision/params-final` (`e1260cb`, on top of `cec2c37`). Keep
-  everything that worked; local persistence 0.3 s, slower Spin that looks further ahead, views 3 cm
-  further from walls. Speed stays at 0.5 m/s: in the simulator 0.35 cost the 5-minute bonus.
-  Table and simulator comparison below.
+- **Proposal for the final:** branch `mision/params-final` (`169a4bc`, on top of `cec2c37`). Keep
+  everything that worked; slow down to 0.35 m/s, local persistence 0.3 s, slower Spin that looks
+  further ahead, views 3 cm further from walls. Table, simulator comparison and other teams below.
 
 ## The real qualification map
 
@@ -109,8 +109,8 @@ How the coverage transit was chosen, on the real map (offline, `scripts/coverage
 - 431–521 s: pinned near (0.24, 4.81), next to the upper-left passage. The global planner refused
   every path ("Starting point in lethal space"), Spin and BackUp stopped with "Collision Ahead", and
   the trip back is not capped by `max_recoveries` (two return goals with 21 and 22 recoveries). The
-  robot kept turning against the walls (its heading went through every direction) until the
-  organizers stopped it.
+  robot kept turning against the walls (its heading went through every direction), knocked a wall
+  down, and the organizers lifted it out.
 - Localization was fine all run: LiDAR-to-map score median 0.85–0.98 per 30 s window.
 
 Counts from our `log.txt` (repeated lines are collapsed as `[+N same]`, so these are lower bounds):
@@ -128,7 +128,8 @@ Counts from our `log.txt` (repeated lines are collapsed as `[+N same]`, so these
 
 Method: `scripts/contacts_on_map.py` puts the chassis rectangle (0.119 m ahead, 0.181 m behind,
 0.100 m to each side) on the real map at every AMCL pose of our log and measures the clearance to the
-walls. AMCL is ~3–5 cm off, so single poses can be wrong; 16 % vs 1 % of poses is not noise.
+walls. AMCL is ~3–5 cm off, so single poses can be wrong; 16 % vs 1 % of poses is not noise, and
+the team counted ~8 real collisions in run 2.
 
 | | Run 1 | Run 2 |
 | --- | --- | --- |
@@ -148,8 +149,9 @@ there are ~0.4–0.7 m wide. Causes, in decreasing order of how sure we are:
    center, so a turn sweeps them into a wall that the straight rectangle cleared.
 2. **Command delay at speed.** The real robot answers ~0.4 s late (measured in run 1). The maximum
    commanded speed in the 3 s before each contact was 0.11–0.44 m/s; at 0.4 m/s that is 16 cm past
-   what MPPI planned. But only 3 of the 16 came after commands above 0.35 m/s, so a lower speed cap
-   would have changed few of them. MPPI does not slow down near walls: mean commanded speed
+   what MPPI planned. Only 3 of the 16 came after commands above 0.35 m/s, but the cap is also
+   cheap on the real robot: MPPI asked for more than 0.35 m/s only 6–8 % of the moving time in our
+   two runs (a 0.35 cap would have cost ~3–6 s per run). MPPI does not slow down near walls: mean commanded speed
    0.13 m/s with < 6 cm of clearance, 0.14 m/s with > 15 cm. MPPI's `CostCritic` only forbids the rectangle touching a
    lethal cell, and its weight is low (1.0), so it does not push away from walls.
 3. **Ghost obstacles after turns (local costmap).** The local costmap is in the `odom` frame and the
@@ -166,34 +168,55 @@ Once touching, the robot cannot get out by itself: Smac 2D treats the start as b
 center is within 0.12 m (padded half-width) of an obstacle, so there is no path, and both recoveries
 refuse to move.
 
-## What another team did (Grupo_de_Lie, run 1, 15:39)
+## Other teams (organizers' packages, both runs)
 
-500 points: 4 victims + return, no collisions, `/done` at 503 s. Their own stack, not Nav2. From the
-params block of their log: `v_max: 0.35`, `a_max: 0.35`, `w_max: 1.0`, `reaccion_s: 0.4` (they model
-the 0.4 s delay), `margen_seguridad: 0.04`, `huella_margen: 0.05`. They also struggled at the opening
-to the upper third: from 95 s to 193 s they tried and backed off several times, and crossed
-diagonally near x ≈ 1.4.
+The organizers share every team's package with all teams. What they show:
+
+| Team | Best | Stack | Max speed | Collisions | Notes |
+| --- | --- | --- | --- | --- | --- |
+| Grupo_de_Lie | 500 (run 1) | own (scan matching, own controller) | 0.35 | run 1: 0, run 2: 5 | run 2 changed one param, see below |
+| BoBots | 400 (run 2) | Nav2 + Regulated Pure Pursuit, AMCL | 0.35 | 0 and 0 | reached the upper third (V3, V4); 0–2 Spins per run |
+| TARS (us) | 300 (run 2) | Nav2 + MPPI, AMCL | 0.5 | run 1: 1, run 2: ~8 (team count, not loaded) | run 2: knocked a wall down, lifted out |
+| Stack_Queue | 150 (run 1) | Nav2, AMCL | 0.5 | run 1: 2 | 16 Spins in run 1; run 2 lost to Wi-Fi gaps |
+| JARVIS | 0 | AMCL + own node | 0.24–0.29 | 0 | localization lost 9 times in run 1 |
+
+- **Grupo_de_Lie, run 1 → run 2:** the only difference in the params block of their logs is one new
+  line, `motion.llegada_rumbo: 0.3` (by its name, a heading to reach on arrival). Run 2 had 5
+  collisions (−250, total 0). Their localization was as good in both runs (scan-match inliers median
+  0.97 and 0.98), and their pose lines put their body on a `/map` wall in 2 % of the poses in run 1
+  and 25 % in run 2 (our `contacts_on_map.py` method, their body length). Their motion state 3 was
+  logged 31 times in run 1 and 99 times in run 2. We cannot see their code, but it fits what we saw:
+  turning in place near walls is what makes contacts on this robot.
+- **Grupo_de_Lie's motion params:** `v_max: 0.35`, `a_max: 0.35`, `w_max: 1.0`, `reaccion_s: 0.4`
+  (they model the 0.4 s delay), `margen_seguridad: 0.04`, `huella_margen: 0.05`, body
+  `cuerpo_x: [-0.156, 0.119]` (they use 0.156 m behind the center; our footprint uses 0.181 from the
+  simulator URDF). In run 1 they also struggled at the opening to the upper third: from 95 s to 193 s
+  they tried and backed off several times, and crossed diagonally near x ≈ 1.4.
+- **BoBots:** Nav2 with Regulated Pure Pursuit, which slows down near obstacles and stops on
+  "collision ahead" (17 times in run 2) instead of optimizing around them; their mission measures
+  gaps online and marks them passable from around 0.30 m.
+- **Pattern:** the teams that covered the arena without collisions drove at ≤ 0.35 m/s and turned
+  in place near walls little. The collisions came with 0.5 m/s, many Spins, or arrival turns.
+- No log says which LiDAR the robot has or its minimum range.
 
 ## Proposal for the final
 
-Branch `mision/params-final` (`e1260cb`, parent `cec2c37`): only `params/`. Passes
+Branch `mision/params-final` (`169a4bc`, parent `cec2c37`): only `params/`. Passes
 `tools/verificar_params.py`, `verificar_estructura.py` and `verificar_estatico.py`. Simulated
 (below), not tried on the robot.
 
 | Param | Run 2 → Final | Owner | Against | Cost / risk |
 | --- | --- | --- | --- | --- |
+| `limites.lineal_max_ms` | 0.5 → 0.35 | Hans | Cause 2 | ~3–6 s per run on the real robot; in the simulator much more (see below). The collision-free teams' value |
+| `limites.reversa_max_ms` | 0.35 → 0.25 | Hans | Cause 2 | — |
 | `local_costmap...observation_persistence` | 1.0 → 0.3 | Hans | Cause 3 | A cone missed for > 2 scans can flicker again. Global keeps 1.0, so the planner still routes around cones |
 | `behavior_server.max_rotational_vel` | 1.0 → 0.6 | Hans | Cause 1 | Spin takes ~2.6 s instead of ~1.6 s. Must stay above `min_rotational_vel` (0.5) |
 | `behavior_server.simulate_ahead_time` | 1.0 → 2.0 | Hans | Cause 1 | Spin/BackUp refuse more often (they stop instead of moving) |
 | `cobertura.view_clearance` | 0.24 → 0.27 | Marco | Cause 4 | Offline on the real map: 73 views (none closer than 0.27 m to a wall), 893/1056 visible (−1 %), real-time estimate ~355 s (−40 s), both upper victims still in view |
 
-Keep from run 2: everything in the run-2 table above, including `limites.lineal_max_ms: 0.5` and
-`reversa_max_ms: 0.35`.
+Keep from run 2: everything in the run-2 table above.
 
 Considered and not proposed:
-- `limites.lineal_max_ms` 0.5 → 0.35 (Lie's value): it was in the first version of the proposal
-  (`c160808`). Dropped after the simulator comparison: it lost the 5-minute bonus in 3 of 5
-  conos_pista runs, and only 3 of the 16 real contacts came after commands above 0.35 m/s.
 - `local_costmap.footprint_padding` 0.02 → 0.03: door model (`scripts/door_fit.py`) says a 0.44 m
   opening would fit ~30° of headings instead of ~42–57°; the qualification opening was ~0.45 m.
 - Coverage transit back to 0.21: the upper third was worth 2 victims. The new layout may have similar
@@ -221,7 +244,11 @@ Each variant changes one thing from the first proposal `c160808` (B). Maps `tars
 | E: B, `view_clearance` 0.30 | `mision/final-vc030` | 500 (340 s) | 600 | 200 (return failed) |
 
 - **Speed:** with 0.35 m/s, conos_pista got the 5-minute bonus in 2 of 5 runs (B, B, B0, C, E); with
-  0.5 m/s in 3 of 3 (A, A, D). That bonus is worth 200. So the final keeps 0.5 (D's values).
+  0.5 m/s in 3 of 3 (A, A, D). For a few hours the proposal went back to 0.5 (`e1260cb`). It is 0.35
+  again (`169a4bc`) because the simulator overstates the cost: there MPPI drives at 0.5 far more
+  than on the real robot (6–8 % of the moving time above 0.35, ~3–6 s per run), no team got the
+  5-minute bonus on the real robot, and the teams that covered the arena without collisions drove
+  at ≤ 0.35 m/s (see "Other teams").
 - **Local persistence 0.3:** no cone trouble in conos_pista (B: both victims, no collisions). C (1.0)
   was not better.
 - **Spin/simulate changes** (in B–E): no new stalls compared with A.
@@ -279,7 +306,8 @@ python3 docs/team/ajuste/scripts/sim_table.py RUN_ID=label  # one line per run
 ## Open questions
 
 - Will collisions in the final be counted per contact, and will the organizers stop a run that pushes
-  walls? In run 2 none were loaded and the run was stopped.
+  walls? In run 2 they loaded none, although the team counted ~8, and they lifted the robot out after
+  it knocked a wall down. If they load them later, run 2 is worth 0 and run 1 (250) counts.
 - LiDAR minimum range on the real robot (`sllidar_node`): if it is ~0.15 m, a wall touching the
   side is invisible right after a costmap clear, and recoveries cannot see it. Not checked.
 
