@@ -309,7 +309,7 @@ local_costmap:
           obstacle_max_range: 3.0
           # Conos finos: a 0.18 m miden ~5 cm (una celda) y los rayos de al lado los borran.
           # Marca lo que el LiDAR vio en el último segundo, no solo el último barrido.
-          observation_persistence: 1.0
+          observation_persistence: 0.3      # sim variant: local only
           inf_is_valid: false
       # El costo sube solo cerca de los obstáculos: MPPI entra en huecos angostos sin
       # dudar. El camino ya viene por el medio por la inflación del global.
