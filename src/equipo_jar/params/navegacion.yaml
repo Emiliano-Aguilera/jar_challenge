@@ -284,7 +284,7 @@ local_costmap:
   local_costmap:
     ros__parameters:
       update_frequency: 7.0           # el LiDAR va a ~7.2 Hz
-      publish_frequency: 2.0
+      publish_frequency: 10.0         # sim variant: BackUp/Spin read the costmap by topic; 2 Hz = up to 0.5 s stale
       global_frame: odom
       robot_base_frame: base_footprint
       rolling_window: true
