@@ -1,0 +1,126 @@
+{
+  "termino_por": "done",
+  "mapa_publicado": true,
+  "reportes": [
+    {
+      "t": 72.23,
+      "x": 2.2311918525759222,
+      "y": 0.9987156990107843
+    },
+    {
+      "t": 447.53,
+      "x": 0.0986913314536944,
+      "y": 3.1763836271981902
+    }
+  ],
+  "reportes_mal_formados": [],
+  "antes_del_mapa": {
+    "cmd_vel_no_nulo": 0,
+    "reportes": 0
+  },
+  "violaciones": [],
+  "puntaje": {
+    "por_victima": [
+      {
+        "indice": 0,
+        "indice_reporte": 1,
+        "distancia": 0.06822651817759308,
+        "puntos": 100
+      },
+      {
+        "indice": 1,
+        "indice_reporte": 0,
+        "distancia": 0.012695553419906512,
+        "puntos": 100
+      },
+      {
+        "indice": 2,
+        "indice_reporte": null,
+        "distancia": null,
+        "puntos": 0
+      },
+      {
+        "indice": 3,
+        "indice_reporte": null,
+        "distancia": null,
+        "puntos": 0
+      }
+    ],
+    "reportes_contados": 2,
+    "reportes_ignorados": 0,
+    "puntos_victimas": 200,
+    "bono_rapido": false,
+    "bono_regreso": true,
+    "penalizacion_colisiones": 50,
+    "penalizacion_salida": 0,
+    "total": 250,
+    "anulada": false,
+    "tiempo_ultimo_reporte_que_puntua": 447.53
+  },
+  "resumen": "total 250 | víctimas [V1:100 V2:100 V3:0 V4:0] | +100 regreso | -50 colisiones",
+  "eventos": [
+    {
+      "t": null,
+      "evento": "juez_listo",
+      "victimas": 4,
+      "equipo": "TARS"
+    },
+    {
+      "t": 0.0,
+      "evento": "mapa_publicado",
+      "equipo": "TARS"
+    },
+    {
+      "t": 72.23,
+      "evento": "reporte",
+      "x": 2.231,
+      "y": 0.999,
+      "valido": true,
+      "equipo": "TARS"
+    },
+    {
+      "t": 447.53,
+      "evento": "reporte",
+      "x": 0.099,
+      "y": 3.176,
+      "valido": true,
+      "equipo": "TARS"
+    },
+    {
+      "t": 447.63,
+      "evento": "done",
+      "distancia_a_largada": null,
+      "equipo": "TARS"
+    },
+    {
+      "t": null,
+      "evento": "regreso",
+      "valor": true,
+      "agregado_manual": true,
+      "equipo": "TARS"
+    },
+    {
+      "t": null,
+      "evento": "colision",
+      "agregado_manual": true,
+      "equipo": "TARS"
+    },
+    {
+      "t": null,
+      "evento": "correccion_manual",
+      "equipo": "TARS",
+      "motivo": "Veredicto humano cargado despues del cierre del juez: regreso a la largada = si, 1 colision. Se perdio la ventana de 60 s por error de operacion, no del equipo.",
+      "decidio": "Zoe",
+      "fecha": "2026-11-04T13:33:00",
+      "puntaje_original": 200,
+      "puntaje_corregido": 250,
+      "respaldo": "respaldos/*TARS_c1_ORIGINAL_antes_de_correccion"
+    }
+  ],
+  "equipo": "TARS",
+  "duracion_s": 507.8,
+  "tiempo_total_s": 447.63,
+  "tiempo_ultimo_reporte_que_puntua_s": 447.53,
+  "movimiento_despues_de_done": 0,
+  "medidas_con_ground_truth": false
+}
