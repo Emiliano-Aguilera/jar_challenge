@@ -26,9 +26,10 @@ or "simulator". Re-run the scripts in `scripts/` instead of trusting a number yo
 - **Main causes (see "Why the robot touched walls"):** ~0.4 s command delay at up to 0.5 m/s;
   Spin/BackUp recoveries turning or backing into walls; ghost obstacles in the local costmap after
   turns that triggered those recoveries; view points only ~3 cm from walls when turning in place.
-- **Proposal for the final:** branch `mision/params-final` (`169a4bc`, on top of `cec2c37`). Keep
-  everything that worked; slow down to 0.35 m/s, local persistence 0.3 s, slower Spin that looks
-  further ahead, views 3 cm further from walls. Table, simulator comparison and other teams below.
+- **Final set (team decision, 2026-11-05):** branch `mision/params-final` (`ba6ed23`, on top of
+  `cec2c37`), only `navegacion.yaml`. Keep everything that worked; slow down to 0.35 m/s, local
+  persistence 0.3 s, slower Spin that looks further ahead, local costmap published at 10 Hz.
+  `view_clearance` stays at 0.24. Table, simulator comparison and other teams below.
 - **V1 behind the slit window (run 2):** detection cannot see a box through vertical slits at any
   distance (each stripe fails the shape filter). V1 was lost because the robot never reached the
   open-side view that coverage had planned. See "V1 in run 2: the slit window".
@@ -189,7 +190,10 @@ there are ~0.4–0.7 m wide. Causes, in decreasing order of how sure we are:
    ~0.4 s of delay the robot keeps moving after the stop. Spin turns at up to 1.0 rad/s and only
    checks 1.0 s ahead (`behavior_server.simulate_ahead_time`). The rear corners are 0.207 m from the
    center, so a turn sweeps them into a wall that the straight rectangle cleared.
-2. **Command delay at speed.** The real robot answers ~0.4 s late (measured in run 1). The maximum
+2. **Command delay at speed.** The real robot moves 0.30–0.35 s (run 1) and 0.45 s (run 2) after
+   the command (best correlation of the judge's `/cmd_vel` with `/odom`). The Wi-Fi is ~15 ms of it
+   (organizers' ping: mean 14.5 ms round trip); the rest is the robot's driver, its motor ramp and
+   `/odom` at 10 Hz. The maximum
    commanded speed in the 3 s before each contact was 0.11–0.44 m/s; at 0.4 m/s that is 16 cm past
    what MPPI planned. Only 3 of the 16 came after commands above 0.35 m/s, but the cap is also
    cheap on the real robot: MPPI asked for more than 0.35 m/s only 6–8 % of the moving time in our
@@ -243,7 +247,7 @@ The organizers share every team's package with all teams. What they show:
 
 ## Proposal for the final
 
-Branch `mision/params-final` (`169a4bc`, parent `cec2c37`): only `params/`. Passes
+Branch `mision/params-final` (`ba6ed23`, descends from `cec2c37`): only `navegacion.yaml`. Passes
 `tools/verificar_params.py`, `verificar_estructura.py` and `verificar_estatico.py`. Simulated
 (below), not tried on the robot.
 
@@ -254,11 +258,19 @@ Branch `mision/params-final` (`169a4bc`, parent `cec2c37`): only `params/`. Pass
 | `local_costmap...observation_persistence` | 1.0 → 0.3 | Hans | Cause 3 | A cone missed for > 2 scans can flicker again. Global keeps 1.0, so the planner still routes around cones |
 | `behavior_server.max_rotational_vel` | 1.0 → 0.6 | Hans | Cause 1 | Spin takes ~2.6 s instead of ~1.6 s. Must stay above `min_rotational_vel` (0.5) |
 | `behavior_server.simulate_ahead_time` | 1.0 → 2.0 | Hans | Cause 1 | Spin/BackUp refuse more often (they stop instead of moving) |
-| `cobertura.view_clearance` | 0.24 → 0.27 | Marco | Cause 4 | Offline on the real map: 73 views (none closer than 0.27 m to a wall), 893/1056 visible (−1 %), real-time estimate ~355 s (−40 s), both upper victims still in view |
+| `local_costmap.publish_frequency` | 2.0 → 10.0 | team | Cause 1 | Spin/BackUp check "Collision Ahead" on the published copy, up to ~0.57 s old at 2 Hz (it kept ghosts the 0.3 s persistence had dropped). 10 publishes after every 7 Hz update; 60 × 60 cells. Not simulated |
 
 Keep from run 2: everything in the run-2 table above.
 
 Considered and not proposed:
+- `cobertura.view_clearance` 0.24 → 0.27 (first proposal, `c160808`–`169a4bc`): no run-2 contact
+  happened while turning at a view (all 16 were 0.17–0.59 m from the nearest view, none during an
+  in-place turn), and on a harder map 0.27 can drop views inside narrow corridors. Offline on the
+  real map it cost −1 % visible samples.
+- `limites.giro_max_rads` 1.0 → 0.8: MPPI turned above 0.8 rad/s 29 % (run 1) and 43 % (run 2) of
+  the moving time, so a cap costs ~25 s per run. BoBots and Grupo_de_Lie also turned at up to 1.0;
+  Stack_Queue capped at 0.8 and still collided. Before 14 of 16 contacts there was a turn ≥ 0.9 rad/s,
+  but so there is in 75 % of any 3 s of moving.
 - `local_costmap.footprint_padding` 0.02 → 0.03: door model (`scripts/door_fit.py`) says a 0.44 m
   opening would fit ~30° of headings instead of ~42–57°; the qualification opening was ~0.45 m.
 - Coverage transit back to 0.21: the upper third was worth 2 victims. The new layout may have similar
