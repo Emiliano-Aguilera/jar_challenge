@@ -284,7 +284,7 @@ local_costmap:
   local_costmap:
     ros__parameters:
       update_frequency: 7.0           # el LiDAR va a ~7.2 Hz
-      publish_frequency: 2.0
+      publish_frequency: 10.0         # sim A: Spin/BackUp leen el costmap por topic; a 2 Hz llega hasta 0.5 s viejo
       global_frame: odom
       robot_base_frame: base_footprint
       rolling_window: true
@@ -309,7 +309,7 @@ local_costmap:
           obstacle_max_range: 3.0
           # Conos finos: a 0.18 m miden ~5 cm (una celda) y los rayos de al lado los borran.
           # Marca lo que el LiDAR vio en el último segundo, no solo el último barrido.
-          observation_persistence: 1.0
+          observation_persistence: 0.3      # sim A: solo el local (odom se corre en los giros)
           inf_is_valid: false
       # El costo sube solo cerca de los obstáculos: MPPI entra en huecos angostos sin
       # dudar. El camino ya viene por el medio por la inflación del global.
@@ -401,8 +401,8 @@ behavior_server:
     global_frame: odom
     robot_base_frame: base_footprint
     transform_tolerance: 0.3
-    simulate_ahead_time: 1.0
-    max_rotational_vel: 1.0
+    simulate_ahead_time: 2.0          # sim A
+    max_rotational_vel: 0.6           # sim A: con 0.4 s de retraso gira 14° de más en vez de 23°
     min_rotational_vel: 0.5           # the real robot does not turn below ~0.5 rad/s from rest
     rotational_acc_lim: 3.2
 

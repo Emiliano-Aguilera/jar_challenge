@@ -18,7 +18,7 @@ cobertura:
     # to the upper third is ~0.45 m there, so 0.21 closed it (run 1: 58 views, 327 samples out)
     # and 0.18 opens it: 81 views, 905/1056 visible, both upper victims in view. 0.16 adds only
     # 13 samples in pockets behind 0.36-0.40 m passages; 0.14 adds nothing more.
-    robot_radius: 0.15
+    robot_radius: 0.13          # PROXY DE SIM de 0.15: el mapa del servidor tiene celdas de 0.05 m (rama de prueba)
     safety_margin: 0.03
     #PARAM: bounded initial planning-anchor shift from a known-free pose (m; 0 disables).
     start_max_shift_m: 0.20
