@@ -1,0 +1,175 @@
+{
+  "termino_por": "done",
+  "mapa_publicado": true,
+  "reportes": [
+    {
+      "t": 108.83,
+      "x": 0.2769999814480544,
+      "y": 3.757999903216958
+    },
+    {
+      "t": 239.35,
+      "x": 2.234435110147023,
+      "y": 1.0617592568770362
+    },
+    {
+      "t": 346.51,
+      "x": 1.1527292823184947,
+      "y": 5.335750203692822
+    },
+    {
+      "t": 346.52,
+      "x": 1.3698441529290681,
+      "y": -0.1617235723527547
+    }
+  ],
+  "reportes_mal_formados": [],
+  "antes_del_mapa": {
+    "cmd_vel_no_nulo": 0,
+    "reportes": 0
+  },
+  "violaciones": [],
+  "puntaje": {
+    "por_victima": [
+      {
+        "indice": 0,
+        "indice_reporte": null,
+        "distancia": null,
+        "puntos": 0
+      },
+      {
+        "indice": 1,
+        "indice_reporte": 1,
+        "distancia": 0.07384535472672923,
+        "puntos": 100
+      },
+      {
+        "indice": 2,
+        "indice_reporte": null,
+        "distancia": null,
+        "puntos": 0
+      },
+      {
+        "indice": 3,
+        "indice_reporte": null,
+        "distancia": null,
+        "puntos": 0
+      }
+    ],
+    "reportes_contados": 4,
+    "reportes_ignorados": 0,
+    "puntos_victimas": 100,
+    "bono_rapido": false,
+    "bono_regreso": true,
+    "penalizacion_colisiones": 250,
+    "penalizacion_salida": 0,
+    "total": 0,
+    "anulada": false,
+    "tiempo_ultimo_reporte_que_puntua": 239.35
+  },
+  "resumen": "total 0 | víctimas [V1:0 V2:100 V3:0 V4:0] | +100 regreso | -250 colisiones",
+  "eventos": [
+    {
+      "t": null,
+      "evento": "juez_listo",
+      "victimas": 4,
+      "equipo": "Grupo_de_Lie"
+    },
+    {
+      "t": 0.0,
+      "evento": "mapa_publicado",
+      "equipo": "Grupo_de_Lie"
+    },
+    {
+      "t": 108.83,
+      "evento": "reporte",
+      "x": 0.277,
+      "y": 3.758,
+      "valido": true,
+      "equipo": "Grupo_de_Lie"
+    },
+    {
+      "t": 239.35,
+      "evento": "reporte",
+      "x": 2.234,
+      "y": 1.062,
+      "valido": true,
+      "equipo": "Grupo_de_Lie"
+    },
+    {
+      "t": 346.51,
+      "evento": "reporte",
+      "x": 1.153,
+      "y": 5.336,
+      "valido": true,
+      "equipo": "Grupo_de_Lie"
+    },
+    {
+      "t": 346.52,
+      "evento": "reporte",
+      "x": 1.37,
+      "y": -0.162,
+      "valido": true,
+      "equipo": "Grupo_de_Lie"
+    },
+    {
+      "t": 540.85,
+      "evento": "done",
+      "distancia_a_largada": null,
+      "equipo": "Grupo_de_Lie"
+    },
+    {
+      "t": 595.62,
+      "evento": "regreso_veredicto",
+      "dentro_del_circulo": true,
+      "equipo": "Grupo_de_Lie"
+    },
+    {
+      "t": null,
+      "evento": "colision",
+      "agregado_manual": true,
+      "equipo": "Grupo_de_Lie"
+    },
+    {
+      "t": null,
+      "evento": "colision",
+      "agregado_manual": true,
+      "equipo": "Grupo_de_Lie"
+    },
+    {
+      "t": null,
+      "evento": "colision",
+      "agregado_manual": true,
+      "equipo": "Grupo_de_Lie"
+    },
+    {
+      "t": null,
+      "evento": "colision",
+      "agregado_manual": true,
+      "equipo": "Grupo_de_Lie"
+    },
+    {
+      "t": null,
+      "evento": "colision",
+      "agregado_manual": true,
+      "equipo": "Grupo_de_Lie"
+    },
+    {
+      "t": null,
+      "evento": "correccion_manual",
+      "equipo": "Grupo_de_Lie",
+      "decidio": "Zoe",
+      "motivo": "Colisiones cargadas despues del cierre del juez (el veredicto de regreso ya estaba registrado en vivo): 5 colisiones.",
+      "fecha": "2026-11-04T18:40:56",
+      "puntaje_original": 200,
+      "puntaje_corregido": 0,
+      "total_sin_tope_de_cero": -50
+    }
+  ],
+  "equipo": "Grupo_de_Lie",
+  "duracion_s": 595.7,
+  "tiempo_total_s": 540.85,
+  "tiempo_ultimo_reporte_que_puntua_s": 239.35,
+  "movimiento_despues_de_done": 0,
+  "medidas_con_ground_truth": false
+}

@@ -1,0 +1,8 @@
+{"t": null, "evento": "juez_listo", "victimas": 4, "equipo": "TARS"}
+{"t": 0.0, "evento": "mapa_publicado", "equipo": "TARS"}
+{"t": 72.23, "evento": "reporte", "x": 2.231, "y": 0.999, "valido": true, "equipo": "TARS"}
+{"t": 447.53, "evento": "reporte", "x": 0.099, "y": 3.176, "valido": true, "equipo": "TARS"}
+{"t": 447.63, "evento": "done", "distancia_a_largada": null, "equipo": "TARS"}
+{"t": null, "evento": "regreso", "valor": true, "agregado_manual": true, "equipo": "TARS"}
+{"t": null, "evento": "colision", "agregado_manual": true, "equipo": "TARS"}
+{"t": null, "evento": "correccion_manual", "equipo": "TARS", "motivo": "Veredicto humano cargado despues del cierre del juez: regreso a la largada = si, 1 colision. Se perdio la ventana de 60 s por error de operacion, no del equipo.", "decidio": "Zoe", "fecha": "2026-11-04T13:33:00", "puntaje_original": 200, "puntaje_corregido": 250, "respaldo": "respaldos/*TARS_c1_ORIGINAL_antes_de_correccion"}

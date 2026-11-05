@@ -1,0 +1,146 @@
+{
+  "termino_por": null,
+  "mapa_publicado": true,
+  "reportes": [
+    {
+      "t": 47.18,
+      "x": 1.9214688280794776,
+      "y": 4.296497510584519
+    },
+    {
+      "t": 94.4,
+      "x": 0.1353713625376073,
+      "y": 6.457338198256456
+    },
+    {
+      "t": 335.44,
+      "x": 2.8867293371349603,
+      "y": 4.305689190207907
+    },
+    {
+      "t": 383.47,
+      "x": 2.5434580972406033,
+      "y": 6.37564947213547
+    }
+  ],
+  "reportes_mal_formados": [],
+  "antes_del_mapa": {
+    "cmd_vel_no_nulo": 0,
+    "reportes": 0
+  },
+  "violaciones": [],
+  "puntaje": {
+    "por_victima": [
+      {
+        "indice": 0,
+        "indice_reporte": null,
+        "distancia": null,
+        "puntos": 0
+      },
+      {
+        "indice": 1,
+        "indice_reporte": null,
+        "distancia": null,
+        "puntos": 0
+      },
+      {
+        "indice": 2,
+        "indice_reporte": null,
+        "distancia": null,
+        "puntos": 0
+      },
+      {
+        "indice": 3,
+        "indice_reporte": 1,
+        "distancia": 0.25706656496354485,
+        "puntos": 50
+      }
+    ],
+    "reportes_contados": 4,
+    "reportes_ignorados": 0,
+    "puntos_victimas": 50,
+    "bono_rapido": false,
+    "bono_regreso": true,
+    "penalizacion_colisiones": 0,
+    "penalizacion_salida": 0,
+    "total": 150,
+    "anulada": false,
+    "tiempo_ultimo_reporte_que_puntua": 94.4
+  },
+  "resumen": "total 150 | víctimas [V1:0 V2:0 V3:0 V4:50] | +100 regreso",
+  "eventos": [
+    {
+      "t": null,
+      "evento": "juez_listo",
+      "victimas": 4,
+      "equipo": "Zonda_Robotics"
+    },
+    {
+      "t": 0.0,
+      "evento": "mapa_publicado",
+      "equipo": "Zonda_Robotics"
+    },
+    {
+      "t": 47.18,
+      "evento": "reporte",
+      "x": 1.921,
+      "y": 4.296,
+      "valido": true,
+      "equipo": "Zonda_Robotics"
+    },
+    {
+      "t": 94.4,
+      "evento": "reporte",
+      "x": 0.135,
+      "y": 6.457,
+      "valido": true,
+      "equipo": "Zonda_Robotics"
+    },
+    {
+      "t": 335.44,
+      "evento": "reporte",
+      "x": 2.887,
+      "y": 4.306,
+      "valido": true,
+      "equipo": "Zonda_Robotics"
+    },
+    {
+      "t": 383.47,
+      "evento": "reporte",
+      "x": 2.543,
+      "y": 6.376,
+      "valido": true,
+      "equipo": "Zonda_Robotics"
+    },
+    {
+      "t": 420.32,
+      "evento": "done",
+      "distancia_a_largada": null,
+      "equipo": "Zonda_Robotics"
+    },
+    {
+      "t": null,
+      "evento": "regreso",
+      "valor": true,
+      "agregado_manual": true,
+      "equipo": "Zonda_Robotics"
+    },
+    {
+      "t": null,
+      "evento": "correccion_manual",
+      "equipo": "Zonda_Robotics",
+      "decidio": "Zoe",
+      "motivo": "Veredicto humano cargado despues del cierre del juez: regreso=si, 0 colisiones. El juez se corto con Ctrl+C antes de terminar, sin veredicto de regreso; 0 colisiones.",
+      "fecha": "2026-11-04T15:01:01",
+      "puntaje_original": 50,
+      "puntaje_corregido": 150,
+      "total_sin_tope_de_cero": 150
+    }
+  ],
+  "equipo": "Zonda_Robotics",
+  "duracion_s": 447.9,
+  "tiempo_total_s": 420.32,
+  "tiempo_ultimo_reporte_que_puntua_s": 94.4,
+  "movimiento_despues_de_done": 0,
+  "medidas_con_ground_truth": false
+}

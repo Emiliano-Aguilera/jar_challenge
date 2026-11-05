@@ -1,0 +1,9 @@
+{"t": null, "evento": "juez_listo", "victimas": 4, "equipo": "BoBots"}
+{"t": 0.0, "evento": "mapa_publicado", "equipo": "BoBots"}
+{"t": 245.64, "evento": "reporte", "x": -0.013, "y": 6.699, "valido": true, "equipo": "BoBots"}
+{"t": 349.74, "evento": "reporte", "x": 0.504, "y": 2.692, "valido": true, "equipo": "BoBots"}
+{"t": 349.74, "evento": "reporte", "x": 1.953, "y": 5.535, "valido": true, "equipo": "BoBots"}
+{"t": 349.74, "evento": "done", "distancia_a_largada": null, "equipo": "BoBots"}
+{"t": 349.74, "evento": "reporte", "x": 1.907, "y": 4.367, "valido": true, "equipo": "BoBots"}
+{"t": null, "evento": "regreso", "valor": true, "agregado_manual": true, "equipo": "BoBots"}
+{"t": null, "evento": "correccion_manual", "equipo": "BoBots", "decidio": "Zoe", "motivo": "Veredicto humano cargado despues del cierre del juez: regreso=si, 0 colisiones. El juez cerro sin registrar el veredicto de regreso.", "fecha": "2026-11-04T17:05:38", "puntaje_original": 100, "puntaje_corregido": 200, "total_sin_tope_de_cero": 200}

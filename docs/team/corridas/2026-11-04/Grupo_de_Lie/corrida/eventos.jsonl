@@ -1,0 +1,8 @@
+{"t": null, "evento": "juez_listo", "victimas": 4, "equipo": "Grupo_de_Lie"}
+{"t": 0.0, "evento": "mapa_publicado", "equipo": "Grupo_de_Lie"}
+{"t": 59.25, "evento": "reporte", "x": 2.229, "y": 1.058, "valido": true, "equipo": "Grupo_de_Lie"}
+{"t": 199.74, "evento": "reporte", "x": 0.079, "y": 6.713, "valido": true, "equipo": "Grupo_de_Lie"}
+{"t": 338.26, "evento": "reporte", "x": 2.767, "y": 5.574, "valido": true, "equipo": "Grupo_de_Lie"}
+{"t": 453.26, "evento": "reporte", "x": 0.175, "y": 3.136, "valido": true, "equipo": "Grupo_de_Lie"}
+{"t": 502.77, "evento": "done", "distancia_a_largada": null, "equipo": "Grupo_de_Lie"}
+{"t": 524.73, "evento": "regreso_veredicto", "dentro_del_circulo": true, "equipo": "Grupo_de_Lie"}

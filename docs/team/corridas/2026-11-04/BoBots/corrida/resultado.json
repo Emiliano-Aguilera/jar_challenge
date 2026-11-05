@@ -1,0 +1,146 @@
+{
+  "termino_por": "done",
+  "mapa_publicado": true,
+  "reportes": [
+    {
+      "t": 245.64,
+      "x": -0.013,
+      "y": 6.699
+    },
+    {
+      "t": 349.74,
+      "x": 0.504,
+      "y": 2.692
+    },
+    {
+      "t": 349.74,
+      "x": 1.953,
+      "y": 5.535
+    },
+    {
+      "t": 349.74,
+      "x": 1.907,
+      "y": 4.367
+    }
+  ],
+  "reportes_mal_formados": [],
+  "antes_del_mapa": {
+    "cmd_vel_no_nulo": 0,
+    "reportes": 0
+  },
+  "violaciones": [],
+  "puntaje": {
+    "por_victima": [
+      {
+        "indice": 0,
+        "indice_reporte": null,
+        "distancia": null,
+        "puntos": 0
+      },
+      {
+        "indice": 1,
+        "indice_reporte": null,
+        "distancia": null,
+        "puntos": 0
+      },
+      {
+        "indice": 2,
+        "indice_reporte": null,
+        "distancia": null,
+        "puntos": 0
+      },
+      {
+        "indice": 3,
+        "indice_reporte": 0,
+        "distancia": 0.048259714048054604,
+        "puntos": 100
+      }
+    ],
+    "reportes_contados": 4,
+    "reportes_ignorados": 0,
+    "puntos_victimas": 100,
+    "bono_rapido": false,
+    "bono_regreso": true,
+    "penalizacion_colisiones": 0,
+    "penalizacion_salida": 0,
+    "total": 200,
+    "anulada": false,
+    "tiempo_ultimo_reporte_que_puntua": 245.64
+  },
+  "resumen": "total 200 | víctimas [V1:0 V2:0 V3:0 V4:100] | +100 regreso",
+  "eventos": [
+    {
+      "t": null,
+      "evento": "juez_listo",
+      "victimas": 4,
+      "equipo": "BoBots"
+    },
+    {
+      "t": 0.0,
+      "evento": "mapa_publicado",
+      "equipo": "BoBots"
+    },
+    {
+      "t": 245.64,
+      "evento": "reporte",
+      "x": -0.013,
+      "y": 6.699,
+      "valido": true,
+      "equipo": "BoBots"
+    },
+    {
+      "t": 349.74,
+      "evento": "reporte",
+      "x": 0.504,
+      "y": 2.692,
+      "valido": true,
+      "equipo": "BoBots"
+    },
+    {
+      "t": 349.74,
+      "evento": "reporte",
+      "x": 1.953,
+      "y": 5.535,
+      "valido": true,
+      "equipo": "BoBots"
+    },
+    {
+      "t": 349.74,
+      "evento": "done",
+      "distancia_a_largada": null,
+      "equipo": "BoBots"
+    },
+    {
+      "t": 349.74,
+      "evento": "reporte",
+      "x": 1.907,
+      "y": 4.367,
+      "valido": true,
+      "equipo": "BoBots"
+    },
+    {
+      "t": null,
+      "evento": "regreso",
+      "valor": true,
+      "agregado_manual": true,
+      "equipo": "BoBots"
+    },
+    {
+      "t": null,
+      "evento": "correccion_manual",
+      "equipo": "BoBots",
+      "decidio": "Zoe",
+      "motivo": "Veredicto humano cargado despues del cierre del juez: regreso=si, 0 colisiones. El juez cerro sin registrar el veredicto de regreso.",
+      "fecha": "2026-11-04T17:05:38",
+      "puntaje_original": 100,
+      "puntaje_corregido": 200,
+      "total_sin_tope_de_cero": 200
+    }
+  ],
+  "equipo": "BoBots",
+  "duracion_s": 409.8,
+  "tiempo_total_s": 349.74,
+  "tiempo_ultimo_reporte_que_puntua_s": 245.64,
+  "movimiento_despues_de_done": 0,
+  "medidas_con_ground_truth": false
+}
