@@ -28,7 +28,7 @@ cobertura:
     #PARAM: retry a failed initial plan with current TF, even within the same cell (s, > 0).
     retry_interval_s: 2.0
     #PARAM: minimum observation clearance, including the padded turning envelope (m, >= 0).
-    view_clearance: 0.24
+    view_clearance: 0.27              # sim variant
     #PARAM: prefer this clearance; tighter views only recover otherwise unseen targets (m, >= 0).
     view_preferred_clearance: 0.30
     candidate_spacing: 0.45
