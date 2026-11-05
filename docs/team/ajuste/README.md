@@ -29,6 +29,9 @@ or "simulator". Re-run the scripts in `scripts/` instead of trusting a number yo
 - **Proposal for the final:** branch `mision/params-final` (`169a4bc`, on top of `cec2c37`). Keep
   everything that worked; slow down to 0.35 m/s, local persistence 0.3 s, slower Spin that looks
   further ahead, views 3 cm further from walls. Table, simulator comparison and other teams below.
+- **V1 behind the slit window (run 2):** detection cannot see a box through vertical slits at any
+  distance (each stripe fails the shape filter). V1 was lost because the robot never reached the
+  open-side view that coverage had planned. See "V1 in run 2: the slit window".
 
 ## The real qualification map
 
@@ -123,6 +126,45 @@ Counts from our `log.txt` (repeated lines are collapsed as `[+N same]`, so these
 | `Running spin` / `Running backup` | 5 / 4 | 25 / 22 |
 | `Failed to make progress` | 18 | 1 |
 | Trips cancelled by mission | 3 | 25 |
+
+## V1 in run 2: the slit window
+
+The team saw the robot pressed against a window made of 3 vertical slits, with V1 behind it and red
+showing between the slits. No candidate was built.
+
+- **What the log shows.** V1 was in the camera's field of view in two stretches: 274–278 s, from
+  (0.10, 4.30), 1.1 m away and facing it; and 431–521 s, pinned at (0.24, 4.81) with V1 1.6 m ahead
+  and the wall 0.1–0.3 m in front. Every 10 s detection summary in both stretches says
+  `published 0; rejected none`. `find_blobs` drops shapes without counting them, so whatever red
+  passed the HSV mask never passed the area, aspect or solidity filter. It never reached the LiDAR
+  or the counted checks.
+- **Geometry (box right behind the slits).** Each slit shows a vertical stripe of the box.
+  Stripe aspect ≈ slit width / 0.30 × (box distance / window distance): 0.10–0.13 for 3 cm slits
+  and 0.17–0.22 for 5 cm slits, at every distance from 0.3 to 2 m (fx 272 px at 320 px and 61°).
+  `aspect_min` is 0.4. Each stripe also fails the width check (ratio 0.12–0.25, minimum 0.45) and
+  the area check (ratio 0.15–0.30, minimum 1/3).
+- **Moving back does not help.** The posts hide the same share of the box at any distance; the
+  stripes just get thinner. The 3 px opening erases a 3 cm stripe from ~2.7 m. The stripes would
+  merge only when a post is under ~2 px wide (2 cm post: beyond 2.7 m).
+- **When one slit shows the whole box.** The slit's projection on the box (slit × box distance /
+  window distance) must reach 0.25 m. That happens only with the box far behind the window and the
+  camera almost touching it, which is the opposite of moving back.
+- **Fusion cannot help.** It only accumulates published observations. With observations, it would
+  confirm from one side: 5 observations, `single_view_sigma_m` 0.09 ≤ `max_deviation_m` 0.10, about
+  1 s at 5 Hz.
+- **Navigation lost V1.** Coverage had the view (0.10, 2.36, 90°). That is the open side, from
+  which run 1 saw V1 14 times. Mission tried it at 382.7 s and 391.2 s from (0.27, 5.37). The
+  planner refused ("Starting point in lethal space"), and mission dropped the point after
+  4 recoveries and then within a second. From 431 s the robot was pinned.
+- **Not tested in the simulator.** Our windows (`tars_ventana`, `tars_borde_ventanas*`) are single
+  0.6 m openings, never slits, so no detection setting has been tested against slits.
+- **Loosening detection for slits** would need `aspect_min` ~0.08, `width_ratio_min` ~0.1 and
+  `max_area_factor` ~7 (or 0), and maybe `lidar_min_points` 2 (a 3 cm slit at 1 m spans ~3 central
+  beams). All of it is untested, and it applies to every view, not only windows. Under the rules
+  (§6.3, §8), a wrong report scores nothing, but it uses one of exactly N reports, so it can cost a
+  real victim's 100 and the +200 fast bonus.
+- **For the final:** no detection change for windows. A box behind a window is found from its open
+  side, which coverage already plans. Getting there is the navigation problem the proposal targets.
 
 ## Why the robot touched walls
 
