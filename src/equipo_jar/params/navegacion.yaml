@@ -10,8 +10,8 @@
 # 1.0 rad/s (physical_rosmaster #72).
 limites:
   ros__parameters:
-    lineal_max_ms: 0.5                # forward and sideways
-    reversa_max_ms: 0.35
+    lineal_max_ms: 0.4                # sim variant
+    reversa_max_ms: 0.3
     giro_max_rads: 1.0
     margen_giro_smoother: 1.0         # smoother turn limit = giro_max_rads x this
 
