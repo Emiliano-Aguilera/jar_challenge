@@ -411,8 +411,8 @@ behavior_server:
     # Final: Spin slower and checking further ahead (were 1.0 s and 1.0 rad/s). In qualy run 2,
     # 10 of 16 wall contacts started right after a Spin, BackUp or Wait: with ~0.4 s of delay the
     # robot kept turning after "Collision Ahead". Must stay above min_rotational_vel.
-    simulate_ahead_time: 2.0
-    max_rotational_vel: 0.6
+    simulate_ahead_time: 1.0          # sim variant: as in run 2
+    max_rotational_vel: 1.0           # sim variant: as in run 2
     min_rotational_vel: 0.5           # the real robot does not turn below ~0.5 rad/s from rest
     rotational_acc_lim: 3.2
 
