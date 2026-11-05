@@ -1,0 +1,4 @@
+{"t": null, "evento": "juez_listo", "victimas": 4, "equipo": "JARVIS"}
+{"t": 0.0, "evento": "mapa_publicado", "equipo": "JARVIS"}
+{"t": 340.92, "evento": "reporte", "x": 0.958, "y": 1.478, "valido": true, "equipo": "JARVIS"}
+{"t": 552.2, "evento": "done", "distancia_a_largada": null, "equipo": "JARVIS"}

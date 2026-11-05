@@ -1,0 +1,11 @@
+{"t": null, "evento": "juez_listo", "victimas": 4, "equipo": "Stack_Queue"}
+{"t": 0.0, "evento": "mapa_publicado", "equipo": "Stack_Queue"}
+{"t": 143.77, "evento": "reporte", "x": 2.238, "y": 0.995, "valido": true, "equipo": "Stack_Queue"}
+{"t": 365.4, "evento": "reporte", "x": 0.177, "y": 4.378, "valido": true, "equipo": "Stack_Queue"}
+{"t": 365.4, "evento": "reporte", "x": 0.077, "y": 3.618, "valido": true, "equipo": "Stack_Queue"}
+{"t": 365.4, "evento": "reporte", "x": 0.137, "y": 2.618, "valido": true, "equipo": "Stack_Queue"}
+{"t": 365.78, "evento": "done", "distancia_a_largada": null, "equipo": "Stack_Queue"}
+{"t": null, "evento": "regreso", "valor": true, "agregado_manual": true, "equipo": "Stack_Queue"}
+{"t": null, "evento": "colision", "agregado_manual": true, "equipo": "Stack_Queue"}
+{"t": null, "evento": "colision", "agregado_manual": true, "equipo": "Stack_Queue"}
+{"t": null, "evento": "correccion_manual", "equipo": "Stack_Queue", "decidio": "Zoe", "motivo": "Veredicto humano cargado despues del cierre del juez: regreso=si, 2 colisiones. El juez cerro sin registrarlos.", "fecha": "2026-11-04T15:16:42", "puntaje_original": 150, "puntaje_corregido": 150, "total_sin_tope_de_cero": 150}

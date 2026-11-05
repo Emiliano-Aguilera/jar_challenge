@@ -1,0 +1,9 @@
+{"t": null, "evento": "juez_listo", "victimas": 4, "equipo": "Zonda_Robotics"}
+{"t": 0.0, "evento": "mapa_publicado", "equipo": "Zonda_Robotics"}
+{"t": 47.18, "evento": "reporte", "x": 1.921, "y": 4.296, "valido": true, "equipo": "Zonda_Robotics"}
+{"t": 94.4, "evento": "reporte", "x": 0.135, "y": 6.457, "valido": true, "equipo": "Zonda_Robotics"}
+{"t": 335.44, "evento": "reporte", "x": 2.887, "y": 4.306, "valido": true, "equipo": "Zonda_Robotics"}
+{"t": 383.47, "evento": "reporte", "x": 2.543, "y": 6.376, "valido": true, "equipo": "Zonda_Robotics"}
+{"t": 420.32, "evento": "done", "distancia_a_largada": null, "equipo": "Zonda_Robotics"}
+{"t": null, "evento": "regreso", "valor": true, "agregado_manual": true, "equipo": "Zonda_Robotics"}
+{"t": null, "evento": "correccion_manual", "equipo": "Zonda_Robotics", "decidio": "Zoe", "motivo": "Veredicto humano cargado despues del cierre del juez: regreso=si, 0 colisiones. El juez se corto con Ctrl+C antes de terminar, sin veredicto de regreso; 0 colisiones.", "fecha": "2026-11-04T15:01:01", "puntaje_original": 50, "puntaje_corregido": 150, "total_sin_tope_de_cero": 150}

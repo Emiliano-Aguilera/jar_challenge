@@ -1,0 +1,15 @@
+stdin is not a terminal device. Keyboard handling disabled.[INFO] [1793818785.956201203] [rosbag2_recorder]: Press SPACE for pausing/resuming
+[INFO] [1793818785.957703133] [rosbag2_storage]: Opened database '/home/zoe/Desktop/JAR/jar_organizacion/jar_juez/corridas/20261104_155945_CapiBot_c1/bag/bag_0.db3' for READ_WRITE.
+[INFO] [1793818785.958279167] [rosbag2_recorder]: Listening for topics...
+[INFO] [1793818785.958290330] [rosbag2_recorder]: Event publisher thread: Starting
+[INFO] [1793818785.958437484] [rosbag2_recorder]: Recording...
+[INFO] [1793818786.062624921] [rosbag2_recorder]: Subscribed to topic '/odom'
+[INFO] [1793818786.065047280] [rosbag2_recorder]: Subscribed to topic '/tf'
+[INFO] [1793818786.065970655] [rosbag2_recorder]: Subscribed to topic '/tf_static'
+[INFO] [1793818798.000025066] [rosbag2_recorder]: Subscribed to topic '/cmd_vel'
+[INFO] [1793818798.000768433] [rosbag2_recorder]: Subscribed to topic '/done'
+[INFO] [1793818798.001368236] [rosbag2_recorder]: Subscribed to topic '/victimas'
+[INFO] [1793818798.001393092] [rosbag2_recorder]: All requested topics are subscribed. Stopping discovery...
+[INFO] [1793819089.164449643] [rosbag2_cpp]: Writing remaining messages from cache to the bag. It may take a while
+[INFO] [1793819089.165206296] [rosbag2_recorder]: Event publisher thread: Exiting
+[INFO] [1793819089.165314629] [rosbag2_recorder]: Recording stopped

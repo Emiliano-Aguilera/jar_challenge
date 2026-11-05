@@ -1,0 +1,6 @@
+{"t": null, "evento": "juez_listo", "victimas": 4, "equipo": "TARS"}
+{"t": 0.0, "evento": "mapa_publicado", "equipo": "TARS"}
+{"t": 56.71, "evento": "reporte", "x": 2.298, "y": 0.991, "valido": true, "equipo": "TARS"}
+{"t": 119.11, "evento": "reporte", "x": 0.012, "y": 6.698, "valido": true, "equipo": "TARS"}
+{"t": 146.71, "evento": "reporte", "x": 2.823, "y": 5.596, "valido": true, "equipo": "TARS"}
+{"t": 581.6, "evento": "robot_inmovil", "segundos": 60.0, "equipo": "TARS"}

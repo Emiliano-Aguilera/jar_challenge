@@ -1,0 +1,9 @@
+Este mundo tiene 4 víctimas: lanzá tu software con victimas:=4
+[INFO] [1793829074.951107747] [juez_mock]: Modo manual: llamá al servicio /juez/iniciar para largar
+[INFO] [1793829097.839677150] [juez_mock]: Mapa publicado en /map: empieza la corrida
+[INFO] [1793829154.550577977] [juez_mock]: [reporte #1] total 100 | víctimas [V1:0 V2:100 V3:0 V4:0]
+[INFO] [1793829216.953117858] [juez_mock]: [reporte #2] total 200 | víctimas [V1:0 V2:100 V3:0 V4:100]
+[INFO] [1793829244.550571122] [juez_mock]: [reporte #3] total 300 | víctimas [V1:0 V2:100 V3:100 V4:100]
+
+=== FIN DE LA CORRIDA: inmovil ===
+total 300 | víctimas [V1:0 V2:100 V3:100 V4:100]

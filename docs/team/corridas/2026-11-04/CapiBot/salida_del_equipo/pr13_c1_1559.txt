@@ -1,0 +1,154 @@
+AVISO: esta computadora tiene salida a internet y el equipo corre en su red. En el evento, desconectala.
+Corriendo 528c0bd con victimas:=4, ROS_DOMAIN_ID=11 (máximo 15m; Ctrl+C para detener)
+[INFO] [launch]: All log files can be found below /home/jar-equipos/.ros/log/2026-11-04-15-59-57-480341-zoe-125152
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [principal-1]: process started with pid [125153]
+[principal-1] [INFO] [1793818797.938681340] [nodo_equipo]: Hay que encontrar 4 víctimas. Esperando el mapa en /map...
+[principal-1] /home/jar-equipos/jar_entregas/entregas/pr-13/install/equipo_jar/lib/python3.10/site-packages/equipo_jar/detector_scan.py:81: RuntimeWarning: invalid value encountered in matmul
+[principal-1]   punto_camara = (puntos_laser @ rotacion.T) + traslacion
+[principal-1] [INFO] [1793818852.208188843] [nodo_equipo]: Mapa recibido: 174x383 celdas, resolución 0.020 m
+[principal-1] [INFO] [1793818852.226768893] [campo_verosimilitud]: Campo de verosimilitud publicado (sigma_sensor=0.2).
+[principal-1] [INFO] [1793818852.227769822] [nodo_equipo]: esperando_mapa -> explorando: llegó el mapa
+[principal-1] [INFO] [1793818852.228420253] [detector_obstaculos]: Campo de verosimilitud recibido.
+[principal-1] [INFO] [1793818852.229086759] [localizador]: Campo de verosimilitud recibido.
+[principal-1] [WARN] [1793818852.337920289] [detector_obstaculos]: Todavía no hay tf laser_link->map: Lookup would require extrapolation at time 1793818852.247470, but only time 1793818852.326745 is in the buffer, when looking up transform from frame [laser_link] to frame [map]
+[principal-1] [INFO] [1793818852.468755249] [evasor]: avanzar -> barrer: zona con mucho sin ver
+[principal-1] /home/jar-equipos/jar_entregas/entregas/pr-13/install/equipo_jar/lib/python3.10/site-packages/equipo_jar/detector_obstaculos.py:229: RuntimeWarning: invalid value encountered in subtract
+[principal-1]   xs_map = tx + c * xs_laser - s * ys_laser
+[principal-1] /home/jar-equipos/jar_entregas/entregas/pr-13/install/equipo_jar/lib/python3.10/site-packages/equipo_jar/detector_obstaculos.py:230: RuntimeWarning: invalid value encountered in add
+[principal-1]   ys_map = ty + s * xs_laser + c * ys_laser
+[principal-1] [INFO] [1793818865.965842232] [evasor]: barrer -> girar: barrido terminado; rumbo +60° (sin ver 7%)
+[principal-1] [INFO] [1793818867.872988181] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818870.071829164] [evasor]: avanzar -> girar: obstáculo a 0.40 m; rumbo -60° (sin ver 8%)
+[principal-1] [INFO] [1793818872.967970681] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818874.427194308] [nodo_equipo]: Largada en el mapa: (-0.02, 0.04)
+[principal-1] [INFO] [1793818876.870533247] [evasor]: avanzar -> girar: obstáculo a 0.39 m; rumbo -90° (sin ver 66%)
+[principal-1] [INFO] [1793818880.760750357] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818883.169974912] [evasor]: avanzar -> girar: obstáculo a 0.39 m; rumbo -120° (sin ver 17%)
+[principal-1] [INFO] [1793818888.163820620] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818888.271065398] [evasor]: avanzar -> girar: obstáculo a 0.36 m; rumbo +0° (sin ver 11%)
+[principal-1] [INFO] [1793818888.367685283] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818890.673329903] [evasor]: avanzar -> girar: obstáculo a 0.40 m; rumbo -60° (sin ver 16%)
+[principal-1] [INFO] [1793818893.462244630] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818894.971090516] [evasor]: avanzar -> girar: obstáculo a 0.40 m; rumbo +30° (sin ver 5%)
+[principal-1] [INFO] [1793818896.962221386] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818899.470303977] [evasor]: avanzar -> girar: obstáculo a 0.39 m; rumbo -60° (sin ver 14%)
+[principal-1] [INFO] [1793818902.462068878] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818902.970453901] [evasor]: avanzar -> girar: obstáculo a 0.18 m; rumbo +0° (sin ver 2%)
+[principal-1] [INFO] [1793818903.067773215] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818903.171049878] [evasor]: avanzar -> girar: obstáculo a 0.17 m; rumbo +0° (sin ver 11%)
+[principal-1] [INFO] [1793818903.262227584] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818903.374263480] [evasor]: avanzar -> girar: obstáculo a 0.13 m; rumbo +0° (sin ver 8%)
+[principal-1] [INFO] [1793818903.461988294] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818903.571379911] [evasor]: avanzar -> girar: obstáculo a 0.11 m; rumbo -30° (sin ver 52%)
+[principal-1] [INFO] [1793818905.461878153] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818905.568696700] [evasor]: avanzar -> girar: obstáculo a 0.11 m; rumbo +0° (sin ver 13%)
+[principal-1] [INFO] [1793818905.662120006] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818905.771157397] [evasor]: avanzar -> girar: obstáculo a 0.12 m; rumbo +0° (sin ver 17%)
+[principal-1] [INFO] [1793818905.865897122] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818905.970413607] [evasor]: avanzar -> girar: obstáculo a 0.12 m; rumbo +0° (sin ver 9%)
+[principal-1] [INFO] [1793818906.062099710] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818906.171461100] [evasor]: avanzar -> girar: obstáculo a 0.12 m; rumbo +0° (sin ver 13%)
+[principal-1] [INFO] [1793818906.262102224] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818906.371352801] [evasor]: avanzar -> girar: obstáculo a 0.12 m; rumbo +0° (sin ver 8%)
+[principal-1] [INFO] [1793818906.466207501] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818906.571621318] [evasor]: avanzar -> girar: obstáculo a 0.12 m; rumbo +90° (sin ver 31%)
+[principal-1] [INFO] [1793818910.366648281] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818910.570546347] [evasor]: avanzar -> girar: obstáculo a 0.27 m; rumbo +0° (sin ver 13%)
+[principal-1] [INFO] [1793818910.666271398] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818910.771694434] [evasor]: avanzar -> girar: obstáculo a 0.25 m; rumbo +0° (sin ver 20%)
+[principal-1] [INFO] [1793818910.866183778] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818910.971224789] [evasor]: avanzar -> girar: obstáculo a 0.23 m; rumbo +0° (sin ver 12%)
+[principal-1] [INFO] [1793818911.060710281] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818911.171644679] [evasor]: avanzar -> girar: obstáculo a 0.23 m; rumbo -150° (sin ver 46%)
+[principal-1] [INFO] [1793818917.662197580] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818917.770879841] [evasor]: avanzar -> girar: obstáculo a 0.20 m; rumbo +30° (sin ver 1%)
+[principal-1] [INFO] [1793818920.562108655] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818920.670981305] [evasor]: avanzar -> girar: obstáculo a 0.13 m; rumbo +0° (sin ver 1%)
+[principal-1] [INFO] [1793818920.761673601] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818920.874287757] [evasor]: avanzar -> girar: obstáculo a 0.12 m; rumbo +0° (sin ver 0%)
+[principal-1] [INFO] [1793818920.962322648] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818923.074173868] [evasor]: avanzar -> girar: obstáculo a 0.39 m; rumbo +120° (sin ver 52%)
+[principal-1] [INFO] [1793818927.965197610] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818928.771813744] [evasor]: avanzar -> girar: obstáculo a 0.38 m; rumbo +0° (sin ver 28%)
+[principal-1] [INFO] [1793818928.867966245] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818928.972616130] [evasor]: avanzar -> girar: obstáculo a 0.36 m; rumbo +0° (sin ver 21%)
+[principal-1] [INFO] [1793818929.064604615] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818929.169208219] [evasor]: avanzar -> girar: obstáculo a 0.32 m; rumbo -30° (sin ver 9%)
+[principal-1] [INFO] [1793818931.375716754] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818932.969892628] [evasor]: avanzar -> girar: obstáculo a 0.39 m; rumbo +90° (sin ver 31%)
+[principal-1] [INFO] [1793818936.962571290] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818937.672583336] [evasor]: avanzar -> girar: obstáculo a 0.28 m; rumbo -90° (sin ver 2%)
+[principal-1] [INFO] [1793818941.865104158] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818943.470628539] [evasor]: avanzar -> girar: obstáculo a 0.40 m; rumbo +30° (sin ver 5%)
+[principal-1] [INFO] [1793818945.462514931] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818947.672410575] [evasor]: avanzar -> girar: obstáculo a 0.33 m; rumbo +30° (sin ver 11%)
+[principal-1] [INFO] [1793818949.562626204] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818951.873322469] [evasor]: avanzar -> girar: obstáculo a 0.39 m; rumbo +30° (sin ver 11%)
+[principal-1] [INFO] [1793818953.663991647] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818953.772335334] [evasor]: avanzar -> girar: obstáculo a 0.27 m; rumbo +0° (sin ver 3%)
+[principal-1] [INFO] [1793818953.866007435] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818955.670518789] [evasor]: avanzar -> girar: obstáculo a 0.39 m; rumbo -30° (sin ver 0%)
+[principal-1] [INFO] [1793818957.662329675] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818959.070671816] [evasor]: avanzar -> girar: obstáculo a 0.39 m; rumbo +30° (sin ver 0%)
+[principal-1] [INFO] [1793818960.963024565] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818961.570632469] [evasor]: avanzar -> girar: obstáculo a 0.39 m; rumbo -30° (sin ver 0%)
+[principal-1] [INFO] [1793818963.866440364] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818966.270035767] [evasor]: avanzar -> girar: obstáculo a 0.39 m; rumbo -60° (sin ver 57%)
+[principal-1] [INFO] [1793818969.162247597] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818969.660856295] [evasor]: avanzar -> acercarse: objeto rojo en (0.04, 3.07)
+[principal-1] [INFO] [1793818979.662253903] [evasor]: acercarse -> avanzar: acercamiento abandonado
+[principal-1] [INFO] [1793818979.767570201] [evasor]: avanzar -> girar: obstáculo a 0.35 m; rumbo -120° (sin ver 0%)
+[principal-1] [INFO] [1793818986.463740118] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818986.579873472] [evasor]: avanzar -> girar: obstáculo a 0.14 m; rumbo -60° (sin ver 20%)
+[principal-1] [INFO] [1793818988.463691622] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818989.771665884] [evasor]: avanzar -> girar: obstáculo a 0.39 m; rumbo +90° (sin ver 1%)
+[principal-1] [INFO] [1793818993.868594996] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793818998.673626861] [evasor]: avanzar -> girar: obstáculo a 0.40 m; rumbo +30° (sin ver 1%)
+[principal-1] [INFO] [1793819000.864271063] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793819000.973956314] [evasor]: avanzar -> girar: obstáculo a 0.27 m; rumbo +60° (sin ver 24%)
+[principal-1] [INFO] [1793819003.563675385] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793819003.673919531] [evasor]: avanzar -> girar: obstáculo a 0.31 m; rumbo -30° (sin ver 0%)
+[principal-1] [INFO] [1793819006.463481404] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793819008.774774294] [evasor]: avanzar -> girar: obstáculo a 0.39 m; rumbo -60° (sin ver 4%)
+[principal-1] [INFO] [1793819011.663003312] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793819014.975157004] [evasor]: avanzar -> girar: obstáculo a 0.39 m; rumbo -30° (sin ver 0%)
+[principal-1] [INFO] [1793819016.763770238] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793819020.573301443] [evasor]: avanzar -> girar: obstáculo a 0.38 m; rumbo +30° (sin ver 0%)
+[principal-1] [INFO] [1793819022.461892068] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793819027.673893390] [evasor]: avanzar -> girar: obstáculo a 0.40 m; rumbo +120° (sin ver 23%)
+[principal-1] [INFO] [1793819032.563028193] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793819035.269813902] [evasor]: avanzar -> girar: obstáculo a 0.39 m; rumbo +60° (sin ver 1%)
+[principal-1] [INFO] [1793819039.765712342] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793819042.470897465] [evasor]: avanzar -> girar: obstáculo a 0.39 m; rumbo -60° (sin ver 0%)
+[principal-1] [INFO] [1793819045.467272955] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793819051.176709884] [evasor]: avanzar -> girar: obstáculo a 0.40 m; rumbo +30° (sin ver 0%)
+[principal-1] [INFO] [1793819052.963637624] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793819055.171802337] [evasor]: avanzar -> girar: obstáculo a 0.39 m; rumbo -30° (sin ver 0%)
+[principal-1] [INFO] [1793819057.063642468] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793819059.175433101] [evasor]: avanzar -> girar: obstáculo a 0.18 m; rumbo +0° (sin ver 0%)
+[principal-1] [INFO] [1793819059.263745992] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793819059.372727224] [evasor]: avanzar -> girar: obstáculo a 0.10 m; rumbo +0° (sin ver 1%)
+[principal-1] [INFO] [1793819059.463769565] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793819059.575951415] [evasor]: avanzar -> girar: obstáculo a 0.07 m; rumbo +0° (sin ver 0%)
+[principal-1] [INFO] [1793819059.663695960] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793819059.770491112] [evasor]: avanzar -> girar: obstáculo a 0.04 m; rumbo +0° (sin ver 1%)
+[principal-1] [INFO] [1793819059.868240938] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793819059.975319718] [evasor]: avanzar -> girar: obstáculo a 0.03 m; rumbo +0° (sin ver 0%)
+[principal-1] [INFO] [1793819060.062804336] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793819060.170220134] [evasor]: avanzar -> girar: obstáculo a 0.03 m; rumbo +0° (sin ver 0%)
+[principal-1] [INFO] [1793819060.263820428] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793819060.377439444] [evasor]: avanzar -> girar: obstáculo a 0.02 m; rumbo +0° (sin ver 0%)
+[principal-1] [INFO] [1793819060.464190011] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793819060.570105868] [evasor]: avanzar -> girar: obstáculo a 0.01 m; rumbo -30° (sin ver 0%)
+[principal-1] [INFO] [1793819062.662065069] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793819064.574704852] [evasor]: avanzar -> girar: obstáculo a 0.40 m; rumbo -90° (sin ver 18%)
+[principal-1] [INFO] [1793819069.061340709] [evasor]: girar -> avanzar: giro terminado
+[principal-1] [INFO] [1793819069.263632860] [evasor]: avanzar -> acercarse: objeto rojo en (2.31, 1.10)
+[principal-1] [INFO] [1793819079.263682195] [evasor]: acercarse -> avanzar: acercamiento abandonado
+[principal-1] [INFO] [1793819079.373405819] [evasor]: avanzar -> girar: obstáculo a 0.10 m; rumbo -60° (sin ver 0%)
+[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)
+[WARNING] [launch]: user interrupted with ctrl-c (SIGINT) again, ignoring...
+[INFO] [principal-1]: sending signal 'SIGINT' to process[principal-1]
+[ERROR] [principal-1]: process has died [pid 125153, exit code -2, cmd '/home/jar-equipos/jar_entregas/entregas/pr-13/install/equipo_jar/lib/equipo_jar/principal --evasor true --ros-args --params-file /home/jar-equipos/jar_entregas/entregas/pr-13/install/equipo_jar/share/equipo_jar/params/params.yaml --params-file /tmp/launch_params_cccg9xou'].
+El equipo no dejó logs_jar/log.txt (es opcional).
