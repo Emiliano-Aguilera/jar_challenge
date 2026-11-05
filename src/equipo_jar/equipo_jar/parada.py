@@ -1,4 +1,5 @@
 """Navigation's sole velocity output; terminal stop cannot be undone by Nav2."""
+import collections
 import math
 import time
 
@@ -9,6 +10,10 @@ from rclpy.node import Node
 from std_msgs.msg import Bool, Empty
 
 from equipo_jar.comun import QOS_ESTADO, QOS_MAPA, correr, parametros_en_vivo
+
+# SOLO PRUEBA (no va a la entrega): retraso de /cmd_vel como el robot real de la qualy.
+# Se mide en el reloj de ROS (simulado), así no depende del RTF.
+RETARDO_PRUEBA_S = 0.4
 
 
 class Parada(Node):
@@ -29,6 +34,8 @@ class Parada(Node):
         self.odom_stamp = None
         self.still_since = None
         self.moving = False
+        self.demorados = collections.deque()
+        self.ultimo_demorado = Twist()
         self.pub_cmd = self.create_publisher(Twist, '/cmd_vel', 10)
         self.pub_confirmed = self.create_publisher(Bool, '/jar/parada_confirmada', QOS_ESTADO)
         self.create_subscription(Twist, '/jar/cmd_vel_smoothed', self.on_command, 10)
@@ -106,7 +113,16 @@ class Parada(Node):
         valid = self.valid_config()
         fresh = (valid and self.command_at is not None
                  and 0 <= now - self.command_at <= self.p['command_max_age_s'])
-        self.pub_cmd.publish(self.command if self.has_map and not self.blocked and fresh else Twist())
+        salida = self.command if self.has_map and not self.blocked and fresh else Twist()
+        if self.blocked:
+            self.demorados.clear()
+            self.ultimo_demorado = Twist()
+        else:
+            ahora_ros = self.get_clock().now().nanoseconds * 1e-9
+            self.demorados.append((ahora_ros, salida))
+            while self.demorados and ahora_ros - self.demorados[0][0] >= RETARDO_PRUEBA_S:
+                self.ultimo_demorado = self.demorados.popleft()[1]
+        self.pub_cmd.publish(self.ultimo_demorado)
         if (not valid or self.odom_at is None
                 or not 0 <= now - self.odom_at <= self.p['odom_max_age_s']):
             self.still_since = None
