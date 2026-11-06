@@ -4,6 +4,33 @@ Module: mision
 
 One entry per decision: the question, what was tried, what was decided.
 
+## Navigation access diagnosis (2026-11-01)
+
+- Approved scope: prepare effective-footprint checks and controlled wide-entry /
+  problem-room evidence, keeping all production margins and behavior unchanged.
+- Branch: `navegacion/diagnostico-acceso`, from `development` at `dc3d2df`.
+- Test-only tools in `pruebas/` read effective parameters and stamped published
+  polygons, record a single optional goal, localized/true poses, plans, costmaps,
+  output commands, logs, result and recoveries. Unknown evidence stays unknown;
+  successful action status never certifies collision-free access.
+- Active probes refuse concurrent mission and incomplete geometry. Unknown goal
+  acceptance, timeout or interruption after dispatch requests terminal inhibit
+  and cancellation, preserving ROS until bounded stop-confirmation cleanup ends.
+- User identified `tars_borde_ventanas` upper-right room, run `41323263886`.
+  Its historical summary reports 400 points, zero collisions, RTF 0.976. Logs
+  show separate occupied-endpoint cancellations, no-motion cancellations and
+  the 10-recovery limit; one corner attempt includes Spin's collision refusal.
+  This is not the requested paired controlled movement experiment.
+- `pruebas/DIAGNOSTICO_NAVEGACION.md` records the footprint, NavFn/MPPI distinction,
+  approach/arrival/recovery behavior and coverage acceptance conditions. Official
+  simulator movement and scenario-effective footprint capture remain pending.
+- Verification: clean temporary ROS build and full suite, 882 passed including
+  24 new diagnostic cases. Signal tests cover SIGINT, SIGTERM and interruption
+  after transmission before the acceptance future is assigned. Fixture domains
+  are isolated from mission tests so lingering DDS discovery cannot reject the
+  synthetic controlled client. Commits are authorized; push, PR creation and
+  remote experiment commands remain with the user. No remote experiment run.
+
 Code: `src/equipo_jar/equipo_jar/mision.py` (the node), `confirmacion.py` (what to
 report), `exploracion.py` (where to go). Tunables: the `mision` section of
 `src/equipo_jar/params/params.yaml`.

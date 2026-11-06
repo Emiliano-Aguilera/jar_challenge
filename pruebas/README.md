@@ -1,5 +1,10 @@
 # Coverage checks
 
+For effective Nav2 footprint checks, approach/recovery evidence and the controlled
+wide-entry/problem-room comparison, see
+[`DIAGNOSTICO_NAVEGACION.md`](DIAGNOSTICO_NAVEGACION.md). These tools do not change
+production margins or certify movement from a connected costmap alone.
+
 Current command-position/time proxies, explicit goal-result records and noise
 sensitivity tools are documented in
 [`EXECUTION_AUDIT.md`](../notes/marcorita/EXECUTION_AUDIT.md).
