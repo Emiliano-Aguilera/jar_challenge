@@ -9,7 +9,16 @@
 # posicion_ (docs/team/INTERFACES.md).
 cobertura:
   ros__parameters:
-    robot_radius: 0.18
+    # Transit clearance = robot_radius + safety_margin; coverage plans only through passages that
+    # wide (cell rounding on a 0.02 m map: 0.21 -> 0.46 m, 0.18 -> 0.38 m, 0.16 -> 0.34 m). Qualy run 1:
+    # the door to the upper third is 0.41 m, so the plan stopped at y 4.2 and missed 2 victims.
+    # 0.15 + 0.03 opens doors from 0.38 m, which MPPI passes with pauses; 0.16 or less (0.34 m doors)
+    # lost a whole simulated run (14 blocked goals, no return). Viewpoint clearance is view_clearance.
+    # Qualy run 2: 0.15 + 0.03 = 0.18. Checked on the real qualy /map (174x383 @ 0.02 m): the door
+    # to the upper third is ~0.45 m there, so 0.21 closed it (run 1: 58 views, 327 samples out)
+    # and 0.18 opens it: 81 views, 905/1056 visible, both upper victims in view. 0.16 adds only
+    # 13 samples in pockets behind 0.36-0.40 m passages; 0.14 adds nothing more.
+    robot_radius: 0.15
     safety_margin: 0.03
     #PARAM: bounded initial planning-anchor shift from a known-free pose (m; 0 disables).
     start_max_shift_m: 0.20
@@ -27,10 +36,13 @@ cobertura:
     view_range: 2.0
     fov_degrees: 61.0
     heading_count: 8
-    travel_speed: 0.25
+    # Qualy run 1: real trips cost ~4 s fixed + 2.8 s/m, but the plan charges distance / speed + 1 s,
+    # so it split the headings of one spot into separate visits (6 spots got 2-3 trips). Lower
+    # speed: more headings per stop. Offline on 6 maps: route 10-15 % shorter.
+    travel_speed: 0.15
     turn_speed: 0.7
     observation_time: 1.0
-    max_views: 80
+    max_views: 120                    # the whole qualy arena needs 76 views; the cap must not cut the plan
     max_positions: 256
     max_targets: 2048
     free_threshold: 25
@@ -80,8 +92,8 @@ deteccion:
     # --- Checks against false positives (a false report costs -100 and the -200 bonus) ---
     #PARAM: blob width / expected width of a box at the LiDAR distance (0 < min < 1 < max).
     #       Coarse sanity check: the central beams already fix the corner case (ratio ~0.5).
-    #       Real boxes seen while passing a doorway at 0.8 m measured 0.53-0.60 (laberinto_1
-    #       replay); 0.45 keeps them. Raise it only if false boxes slip past the central beams.
+    #       Real boxes seen while passing a doorway at 0.8 m measured 0.53-0.60 (a practice
+    #       recording replay); 0.45 keeps them. Raise it only if false boxes slip past the central beams.
     width_ratio_min: 0.45
     width_ratio_max: 1.8
     #PARAM: observations farther than this are dropped, m (> 0). Coverage looks from 2.0 m.
@@ -128,8 +140,9 @@ deteccion:
     #PARAM: messages held per topic while waiting for a partner (>= 1). Must cover the images
     #       (30 Hz) taken while a scan is in transit: 10 lost 80 % of pairs with scans 0.3 s
     #       late; 60 kept 99.5 % up to 1.5 s late (week-10 bag, delays injected). ~14 MB of
-    #       images. Read at startup only.
-    sync_queue_size: 60
+    #       images. 120: 4 s of images; other teams' qualy logs showed scans up to 2.8 s late
+    #       over the venue Wi-Fi. Read at startup only.
+    sync_queue_size: 120
     #PARAM: robot base frame in /tf (base_footprint on this robot).
     robot_frame: base_footprint
     #PARAM: frame used to bridge image time and scan time (odom: smooth, always available).
@@ -167,8 +180,13 @@ fusion:
     merge_dist_m: 0.3
     #PARAM: robot displacement needed to lift the single-view floor, m (>= 0; 0 disables).
     min_baseline_m: 0.3
-    #PARAM: covariance floor (std) while seen from one spot, m (> mission's max_desvio_m).
-    single_view_sigma_m: 0.15
+    #PARAM: covariance floor (std) while seen from one spot, m. Above mission's max_deviation_m
+    #       (0.10) a candidate never confirms from one spot and needs an inspection; 0.09 lets a
+    #       box seen >= min_observations times from one spot with a tight spread confirm. Qualy
+    #       run 1: both real boxes measured within 7 cm from one spot; the second waited 300 s
+    #       (its only free side was the one it was first seen from). Boxes behind windows or in
+    #       slots are only ever seen from one side.
+    single_view_sigma_m: 0.09
     #PARAM: seconds without observations before a weak candidate is dropped (> 0).
     stale_timeout_s: 20.0
     #PARAM: candidates with at least this many observations are never dropped (>= 1).
@@ -182,7 +200,7 @@ fusion:
 
 mision:
   ros__parameters: 
-    extra_search_enabled: false
+    extra_search_enabled: true       # qualy run 2: after the plan, look at the floor the camera did not see
     extra_history_max: 1200
     extra_history_interval_s: 1.0
     extra_history_shift_m: 0.10
@@ -193,12 +211,12 @@ mision:
     return_estimate_overhead_s: 8.0
     return_reserve_s: 45.0
     extra_look_s: 2.0
-    extra_max_goals: 6
+    extra_max_goals: 10              # sim trials hit 6 with near-repeated views; the time budget still limits it
     extra_max_failed: 2
-    extra_goal_timeout_s: 30.0
-    extra_plan_timeout_s: 5.0
+    extra_goal_timeout_s: 45.0       # a trip to the upper third through a door can pass 30 s
+    extra_plan_timeout_s: 15.0       # the venue laptop took 10 s for the coverage plan
     extra_costmap_max_age_s: 2.5
-    extra_failed_shift_m: 0.40
+    extra_failed_shift_m: 1.0        # do not go back behind the cone where three trips failed in run 1
     extra_range_m: 2.0
     extra_fov_deg: 61.0
     extra_heading_count: 8
@@ -207,7 +225,7 @@ mision:
     extra_max_positions: 256
     extra_max_targets: 2048
     extra_max_views: 80
-    extra_transit_radius_m: 0.21
+    extra_transit_radius_m: 0.18     # same transit as coverage (0.15 + 0.03): doors from 0.38 m
     extra_view_clearance_m: 0.24
     extra_preferred_clearance_m: 0.30
     extra_turn_speed_rads: 0.7
@@ -223,14 +241,15 @@ mision:
     finish_time_s: 570.0
     idle_spin_s: 10.0
     idle_spin_rad: 1.57
-    visit_min_observations: 2
+    visit_min_observations: 2         # run 1 had no inspection of a 2-observation candidate: no reason to change it
     visit_distance_m: 0.8
     visit_clearance_m: 0.25
     visit_angles: 12
     visit_min_shift_m: 0.4
-    visit_box_margin_m: 0.25
+    visit_box_margin_m: 0.15          # 0.25 hid a wall right next to the box: a blind inspection spot (qualy run 1)
     localization_wait_max_s: 10.0
-    goal_timeout_s: 90.0
+    # Hard cap per trip (s). Good trips in the qualification took <= 15 s; return legs ~20 s.
+    goal_timeout_s: 60.0
     goal_accept_timeout_s: 5.0
     stop_confirm_max_age_s: 0.5
     stuck_time_s: 20.0
@@ -246,7 +265,9 @@ mision:
     visit_transit_radius_m: 0.15
     visit_free_threshold: 25
     settle_s: 0.0
-    max_recoveries: 10
+    # Give up a trip after this many Nav2 recoveries. Good trips used <= 3; the trips blocked
+    # by a cone reached 10 after 37-66 s each. 4 gives up after ~15-20 s.
+    max_recoveries: 4
     return_tolerance_m: 0.05
     return_max_tries: 3
     return_still_s: 2.0

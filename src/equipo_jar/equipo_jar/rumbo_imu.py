@@ -23,7 +23,7 @@ IMU's turn over the wheels' turn while turning (bag: 0.80; sim: 1.0). The same w
 constant makes /odom count turns and distance too much (bag: turns 0.80, forward 0.78,
 sideways 0.79), so the turn ratio fixes distance too. Used after `escala_giro_minimo_rad` of
 wheel turning, kept within [escala_minima, escala_maxima]. A number > 0 fixes it (1.0: off).
-Checked on the week-10 bag (notes/hans-die/NOTES.md).
+Checked on the week-10 bag (notes/hans-die/NOTES.md, in tag archive/pre-cleanup).
 """
 import math
 from collections import deque

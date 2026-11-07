@@ -5,7 +5,8 @@ score: share of points on a wall of /map, 0..1; 0.8-0.9 when it is right). A low
 means AMCL is lost or the robot sees things missing from the map (boxes, people). Only
 then it searches nearby poses. If one scores clearly better, twice in a row at the same
 place, AMCL is moved there. A real robot that slips or gets bumped is the case this is for;
-in the simulator AMCL has not been lost since alpha4 0.01 (notes/hans-die/NOTES.md).
+in the simulator AMCL has not been lost since alpha4 0.01
+(notes/hans-die/NOTES.md, in tag archive/pre-cleanup).
 """
 import math
 

@@ -273,7 +273,7 @@ stateDiagram-v2
 │   └── equipo_jar_msgs/            our message types (Candidata, Candidatas)
 ├── pruebas/                        experiments, benchmarks and more tests
 ├── docs/team/                      project overview, module interfaces, run analysis
-├── notes/                          each member's working notes
+├── notes/                          each member's AGENT.md (context for their coding agent)
 └── tools/                          the organizers' checks and practice judge (same as CI)
 ```
 
