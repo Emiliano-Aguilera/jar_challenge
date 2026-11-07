@@ -1,0 +1,6 @@
+<library path="jar_passage">
+  <class name="equipo_jar_navegacion/PassageController" type="equipo_jar_navegacion::PassageController" base_class_type="nav2_core::Controller"><description>MPPI with a checked fixed-heading passage mode.</description></class>
+  <class name="equipo_jar_navegacion/PassageGoalChecker" type="equipo_jar_navegacion::PassageGoalChecker" base_class_type="nav2_core::GoalChecker"><description>Do not finish while the body is inside a passage.</description></class>
+  <class name="equipo_jar_navegacion/GuardedSpin" type="equipo_jar_navegacion::GuardedSpin" base_class_type="nav2_core::Behavior"><description>Request current passage clearance before every spin command.</description></class>
+  <class name="equipo_jar_navegacion/GuardedBackUp" type="equipo_jar_navegacion::GuardedBackUp" base_class_type="nav2_core::Behavior"><description>Do not run a blind recovery while passage control is locked.</description></class>
+</library>

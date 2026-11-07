@@ -32,6 +32,7 @@
   <exec_depend>nav2_velocity_smoother</exec_depend>
   <exec_depend>nav2_costmap_2d</exec_depend>
   <exec_depend>nav2_mppi_controller</exec_depend>
+  <exec_depend>equipo_jar_navegacion</exec_depend>
   <exec_depend>nav2_navfn_planner</exec_depend>
   <exec_depend>nav2_smac_planner</exec_depend>
   <exec_depend>launch</exec_depend>
