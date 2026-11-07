@@ -155,3 +155,21 @@ def test_live_params_are_read_at_call_time():
     params['merge_dist_m'] = 0.05
     f.observe((2.2, 1.0), 0.1, None, 0.1)
     assert len(f.candidates) == 2                 # 0.2 m apart no longer associates
+
+
+def test_shared_error_does_not_average_out():
+    # Every view has the same 0.08 m offset: the std must not fall below shared_sigma.
+    f = new(shared_sigma_m=0.07)
+    for k in range(200):
+        f.observe((2.08, 1.0), 0.1, two_viewpoints(k), k * 0.2)
+    std = f.report()[0]['max_std']
+    assert 0.07 <= std < 0.075
+
+
+def test_shared_error_zero_keeps_the_old_covariance():
+    f = new(shared_sigma_m=0.0)
+    for k in range(30):
+        f.observe((2.0 + 0.01 * k, 1.0), 0.1, two_viewpoints(k), k * 0.2)
+    c = f.candidates[0]
+    old = c.covariance(DEFAULTS['min_baseline_m'], DEFAULTS['single_view_sigma_m'])
+    assert np.allclose(f.report()[0]['cov_xy'], old.flatten())

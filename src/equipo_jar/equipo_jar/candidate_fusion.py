@@ -21,10 +21,13 @@ Update (recursive weighted mean, i.e. a static Kalman filter with R_k = sigma_k^
 
 Covariance reported for the candidate, 2x2:
 
-    cov = S / n  +  I / W
+    cov = S / n  +  I / W  +  shared_sigma^2 I
 
   - I / W is the covariance of the mean if every observation were independent with its
     own sigma_k: it shrinks as 1/n.
+  - shared_sigma^2 I is the error every view of a box has in common (mostly localization),
+    which no number of views averages out. Without it the std of a real candidate ended
+    5-7x smaller than its real error (week-10 bag).
   - S is the weighted sample covariance of the observations around mu (West's online
     algorithm). S / n adds what the observations themselves disagree about, with their
     real shape (an elongated cloud gives an elongated ellipse).
@@ -61,6 +64,11 @@ DEFAULTS = {
     #       Support: > mission's max_desvio_m (0.10) so a one-spot candidate is never
     #       reported; 0.15.
     'single_view_sigma_m': 0.15,
+    #PARAM: shared_sigma_m = error (std, m) common to all views of a box, added to the
+    #       covariance; it does not shrink with more views. Support: the value that makes the
+    #       real error match the std (week-10 bag, NEES median ~1.4): 0.07 with today's AMCL,
+    #       0.04 with the odometry scale fix (PR #34); 0 disables it.
+    'shared_sigma_m': 0.07,
     #PARAM: stale_timeout_s = seconds without observations before a weak candidate is
     #       dropped. Support: > time to see a box again after turning away (a few s); < 600.
     'stale_timeout_s': 20.0,
@@ -99,20 +107,23 @@ class Candidate:
             return np.zeros((2, 2))
         return self.M / self.W
 
-    def covariance(self, min_baseline: float, single_view_sigma: float) -> np.ndarray:
+    def covariance(self, min_baseline: float, single_view_sigma: float,
+                   shared_sigma: float = 0.0) -> np.ndarray:
         """The 2x2 covariance reported to mission (see module docstring)."""
         cov = self.sample_cov() / max(1, self.n_obs)
         if self.W > 0:
             cov = cov + np.eye(2) / self.W
+        cov = cov + shared_sigma ** 2 * np.eye(2)
         if min_baseline > 0 and self.baseline() < min_baseline:
             floor = single_view_sigma ** 2
             cov[0, 0] = max(cov[0, 0], floor)
             cov[1, 1] = max(cov[1, 1], floor)
         return cov
 
-    def max_std(self, min_baseline: float, single_view_sigma: float) -> float:
+    def max_std(self, min_baseline: float, single_view_sigma: float,
+                shared_sigma: float = 0.0) -> float:
         """Std along the worst direction: sqrt of the largest eigenvalue. Mission uses this."""
-        c = self.covariance(min_baseline, single_view_sigma)
+        c = self.covariance(min_baseline, single_view_sigma, shared_sigma)
         a, b, d = c[0, 0], c[0, 1], c[1, 1]
         lam = (a + d) / 2 + math.sqrt(((a - d) / 2) ** 2 + b ** 2)
         return math.sqrt(max(lam, 0.0))
@@ -195,9 +206,10 @@ class CandidateFusion:
         """Candidates as plain dicts in the shape of Candidata.msg, sorted by id."""
         mb = float(self._p('min_baseline_m'))
         sv = float(self._p('single_view_sigma_m'))
+        sh = float(self._p('shared_sigma_m'))
         out = []
         for c in sorted(self.candidates, key=lambda c: c.id):
-            cov = c.covariance(mb, sv)
+            cov = c.covariance(mb, sv, sh)
             out.append({
                 'id': c.id,
                 'x': float(c.mu[0]),
@@ -205,7 +217,7 @@ class CandidateFusion:
                 'cov_xy': [float(cov[0, 0]), float(cov[0, 1]), float(cov[1, 0]), float(cov[1, 1])],
                 'n_obs': c.n_obs,
                 't_last': c.t_last,
-                'max_std': c.max_std(mb, sv),
+                'max_std': c.max_std(mb, sv, sh),
                 'baseline': c.baseline(),
             })
         self.changed = False
