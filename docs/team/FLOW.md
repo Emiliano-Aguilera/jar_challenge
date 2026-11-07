@@ -62,13 +62,14 @@ can stay.
 
 ## Personal notes
 
-Each member has a folder in [`notes/`](../../notes/) with:
+Each member has a folder in [`notes/`](../../notes/) with `AGENT.md`: context
+for their AI agent. Each person writes only in their own folder, so there are
+no conflicts.
 
-- `NOTES.md`: the decisions of their module. For each one: the question, what
-  was tried, what was decided.
-- `AGENT.md`: context for their AI agent.
-
-Each person writes only in their own folder, so there are no conflicts.
+The JAR 2026 working notes (each module's `NOTES.md` with its decisions,
+reports and helper scripts) left the tree after the competition. They are in
+the tag `archive/pre-cleanup`, e.g.
+`git show archive/pre-cleanup:notes/hans-die/NOTES.md`.
 
 Agents read their user's `notes/<GitHub user>/AGENT.md` at the start of each
 session (the root `CLAUDE.md` says so). Don't create a `CLAUDE.local.md`.

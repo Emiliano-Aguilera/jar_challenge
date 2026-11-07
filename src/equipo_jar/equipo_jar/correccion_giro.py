@@ -10,7 +10,7 @@ turn ended. Meanwhile the node asks AMCL for no-motion updates
 A turn is a run of /odom samples with |wz| >= `girando_rads`, and its size is the signed
 yaw change over that run. Small corrections while driving (wobble, S-curves) stay below
 `girando_rads` or cancel out, and the odometry error they add cancels too.
-Checked on the week-10 bag (notes/hans-die/NOTES.md).
+Checked on the week-10 bag (notes/hans-die/NOTES.md, in tag archive/pre-cleanup).
 """
 import math
 

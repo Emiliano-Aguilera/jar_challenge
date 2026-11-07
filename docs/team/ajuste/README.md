@@ -32,15 +32,16 @@ or "simulator". Re-run the scripts in `scripts/` instead of trusting a number yo
 ## The real qualification map
 
 The `/map` the judge published in the qualification: 174 × 383 cells, 0.02 m, origin
-(−0.553, −0.572). Grupo_de_Lie's mission node prints the map it receives (zlib + base64), and the
-organizers share every team's logs with all teams, so `scripts/decode_map_from_log.py` can rebuild
-it from their run-1 log (`salida_del_equipo/pr14_c1_1540.txt` in `Grupo_de_Lie_corrida1_2026-11-04.zip`).
+(−0.553, −0.572). Another team's mission node printed the map it received (zlib + base64) in its
+run-1 log, which the organizers shared with every team, so `scripts/decode_map_from_log.py` can
+rebuild it. That log is no longer in the tree; it is in the tag `archive/pre-cleanup`.
 
-**It is not in git:** `tools/verificar_estructura.py` rejects map files anywhere in the repo (§10),
-so CI would fail. Rebuild it into `build/` (ignored by git) or ask Bautista for his copy:
+**The map is not in git:** `tools/verificar_estructura.py` rejects map files anywhere in the repo
+(§10), so CI would fail. Rebuild it into `build/` (ignored by git) or ask Bautista for his copy:
 
 ```bash
-python3 docs/team/ajuste/scripts/decode_map_from_log.py PATH/TO/pr14_c1_1540.txt build/mapa_qualy/qualy_2026-11-04
+git show archive/pre-cleanup:docs/team/corridas/2026-11-04/Grupo_de_Lie/salida_del_equipo/pr14_c1_1540.txt > build/qualy_log.txt
+python3 docs/team/ajuste/scripts/decode_map_from_log.py build/qualy_log.txt build/mapa_qualy/qualy_2026-11-04
 ```
 
 Check that it is the right map: our coverage planner on it with the run-1 params gives 58 views and
@@ -163,14 +164,6 @@ there are ~0.4–0.7 m wide. Causes, in decreasing order of how sure we are:
 Once touching, the robot cannot get out by itself: Smac 2D treats the start as blocked when the robot
 center is within 0.12 m (padded half-width) of an obstacle, so there is no path, and both recoveries
 refuse to move.
-
-## What another team did (Grupo_de_Lie, run 1, 15:39)
-
-500 points: 4 victims + return, no collisions, `/done` at 503 s. Their own stack, not Nav2. From the
-params block of their log: `v_max: 0.35`, `a_max: 0.35`, `w_max: 1.0`, `reaccion_s: 0.4` (they model
-the 0.4 s delay), `margen_seguridad: 0.04`, `huella_margen: 0.05`. They also struggled at the opening
-to the upper third: from 95 s to 193 s they tried and backed off several times, and crossed
-diagonally near x ≈ 1.4.
 
 ## Proposal for the final
 

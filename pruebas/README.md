@@ -2,7 +2,7 @@
 
 Current command-position/time proxies, explicit goal-result records and noise
 sensitivity tools are documented in
-[`EXECUTION_AUDIT.md`](../notes/marcorita/EXECUTION_AUDIT.md).
+`notes/marcorita/EXECUTION_AUDIT.md` (in tag `archive/pre-cleanup`).
 Historical identity-only metrics remain for comparisons; they do not model
 mission's in-place command substitution, dynamic boxes or actual camera frames.
 
@@ -221,7 +221,7 @@ python3 pruebas/experimentar_agrupacion.py \
 Coverage publishes an initial route. Mission in current development remembers
 finished points, including failed goals, and selects the next pending position
 and heading. Coverage does not remove those points or track actual observation.
-See `notes/marcorita/INTEGRATION.md` for execution tolerances, deadlines and the
+See `notes/marcorita/INTEGRATION.md` (in tag `archive/pre-cleanup`) for execution tolerances, deadlines and the
 remaining perception/navigation agreements.
 
 For a handoff check, use the official simulator and practice judge following
